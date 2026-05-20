@@ -7,35 +7,35 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-      setIsAuthenticated(false);
-      setAuthLoading(false);
-    }, 3000);
+    let mounted = true;
 
     fetch(`${import.meta.env.VITE_API_URL}/me`, {
-  credentials: "include",
-  cache: "no-store",
-  signal: controller.signal,
-})
+      credentials: "include",
+      cache: "no-store",
+    })
       .then((response) => response.json())
       .then((data) => {
-  console.log("AUTH:", data.authenticated);
-  setIsAuthenticated(Boolean(data.authenticated));
-})
-      .catch(() => {
-        setIsAuthenticated(false);
+        console.log("ME RESPONSE:", data);
+
+        if (!mounted) return;
+
+        setIsAuthenticated(Boolean(data.authenticated));
+      })
+      .catch((error) => {
+        console.error("AUTH CHECK ERROR:", error);
+
+        if (mounted) {
+          setIsAuthenticated(false);
+        }
       })
       .finally(() => {
-        clearTimeout(timeout);
-        setAuthLoading(false);
+        if (mounted) {
+          setAuthLoading(false);
+        }
       });
 
     return () => {
-      clearTimeout(timeout);
-      controller.abort();
+      mounted = false;
     };
   }, []);
 
@@ -47,9 +47,9 @@ export default function App() {
     );
   }
 
-  if (!isAuthenticated && !authLoading) {
-  return <WelcomeScreen />;
-}
+  if (!isAuthenticated) {
+    return <WelcomeScreen />;
+  }
 
   return <Dashboard />;
 }
