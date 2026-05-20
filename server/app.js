@@ -22,7 +22,6 @@ const {
 } = require("@aws-sdk/client-s3");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-
 const { dynamo } = require("./dynamo");
 
 const app = express();
@@ -33,6 +32,7 @@ const APP_URL =
   process.env.APP_BASE_URL ||
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
+
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production";
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 
@@ -89,10 +89,6 @@ const checkAuth = (req, res, next) => {
 
 app.use(checkAuth);
 
-// -----------------------------------------------------------------------------
-// Vérification AWS
-// -----------------------------------------------------------------------------
-
 function validateAwsConfig(req, res, next) {
   const missing = [];
 
@@ -110,8 +106,7 @@ function validateAwsConfig(req, res, next) {
   if (missing.length > 0) {
     return res.status(500).json({
       error: "aws_config_missing",
-      message:
-        "Configuration AWS incomplète. Ajoute les variables manquantes dans app/server/.env.",
+      message: "Configuration AWS incomplète.",
       missing,
     });
   }
@@ -139,18 +134,13 @@ function validateS3Config(req, res, next) {
   if (missing.length > 0) {
     return res.status(500).json({
       error: "s3_config_missing",
-      message:
-        "Configuration S3 incomplète. Ajoute les variables manquantes dans app/server/.env.",
+      message: "Configuration S3 incomplète.",
       missing,
     });
   }
 
   return next();
 }
-
-// -----------------------------------------------------------------------------
-// Fonctions utilitaires
-// -----------------------------------------------------------------------------
 
 async function getClient() {
   if (!COGNITO_ISSUER || !COGNITO_CLIENT_ID) {
@@ -259,10 +249,6 @@ function sanitizeFileName(fileName = "") {
     .replace(/[^a-zA-Z0-9._-]/g, "");
 }
 
-// -----------------------------------------------------------------------------
-// Routes publiques
-// -----------------------------------------------------------------------------
-
 app.get("/", (req, res) => {
   res.render("index", {
     title: "Camelio Server",
@@ -290,307 +276,6 @@ app.get("/aws-check", (req, res) => {
   });
 });
 
-// -----------------------------------------------------------------------------
-// Test S3 simple
-// -----------------------------------------------------------------------------
-
-app.post("/api/s3/presign-test", validateS3Config, async (req, res, next) => {
-  try {
-    const { fileName, fileType, childId } = req.body;
-
-    if (!fileName || !fileType || !childId) {
-      return res.status(400).json({
-        error: "missing_fields",
-        message: "fileName, fileType et childId sont requis.",
-      });
-    }
-
-    const ownerId = getOwnerId(req);
-    const documentId = randomUUID();
-
-    const cleanFileName = sanitizeFileName(fileName);
-
-    const s3Key = `users/${ownerId}/children/${childId}/documents/${documentId}-${cleanFileName}`;
-
-    const command = new PutObjectCommand({
-      Bucket: S3_DOCUMENTS_BUCKET,
-      Key: s3Key,
-      ContentType: fileType,
-    });
-
-    const uploadUrl = await getSignedUrl(s3, command, {
-      expiresIn: 300,
-    });
-
-    res.json({
-      success: true,
-      uploadUrl,
-      s3Key,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// -----------------------------------------------------------------------------
-// API Documents, S3 + DynamoDB
-// -----------------------------------------------------------------------------
-
-app.post(
-  "/api/documents/presign",
-  validateAwsConfig,
-  validateS3Config,
-  async (req, res, next) => {
-    try {
-      const payload = cleanDocumentPayload(req.body);
-
-      if (!payload.fileName || !payload.fileType || !payload.childId) {
-        return res.status(400).json({
-          error: "missing_fields",
-          message: "fileName, fileType et childId sont requis.",
-        });
-      }
-
-      const allowedTypes = [
-        "application/pdf",
-        "image/png",
-        "image/jpeg",
-        "image/webp",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ];
-
-      if (!allowedTypes.includes(payload.fileType)) {
-        return res.status(400).json({
-          error: "invalid_file_type",
-          message: "Ce type de fichier n’est pas autorisé.",
-        });
-      }
-
-      const maxSize = 12 * 1024 * 1024;
-
-      if (payload.fileSize && payload.fileSize > maxSize) {
-        return res.status(400).json({
-          error: "file_too_large",
-          message: "Le fichier dépasse la limite de 12 Mo.",
-        });
-      }
-
-      const ownerId = getOwnerId(req);
-      const documentId = randomUUID();
-      const now = new Date().toISOString();
-
-      const cleanFileName = sanitizeFileName(payload.fileName);
-
-      const s3Key = `users/${ownerId}/children/${payload.childId}/documents/${documentId}-${cleanFileName}`;
-
-      const command = new PutObjectCommand({
-        Bucket: S3_DOCUMENTS_BUCKET,
-        Key: s3Key,
-        ContentType: payload.fileType,
-      });
-
-      const uploadUrl = await getSignedUrl(s3, command, {
-        expiresIn: 300,
-      });
-
-      const document = {
-        PK: getDemoUserPk(req),
-        SK: `DOCUMENT#${documentId}`,
-        id: documentId,
-        type: "document",
-
-        ownerId,
-        childId: payload.childId,
-        childName: payload.childName,
-        category: payload.category,
-
-        fileName: payload.fileName,
-        fileType: payload.fileType,
-        fileSize: payload.fileSize,
-        s3Key,
-
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: document,
-        })
-      );
-
-      res.json({
-        success: true,
-        uploadUrl,
-        document,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.get("/api/documents", validateAwsConfig, async (req, res, next) => {
-  try {
-    const result = await dynamo.send(
-      new QueryCommand({
-        TableName: DYNAMODB_TABLE,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": getDemoUserPk(req),
-          ":sk": "DOCUMENT#",
-        },
-      })
-    );
-
-    const documents = (result.Items || []).sort((a, b) => {
-      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
-    });
-
-    res.json({
-      documents,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/documents/child/:childId", validateAwsConfig, async (req, res, next) => {
-  try {
-    const { childId } = req.params;
-
-    const result = await dynamo.send(
-      new QueryCommand({
-        TableName: DYNAMODB_TABLE,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": getDemoUserPk(req),
-          ":sk": "DOCUMENT#",
-        },
-      })
-    );
-
-    const documents = (result.Items || [])
-      .filter((document) => document.childId === childId)
-      .sort((a, b) => {
-        return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
-      });
-
-    res.json({
-      documents,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get(
-  "/api/documents/:documentId/download",
-  validateAwsConfig,
-  validateS3Config,
-  async (req, res, next) => {
-    try {
-      const { documentId } = req.params;
-
-      const result = await dynamo.send(
-        new GetCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: getDemoUserPk(req),
-            SK: `DOCUMENT#${documentId}`,
-          },
-        })
-      );
-
-      const document = result.Item;
-
-      if (!document) {
-        return res.status(404).json({
-          error: "not_found",
-          message: "Document introuvable.",
-        });
-      }
-
-      const command = new GetObjectCommand({
-        Bucket: S3_DOCUMENTS_BUCKET,
-        Key: document.s3Key,
-      });
-
-      const downloadUrl = await getSignedUrl(s3, command, {
-        expiresIn: 300,
-      });
-
-      res.json({
-        success: true,
-        downloadUrl,
-        document,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.delete(
-  "/api/documents/:documentId",
-  validateAwsConfig,
-  validateS3Config,
-  async (req, res, next) => {
-    try {
-      const { documentId } = req.params;
-
-      const result = await dynamo.send(
-        new GetCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: getDemoUserPk(req),
-            SK: `DOCUMENT#${documentId}`,
-          },
-        })
-      );
-
-      const document = result.Item;
-
-      if (!document) {
-        return res.status(404).json({
-          error: "not_found",
-          message: "Document introuvable.",
-        });
-      }
-
-      await s3.send(
-        new DeleteObjectCommand({
-          Bucket: S3_DOCUMENTS_BUCKET,
-          Key: document.s3Key,
-        })
-      );
-
-      await dynamo.send(
-        new DeleteCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: getDemoUserPk(req),
-            SK: `DOCUMENT#${documentId}`,
-          },
-        })
-      );
-
-      res.json({
-        success: true,
-        deletedId: documentId,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// -----------------------------------------------------------------------------
-// Authentification Cognito
-// -----------------------------------------------------------------------------
-
 app.get("/login", async (req, res, next) => {
   try {
     const client = await getClient();
@@ -613,7 +298,10 @@ app.get("/login", async (req, res, next) => {
       lang: "fr",
     });
 
-    res.redirect(authorizationUrl);
+    req.session.save((err) => {
+      if (err) return next(err);
+      return res.redirect(authorizationUrl);
+    });
   } catch (error) {
     next(error);
   }
@@ -624,9 +312,8 @@ app.get("/callback", async (req, res, next) => {
     if (!req.session.state || !req.session.nonce || !req.session.codeVerifier) {
       return res.status(400).json({
         error: "auth_session_expired",
-        message:
-          "La session de connexion a expiré ou est incomplète. Retourne à l’application et reconnecte-toi.",
-        action: "Va sur http://localhost:3001/logout puis reconnecte-toi.",
+        message: "La session de connexion a expiré ou est incomplète.",
+        action: `Va sur ${APP_URL} puis reconnecte-toi.`,
       });
     }
 
@@ -661,7 +348,10 @@ app.get("/callback", async (req, res, next) => {
     delete req.session.state;
     delete req.session.nonce;
 
-    res.redirect(APP_URL);
+    req.session.save((err) => {
+      if (err) return next(err);
+      return res.redirect(APP_URL);
+    });
   } catch (error) {
     next(error);
   }
@@ -703,10 +393,6 @@ app.get("/logout", (req, res) => {
   });
 });
 
-// -----------------------------------------------------------------------------
-// API Camelio, DynamoDB
-// -----------------------------------------------------------------------------
-
 app.post("/api/referral-code", requireAuth, (req, res) => {
   const referralCode = getReferralCode(req);
 
@@ -716,10 +402,6 @@ app.post("/api/referral-code", requireAuth, (req, res) => {
     message: "Code de référence généré pour cet utilisateur.",
   });
 });
-
-// -----------------------------------------------------------------------------
-// API Profil
-// -----------------------------------------------------------------------------
 
 app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
@@ -770,10 +452,6 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
     next(error);
   }
 });
-
-// -----------------------------------------------------------------------------
-// API Enfants
-// -----------------------------------------------------------------------------
 
 app.get("/api/children", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
@@ -901,10 +579,6 @@ app.delete(
     }
   }
 );
-
-// -----------------------------------------------------------------------------
-// API Calendrier
-// -----------------------------------------------------------------------------
 
 app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
@@ -1041,10 +715,6 @@ app.delete(
   }
 );
 
-// -----------------------------------------------------------------------------
-// Route test, toutes les données utilisateur
-// -----------------------------------------------------------------------------
-
 app.get("/api/my-data", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
     const result = await dynamo.send(
@@ -1065,268 +735,204 @@ app.get("/api/my-data", requireAuth, validateAwsConfig, async (req, res, next) =
   }
 });
 
-// -----------------------------------------------------------------------------
-// Gestion des erreurs
-// -----------------------------------------------------------------------------
+app.post(
+  "/api/documents/presign",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const payload = cleanDocumentPayload(req.body);
 
+      if (!payload.fileName || !payload.fileType || !payload.childId) {
+        return res.status(400).json({
+          error: "missing_fields",
+          message: "fileName, fileType et childId sont requis.",
+        });
+      }
 
+      const ownerId = getOwnerId(req);
+      const documentId = randomUUID();
+      const now = new Date().toISOString();
+      const cleanFileName = sanitizeFileName(payload.fileName);
+      const s3Key = `users/${ownerId}/children/${payload.childId}/documents/${documentId}-${cleanFileName}`;
 
-app.use((error, req, res, next) => {
-  console.error(error);
-
-  if (error.message && error.message.includes("Could not load credentials")) {
-    return res.status(500).json({
-      error: "aws_credentials_missing",
-      message:
-        "AWS ne trouve pas les identifiants. Ajoute AWS_ACCESS_KEY_ID et AWS_SECRET_ACCESS_KEY dans app/server/.env, puis redémarre le serveur.",
-    });
-  }
-
-  if (error.message && error.message.includes("checks.state argument is missing")) {
-    return res.status(400).json({
-      error: "auth_state_missing",
-      message:
-        "La session de connexion Cognito est incomplète. Va sur /logout, puis reconnecte-toi depuis l’application.",
-    });
-  }
-
-  if (error.name === "AccessDenied" || error.name === "AccessDeniedException") {
-    return res.status(403).json({
-      error: "aws_access_denied",
-      message:
-        "Les clés AWS sont présentes, mais elles n'ont pas les permissions nécessaires. Vérifie la politique IAM pour S3 ou DynamoDB.",
-      details: error.message,
-    });
-  }
-
-  if (error.name === "NoSuchBucket") {
-    return res.status(404).json({
-      error: "s3_bucket_not_found",
-      message:
-        "Le bucket S3 est introuvable. Vérifie S3_DOCUMENTS_BUCKET dans app/server/.env.",
-      details: error.message,
-    });
-  }
-
-  if (error.name === "ResourceNotFoundException") {
-    return res.status(404).json({
-      error: "dynamodb_table_not_found",
-      message:
-        "La table DynamoDB est introuvable. Vérifie DYNAMODB_TABLE et AWS_REGION dans app/server/.env.",
-    });
-  }
-
-  res.status(500).json({
-    error: "server_error",
-    message: error.message || "Erreur serveur.",
-  });
-});
-
-// -----------------------------------------------------------------------------
-// Photos, S3 + DynamoDB
-// -----------------------------------------------------------------------------
-
-app.post("/api/photos/presign", validateS3Config, async (req, res) => {
-  try {
-    const { fileName, fileType } = req.body;
-
-    if (!fileName || !fileType) {
-      return res.status(400).json({
-        error: "missing_fields",
-        message: "fileName et fileType sont requis.",
+      const command = new PutObjectCommand({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Key: s3Key,
+        ContentType: payload.fileType,
       });
+
+      const uploadUrl = await getSignedUrl(s3, command, {
+        expiresIn: 300,
+      });
+
+      const document = {
+        PK: getUserPk(req),
+        SK: `DOCUMENT#${documentId}`,
+        id: documentId,
+        type: "document",
+        ownerId,
+        childId: payload.childId,
+        childName: payload.childName,
+        category: payload.category,
+        fileName: payload.fileName,
+        fileType: payload.fileType,
+        fileSize: payload.fileSize,
+        s3Key,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: document,
+        })
+      );
+
+      res.json({
+        success: true,
+        uploadUrl,
+        document,
+      });
+    } catch (error) {
+      next(error);
     }
-
-    const ownerId = getOwnerId(req);
-    const photoId = randomUUID();
-
-    const cleanFileName = fileName
-      .replace(/\s+/g, "-")
-      .replace(/[^a-zA-Z0-9._-]/g, "");
-
-    const s3Key = `users/${ownerId}/photos/${photoId}-${cleanFileName}`;
-
-    const command = new PutObjectCommand({
-      Bucket: S3_DOCUMENTS_BUCKET,
-      Key: s3Key,
-      ContentType: fileType,
-    });
-
-    const uploadUrl = await getSignedUrl(s3, command, {
-      expiresIn: 300,
-    });
-
-    res.json({
-      photoId,
-      uploadUrl,
-      s3Key,
-    });
-  } catch (error) {
-    console.error("Erreur presign photo:", error);
-    res.status(500).json({
-      error: "server_error",
-      message: "Impossible de générer l’URL d’envoi S3.",
-    });
   }
-});
+);
 
-app.get("/api/photos", validateAwsConfig, async (req, res) => {
+app.get("/api/documents", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
-    const pk = getDemoUserPk(req);
-
     const result = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": pk,
-          ":sk": "PHOTO#",
+          ":pk": getUserPk(req),
+          ":sk": "DOCUMENT#",
         },
       })
     );
 
-    const photos = await Promise.all(
-      (result.Items || []).map(async (item) => {
-        let url = item.url || "";
-
-        if (item.s3Key) {
-          url = await getSignedUrl(
-            s3,
-            new GetObjectCommand({
-              Bucket: S3_DOCUMENTS_BUCKET,
-              Key: item.s3Key,
-            }),
-            { expiresIn: 3600 }
-          );
-        }
-
-        return {
-          id: item.id,
-          title: item.title,
-          album: item.album,
-          children: item.children || [],
-          date: item.date,
-          fileName: item.fileName || "",
-          s3Key: item.s3Key,
-          url,
-        };
-      })
-    );
-
-    res.json({ photos });
-  } catch (error) {
-    console.error("Erreur liste photos:", error);
-    res.status(500).json({
-      error: "server_error",
-      message: "Impossible de charger les photos.",
+    const documents = (result.Items || []).sort((a, b) => {
+      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
     });
+
+    res.json({
+      documents,
+    });
+  } catch (error) {
+    next(error);
   }
 });
 
-app.post("/api/photos", validateAwsConfig, async (req, res) => {
-  try {
-    const pk = getDemoUserPk(req);
+app.get(
+  "/api/documents/:documentId/download",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const { documentId } = req.params;
 
-    const {
-      id,
-      title,
-      album,
-      children = [],
-      s3Key,
-      fileName = "",
-    } = req.body;
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `DOCUMENT#${documentId}`,
+          },
+        })
+      );
 
-    if (!id || !title || !album || !s3Key) {
-      return res.status(400).json({
-        error: "missing_fields",
-        message: "id, title, album et s3Key sont requis.",
+      const document = result.Item;
+
+      if (!document) {
+        return res.status(404).json({
+          error: "not_found",
+          message: "Document introuvable.",
+        });
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Key: document.s3Key,
       });
+
+      const downloadUrl = await getSignedUrl(s3, command, {
+        expiresIn: 300,
+      });
+
+      res.json({
+        success: true,
+        downloadUrl,
+        document,
+      });
+    } catch (error) {
+      next(error);
     }
-
-    const item = {
-      PK: pk,
-      SK: `PHOTO#${id}`,
-      id,
-      title,
-      album,
-      children,
-      s3Key,
-      fileName,
-      date: new Date().toISOString().slice(0, 10),
-      createdAt: new Date().toISOString(),
-      type: "photo",
-    };
-
-    await dynamo.send(
-      new PutCommand({
-        TableName: DYNAMODB_TABLE,
-        Item: item,
-      })
-    );
-
-    res.json({ photo: item });
-  } catch (error) {
-    console.error("Erreur ajout photo:", error);
-    res.status(500).json({
-      error: "server_error",
-      message: "Impossible d’enregistrer la photo.",
-    });
   }
-});
+);
 
-app.delete("/api/photos/:id", validateAwsConfig, async (req, res) => {
-  try {
-    const pk = getDemoUserPk(req);
-    const id = req.params.id;
+app.delete(
+  "/api/documents/:documentId",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const { documentId } = req.params;
 
-    const existing = await dynamo.send(
-      new GetCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: pk,
-          SK: `PHOTO#${id}`,
-        },
-      })
-    );
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `DOCUMENT#${documentId}`,
+          },
+        })
+      );
 
-    if (existing.Item?.s3Key) {
+      const document = result.Item;
+
+      if (!document) {
+        return res.status(404).json({
+          error: "not_found",
+          message: "Document introuvable.",
+        });
+      }
+
       await s3.send(
         new DeleteObjectCommand({
           Bucket: S3_DOCUMENTS_BUCKET,
-          Key: existing.Item.s3Key,
+          Key: document.s3Key,
         })
       );
+
+      await dynamo.send(
+        new DeleteCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `DOCUMENT#${documentId}`,
+          },
+        })
+      );
+
+      res.json({
+        success: true,
+        deletedId: documentId,
+      });
+    } catch (error) {
+      next(error);
     }
-
-    await dynamo.send(
-      new DeleteCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: pk,
-          SK: `PHOTO#${id}`,
-        },
-      })
-    );
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Erreur suppression photo:", error);
-    res.status(500).json({
-      error: "server_error",
-      message: "Impossible de supprimer la photo.",
-    });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Camelio server lancé sur http://localhost:${PORT}`);
-});
-// -----------------------------------------------------------------------------
-// API Photos, S3 + DynamoDB
-// -----------------------------------------------------------------------------
+);
 
 app.post(
   "/api/photos/presign",
+  requireAuth,
   validateAwsConfig,
   validateS3Config,
   async (req, res, next) => {
@@ -1352,7 +958,6 @@ app.post(
       const ownerId = getOwnerId(req);
       const photoId = randomUUID();
       const cleanFileName = sanitizeFileName(fileName);
-
       const s3Key = `users/${ownerId}/photos/${photoId}-${cleanFileName}`;
 
       const command = new PutObjectCommand({
@@ -1377,16 +982,9 @@ app.post(
   }
 );
 
-app.post("/api/photos", validateAwsConfig, async (req, res, next) => {
+app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
-    const {
-      id,
-      title,
-      album,
-      children = [],
-      s3Key,
-      fileName = "",
-    } = req.body;
+    const { id, title, album, children = [], s3Key, fileName = "" } = req.body;
 
     if (!id || !title || !album || !s3Key) {
       return res.status(400).json({
@@ -1398,7 +996,7 @@ app.post("/api/photos", validateAwsConfig, async (req, res, next) => {
     const now = new Date().toISOString();
 
     const photo = {
-      PK: getDemoUserPk(req),
+      PK: getUserPk(req),
       SK: `PHOTO#${id}`,
       id,
       type: "photo",
@@ -1430,6 +1028,7 @@ app.post("/api/photos", validateAwsConfig, async (req, res, next) => {
 
 app.get(
   "/api/photos",
+  requireAuth,
   validateAwsConfig,
   validateS3Config,
   async (req, res, next) => {
@@ -1439,7 +1038,7 @@ app.get(
           TableName: DYNAMODB_TABLE,
           KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
           ExpressionAttributeValues: {
-            ":pk": getDemoUserPk(req),
+            ":pk": getUserPk(req),
             ":sk": "PHOTO#",
           },
         })
@@ -1478,6 +1077,7 @@ app.get(
 
 app.delete(
   "/api/photos/:photoId",
+  requireAuth,
   validateAwsConfig,
   validateS3Config,
   async (req, res, next) => {
@@ -1488,7 +1088,7 @@ app.delete(
         new GetCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getDemoUserPk(req),
+            PK: getUserPk(req),
             SK: `PHOTO#${photoId}`,
           },
         })
@@ -1514,7 +1114,7 @@ app.delete(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getDemoUserPk(req),
+            PK: getUserPk(req),
             SK: `PHOTO#${photoId}`,
           },
         })
@@ -1522,9 +1122,62 @@ app.delete(
 
       res.json({
         success: true,
+        deletedId: photoId,
       });
     } catch (error) {
       next(error);
     }
   }
 );
+
+app.use((error, req, res, next) => {
+  console.error(error);
+
+  if (error.message && error.message.includes("Could not load credentials")) {
+    return res.status(500).json({
+      error: "aws_credentials_missing",
+      message: "AWS ne trouve pas les identifiants.",
+    });
+  }
+
+  if (error.message && error.message.includes("checks.state argument is missing")) {
+    return res.status(400).json({
+      error: "auth_state_missing",
+      message:
+        "La session de connexion Cognito est incomplète. Va sur /logout, puis reconnecte-toi depuis l’application.",
+    });
+  }
+
+  if (error.name === "AccessDenied" || error.name === "AccessDeniedException") {
+    return res.status(403).json({
+      error: "aws_access_denied",
+      message:
+        "Les clés AWS sont présentes, mais elles n'ont pas les permissions nécessaires.",
+      details: error.message,
+    });
+  }
+
+  if (error.name === "NoSuchBucket") {
+    return res.status(404).json({
+      error: "s3_bucket_not_found",
+      message: "Le bucket S3 est introuvable.",
+      details: error.message,
+    });
+  }
+
+  if (error.name === "ResourceNotFoundException") {
+    return res.status(404).json({
+      error: "dynamodb_table_not_found",
+      message: "La table DynamoDB est introuvable.",
+    });
+  }
+
+  res.status(500).json({
+    error: "server_error",
+    message: error.message || "Erreur serveur.",
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Camelio server lancé sur http://localhost:${PORT}`);
+});
