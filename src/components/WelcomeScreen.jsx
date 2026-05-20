@@ -45,7 +45,7 @@ export default function WelcomeScreen() {
           </div>
         </div>
 
-        <button type="button" onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL}/login`; }} className="mt-9 w-full rounded-3xl bg-[#8FA173] px-6 py-5 text-[1.25rem] font-bold tracking-wide text-white shadow-sm transition hover:brightness-95">
+        <button type="button" onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || "https://camelio.onrender.com"}/login`; }} className="mt-9 w-full rounded-3xl bg-[#8FA173] px-6 py-5 text-[1.25rem] font-bold tracking-wide text-white shadow-sm transition hover:brightness-95">
           Connexion
         </button>
       </div>

@@ -3,13 +3,14 @@ import WelcomeScreen from "./components/WelcomeScreen.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 
 export default function App() {
+  const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    fetch(`${import.meta.env.VITE_API_URL}/me`, {
+    fetch(`${API_URL}/me`, {
       credentials: "include",
       cache: "no-store",
     })

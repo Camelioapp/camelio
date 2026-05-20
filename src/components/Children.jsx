@@ -18,7 +18,7 @@ import {
 import { Popup, SectionTitle } from "./shared.jsx";
 import { colorOptions, displayName } from "./sectionsData.js";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 const defaultPhotoPosition = { x: 50, y: 50 };
 
 const presetPhotos = [

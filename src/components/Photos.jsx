@@ -9,7 +9,7 @@ import {
 import { Field, Popup, SectionTitle } from "./shared.jsx";
 import { displayName, getColor } from "./sectionsData.js";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 const inputClass =
   "mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#EAA5AF] focus:ring-2 focus:ring-[#F3CDD3]";

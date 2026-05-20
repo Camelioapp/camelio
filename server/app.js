@@ -58,9 +58,26 @@ app.set("views", `${__dirname}/views`);
 
 app.use(express.json({ limit: "10mb" }));
 
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3001",
+  "https://camelio-frontend.onrender.com",
+];
+
 app.use(
   cors({
-    origin: "https://camelio-frontend.onrender.com",
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
   })
 );
