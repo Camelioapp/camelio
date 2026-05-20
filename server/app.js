@@ -44,11 +44,12 @@ const COGNITO_REDIRECT_URI =
 const COGNITO_LOGOUT_URI = process.env.COGNITO_LOGOUT_URI || APP_URL;
 const COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
 
-const AWS_REGION = process.env.AWS_REGION || "ca-central-1";
+const AWS_REGION = process.env.AWS_REGION || "us-east-2";
+const S3_REGION = process.env.S3_REGION || "ca-central-1";
 const S3_DOCUMENTS_BUCKET = process.env.S3_DOCUMENTS_BUCKET;
 
 const s3 = new S3Client({
-  region: AWS_REGION,
+  region: S3_REGION,
 });
 
 let oidcClientPromise = null;
