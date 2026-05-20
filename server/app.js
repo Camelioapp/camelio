@@ -58,14 +58,12 @@ app.set("views", `${__dirname}/views`);
 
 app.use(express.json({ limit: "10mb" }));
 
-app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "http://localhost:3001",
-    "https://camelio-frontend.onrender.com"
-  ],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: "https://camelio-frontend.onrender.com",
+    credentials: true,
+  })
+);
 
 app.use(
   session({
@@ -76,7 +74,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "none",
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       maxAge: 1000 * 60 * 60 * 8,
     },
   })

@@ -16,9 +16,9 @@ export default function App() {
     }, 3000);
 
     fetch(`${import.meta.env.VITE_API_URL}/me`, {
-      credentials: "include",
-      signal: controller.signal,
-    })
+  credentials: "include",
+  signal: controller.signal,
+})
       .then((response) => response.json())
       .then((data) => {
         setIsAuthenticated(Boolean(data.authenticated));
