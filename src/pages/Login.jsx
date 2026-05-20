@@ -6,11 +6,11 @@ export default function Login() {
   const REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI;
 
 const loginWithCognito = () => {
-  window.location.href = "http://localhost:3001/login";
+  window.location.href = "import.meta.env.VITE_API_URL/login";
 };
 
 const loginWithGoogle = () => {
-  window.location.href = "http://localhost:3001/login";
+  window.location.href = "import.meta.env.VITE_API_URL/login";
 };
 
   return (

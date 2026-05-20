@@ -30,7 +30,7 @@ import Notes from "./Notes.jsx";
 import SettingsView from "./SettingsView.jsx";
 import MemorablePhrases from "./MemorablePhrases.jsx";
 
-const API_BASE_URL = "http://localhost:3001";
+const API_BASE_URL = "import.meta.env.VITE_API_URL";
 
 const sections = [
   {
