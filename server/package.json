@@ -1,0 +1,24 @@
+{
+  "name": "camelio-server",
+  "version": "1.0.0",
+  "description": "Backend Node/Express pour Amazon Cognito",
+  "main": "app.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node app.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1049.0",
+    "@aws-sdk/client-s3": "^3.1049.0",
+    "@aws-sdk/lib-dynamodb": "^3.1049.0",
+    "@aws-sdk/s3-request-presigner": "^3.1049.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "express": "^4.21.1",
+    "express-session": "^1.18.1",
+    "openid-client": "^5.7.0",
+    "uuid": "^14.0.0"
+  }
+}
