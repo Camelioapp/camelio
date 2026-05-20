@@ -28,7 +28,11 @@ const { dynamo } = require("./dynamo");
 const app = express();
 
 const PORT = process.env.PORT || 3001;
-const APP_URL = process.env.APP_URL || "http://localhost:5173";
+const APP_URL =
+  process.env.APP_URL ||
+  process.env.APP_BASE_URL ||
+  process.env.FRONTEND_URL ||
+  "http://localhost:5173";
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production";
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 
@@ -54,12 +58,14 @@ app.set("views", `${__dirname}/views`);
 
 app.use(express.json({ limit: "10mb" }));
 
-app.use(
-  cors({
-    origin: APP_URL,
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:3001",
+    "https://camelio-frontend.onrender.com"
+  ],
+  credentials: true
+}));
 
 app.use(
   session({
