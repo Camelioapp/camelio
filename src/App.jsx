@@ -17,6 +17,7 @@ export default function App() {
 
     fetch(`${import.meta.env.VITE_API_URL}/me`, {
   credentials: "include",
+  cache: "no-store",
   signal: controller.signal,
 })
       .then((response) => response.json())
