@@ -15,7 +15,7 @@ export default function App() {
       setAuthLoading(false);
     }, 3000);
 
-    fetch("import.meta.env.VITE_API_URL/me", {
+    fetch(`${import.meta.env.VITE_API_URL}/me`, {
       credentials: "include",
       signal: controller.signal,
     })

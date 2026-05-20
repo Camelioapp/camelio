@@ -11,7 +11,7 @@ import {
 import { Field, Popup, SectionTitle } from "./shared.jsx";
 import { colorOptions, displayName, getColor } from "./sectionsData.js";
 
-const API_BASE_URL = "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const MONTHS = [
   "Janvier",
