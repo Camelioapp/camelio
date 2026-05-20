@@ -22,8 +22,9 @@ export default function App() {
 })
       .then((response) => response.json())
       .then((data) => {
-        setIsAuthenticated(Boolean(data.authenticated));
-      })
+  console.log("AUTH:", data.authenticated);
+  setIsAuthenticated(Boolean(data.authenticated));
+})
       .catch(() => {
         setIsAuthenticated(false);
       })
@@ -46,9 +47,9 @@ export default function App() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <WelcomeScreen />;
-  }
+  if (!isAuthenticated && !authLoading) {
+  return <WelcomeScreen />;
+}
 
   return <Dashboard />;
 }
