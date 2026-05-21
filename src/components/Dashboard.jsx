@@ -364,38 +364,33 @@ export default function Dashboard() {
           </header>
 
           <main className="p-4 md:p-8">
-            <section className="relative overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[30px]">
+            <section className="relative overflow-hidden rounded-[30px] border border-[#eadfcf] bg-white shadow-sm">
               <FamilySoftCircles />
 
-              <div className="relative z-10 grid grid-cols-[1fr_auto] items-start gap-4 p-5 md:p-8">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#a8aa91] md:text-sm">
-                    Bienvenue
-                  </p>
+              <div className="relative z-10 px-5 py-6 md:px-8 md:py-8">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#a8aa91] md:text-sm">
+                      Bienvenue
+                    </p>
 
-                  <h2 className="mt-1 text-3xl font-semibold text-[#4f4a45]">
-                    Ma famille
-                  </h2>
-
-                  <p className="mt-3 max-w-md text-sm leading-6 text-[#7d756e]">
-                    Un carnet simple pour garder l’essentiel au même endroit.
-                  </p>
-                </div>
-
-                <div className="flex items-start justify-end">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-[#eadfcf] bg-white shadow-sm md:h-24 md:w-24 md:rounded-[28px]">
-                    <img
-                      src="https://studiocameleon.ca/wp-content/uploads/2026/05/Logo-Camelio-2-scaled.png"
-                      alt="Camelio"
-                      className="h-12 w-12 object-contain md:h-20 md:w-20"
-                    />
+                    <h2 className="mt-1 text-2xl font-semibold text-[#4f4a45] md:text-3xl">
+                      Ma famille
+                    </h2>
                   </div>
-                </div>
-              </div>
 
-              <div className="relative z-10 px-5 pb-5 md:px-8 md:pb-8">
+                  <button
+                    type="button"
+                    onClick={() => openSection("children")}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
+                    aria-label="Ajouter un enfant"
+                  >
+                    <Plus size={22} strokeWidth={1.8} />
+                  </button>
+                </div>
+
                 {isLoadingChildren ? (
-                  <div className="flex min-h-[165px] w-full items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-white text-center md:min-h-[170px]">
+                  <div className="flex min-h-[180px] w-full items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center">
                     <p className="text-sm font-semibold text-[#8b8278]">
                       Chargement de votre famille...
                     </p>
@@ -404,7 +399,7 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => openSection("children")}
-                    className="flex min-h-[165px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-white text-center transition hover:bg-[#faf4ec] hover:shadow-sm md:min-h-[170px]"
+                    className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center transition hover:bg-[#faf4ec] hover:shadow-sm"
                   >
                     <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#d8c8b6] bg-[#eef0e7] text-[#8f9874] shadow-sm">
                       <Plus size={32} strokeWidth={1.7} />
@@ -419,38 +414,43 @@ export default function Dashboard() {
                     </p>
                   </button>
                 ) : (
-                  <div className="flex flex-wrap items-center justify-center gap-4 rounded-[26px] border border-[#eadfcf] bg-white p-6">
-                    {children.map((child) => {
-                      const photo = child.image || child.photo || "";
-                      const initials = getInitials(child);
+                  <div className="relative flex min-h-[210px] items-center justify-center overflow-x-auto px-2 pb-4 pt-2">
+                    <div className="flex items-end justify-center pl-7 pr-7">
+                      {children.map((child, index) => {
+                        const photo = child.image || child.photo || "";
+                        const initials = getInitials(child);
 
-                      return (
-                        <button
-                          key={child.id || child.name}
-                          type="button"
-                          onClick={() => openSection("children")}
-                          className="group relative focus:outline-none"
-                        >
-                          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[#eef0e7] text-2xl font-bold text-[#8f9874] shadow-md transition-transform duration-300 group-hover:scale-105 md:h-28 md:w-28">
-                            {photo ? (
-                              <img
-                                src={photo}
-                                alt={child.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : initials ? (
-                              initials
-                            ) : (
-                              <UserRound className="h-8 w-8" />
-                            )}
-                          </div>
+                        return (
+                          <button
+                            key={child.id || child.name}
+                            type="button"
+                            onClick={() => openSection("children")}
+                            className={`group relative flex shrink-0 flex-col items-center ${
+                              index === 0 ? "" : "-ml-5 md:-ml-7"
+                            }`}
+                            style={{ zIndex: children.length + index }}
+                          >
+                            <div className="flex h-[132px] w-[132px] items-center justify-center overflow-hidden rounded-full border-[10px] border-white bg-[#eef0e7] text-3xl font-bold text-[#8f9874] shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] md:h-[150px] md:w-[150px]">
+                              {photo ? (
+                                <img
+                                  src={photo}
+                                  alt={child.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : initials ? (
+                                initials
+                              ) : (
+                                <UserRound className="h-10 w-10" />
+                              )}
+                            </div>
 
-                          <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-xl bg-[#a8aa91] px-4 py-1 text-sm font-semibold text-white shadow-sm">
-                            {child.name}
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <div className="-mt-5 min-w-[104px] rotate-[-2deg] rounded-[18px] bg-[#a8aa91] px-5 py-2 text-center text-lg font-semibold text-white shadow-sm transition group-hover:bg-[#929b7b] md:min-w-[120px] md:text-xl">
+                              {child.name}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -552,16 +552,17 @@ export default function Dashboard() {
 function FamilySoftCircles() {
   return (
     <>
-      <div className="pointer-events-none absolute -left-12 bottom-0 hidden h-28 w-28 rounded-tr-[44px] bg-[#dfe7d7]/75 md:block" />
+      <div className="pointer-events-none absolute -left-16 bottom-0 h-40 w-64 rounded-tr-[120px] bg-[#dfe7d7]/65 md:h-52 md:w-80" />
 
-      <div className="pointer-events-none absolute right-0 top-0 hidden h-28 w-28 rounded-bl-[44px] bg-[#f7dfe0]/85 md:block" />
+      <div className="pointer-events-none absolute -right-10 top-0 h-32 w-32 rounded-bl-[80px] bg-[#f7dfe0]/85 md:h-44 md:w-44" />
 
-      <div className="pointer-events-none absolute right-[94px] top-[42px] hidden h-6 w-6 rounded-full bg-[#b59ed4]/70 md:block" />
-      <div className="pointer-events-none absolute right-[70px] top-[66px] hidden h-3.5 w-3.5 rounded-full bg-[#e99aaa]/70 md:block" />
-      <div className="pointer-events-none absolute right-[110px] top-[88px] hidden h-4 w-4 rounded-full bg-[#a8b58f]/45 md:block" />
+      <div className="pointer-events-none absolute left-[22%] top-[58%] h-5 w-5 rounded-full bg-[#c78cb7]/70 md:h-6 md:w-6" />
 
-      <div className="pointer-events-none absolute left-12 bottom-16 hidden h-3 w-3 rounded-full bg-[#b59ed4]/40 md:block" />
-      <div className="pointer-events-none absolute left-20 bottom-24 hidden h-2.5 w-2.5 rounded-full bg-[#e99aaa]/40 md:block" />
+      <div className="pointer-events-none absolute right-[18%] bottom-[20%] h-5 w-5 rounded-full bg-[#ffd27a]/90 md:h-6 md:w-6" />
+
+      <div className="pointer-events-none absolute right-[21%] top-[18%] hidden h-8 w-8 rotate-12 border-r-4 border-t-4 border-[#ffd27a] md:block" />
+
+      <div className="pointer-events-none absolute right-[19%] top-[27%] hidden h-7 w-7 rotate-[-8deg] border-r-4 border-t-4 border-[#ffd27a] md:block" />
     </>
   );
 }
