@@ -20,6 +20,7 @@ const inputClass =
   "mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]";
 
 const APP_VERSION = "1.0.0";
+
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
@@ -285,13 +286,17 @@ export default function SettingsView({
             return (
               <div
                 key={section.id}
-                className={`rounded-[1.5rem] border bg-[#FFFDF8] transition ${
-                  isOpen ? "border-[#D8C8B6]" : "border-[#EFE4D6]"
+                className={`rounded-[1.5rem] border transition ${
+                  isOpen ? "shadow-sm" : ""
                 } ${!isVisible ? "opacity-60" : ""}`}
+                style={{
+                  backgroundColor: activeTheme.bgColor,
+                  borderColor: activeTheme.borderColor,
+                }}
               >
                 <div className="flex items-center gap-3 p-3">
                   <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
                     style={{ backgroundColor: activeTheme.iconColor }}
                   >
                     <Icon className="h-5 w-5" />
@@ -301,6 +306,7 @@ export default function SettingsView({
                     <p className="truncate font-bold text-[#55534C]">
                       {section.title}
                     </p>
+
                     <p className="text-xs text-[#746F64]">
                       {isVisible
                         ? `Position ${visibleIndex + 1}`
@@ -313,7 +319,7 @@ export default function SettingsView({
                     onClick={() =>
                       setOpenedSectionId(isOpen ? null : section.id)
                     }
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#746F64] ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-[#746F64] ring-1 ring-white/70 transition hover:scale-105 hover:bg-white"
                     aria-label={`Options de ${section.title}`}
                   >
                     <Settings className="h-5 w-5" />
@@ -321,13 +327,16 @@ export default function SettingsView({
                 </div>
 
                 {isOpen && (
-                  <div className="border-t border-[#EFE4D6] p-4">
+                  <div
+                    className="border-t p-4"
+                    style={{ borderColor: activeTheme.borderColor }}
+                  >
                     <div className="grid gap-3 md:grid-cols-3">
                       <button
                         type="button"
                         disabled={!isVisible || visibleIndex === 0}
                         onClick={() => moveSection(section.id, -1)}
-                        className="flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#55534C] ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA] disabled:opacity-40"
+                        className="flex items-center justify-center gap-2 rounded-2xl bg-white/80 px-4 py-3 text-sm font-bold text-[#55534C] ring-1 ring-white/70 transition hover:bg-white disabled:opacity-40"
                       >
                         <ArrowUp className="h-4 w-4" />
                         Monter
@@ -340,7 +349,7 @@ export default function SettingsView({
                           visibleIndex === visibleSectionIds.length - 1
                         }
                         onClick={() => moveSection(section.id, 1)}
-                        className="flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#55534C] ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA] disabled:opacity-40"
+                        className="flex items-center justify-center gap-2 rounded-2xl bg-white/80 px-4 py-3 text-sm font-bold text-[#55534C] ring-1 ring-white/70 transition hover:bg-white disabled:opacity-40"
                       >
                         <ArrowDown className="h-4 w-4" />
                         Descendre
@@ -350,7 +359,7 @@ export default function SettingsView({
                         <button
                           type="button"
                           onClick={() => hideSection(section.id)}
-                          className="flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#B86C6C] ring-1 ring-[#F1CACA] transition hover:bg-[#FFF3F3]"
+                          className="flex items-center justify-center gap-2 rounded-2xl bg-white/80 px-4 py-3 text-sm font-bold text-[#B86C6C] ring-1 ring-white/70 transition hover:bg-white"
                         >
                           <EyeOff className="h-4 w-4" />
                           Masquer
@@ -359,7 +368,7 @@ export default function SettingsView({
                         <button
                           type="button"
                           onClick={() => showSection(section.id)}
-                          className="flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#7A8B69] ring-1 ring-[#D8E6CA] transition hover:bg-[#F7FBF3]"
+                          className="flex items-center justify-center gap-2 rounded-2xl bg-white/80 px-4 py-3 text-sm font-bold text-[#7A8B69] ring-1 ring-white/70 transition hover:bg-white"
                         >
                           <Eye className="h-4 w-4" />
                           Afficher
@@ -369,7 +378,8 @@ export default function SettingsView({
 
                     <div className="mt-5">
                       <div className="mb-3 flex items-center gap-2">
-                        <Palette className="h-4 w-4 text-[#A8AA91]" />
+                        <Palette className="h-4 w-4 text-[#746F64]" />
+
                         <p className="text-sm font-bold text-[#55534C]">
                           Couleur de la section
                         </p>
@@ -387,10 +397,10 @@ export default function SettingsView({
                               onClick={() =>
                                 changeSectionTheme(section.id, theme)
                               }
-                              className={`flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-xs font-bold text-[#55534C] transition hover:scale-105 ${
+                              className={`flex items-center gap-2 rounded-full bg-white/85 px-3 py-2 text-xs font-bold text-[#55534C] transition hover:scale-105 ${
                                 selected
-                                  ? "border-[#55534C]"
-                                  : "border-[#EFE4D6]"
+                                  ? "ring-2 ring-[#55534C]"
+                                  : "ring-1 ring-white/70"
                               }`}
                             >
                               <span
@@ -406,7 +416,7 @@ export default function SettingsView({
                       <button
                         type="button"
                         onClick={() => resetSectionTheme(section.id)}
-                        className="mt-3 flex items-center gap-2 rounded-full bg-[#F8F3EA] px-4 py-2 text-xs font-bold text-[#746F64] transition hover:bg-[#EFE4D6]"
+                        className="mt-3 flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-[#746F64] transition hover:bg-white"
                       >
                         <Grid2X2 className="h-4 w-4" />
                         Réinitialiser la couleur

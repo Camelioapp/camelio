@@ -6,6 +6,8 @@ import {
   Baby,
   Camera,
   Check,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Plus,
   ScrollText,
@@ -16,10 +18,30 @@ import {
 } from "lucide-react";
 
 import { Popup, SectionTitle } from "./shared.jsx";
-import { colorOptions, displayName } from "./sectionsData.js";
+import { displayName } from "./sectionsData.js";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+
 const defaultPhotoPosition = { x: 50, y: 50 };
+
+const childColorOptions = [
+  { id: "sage", label: "Sauge", dot: "#A8B193" },
+  { id: "rose", label: "Rose", dot: "#E99AAA" },
+  { id: "blue", label: "Bleu", dot: "#9EBBE1" },
+  { id: "mauve", label: "Mauve", dot: "#AD9BCF" },
+  { id: "gold", label: "Doré", dot: "#D8B77F" },
+  { id: "peach", label: "Pêche", dot: "#DF9F8A" },
+  { id: "mint", label: "Menthe", dot: "#8FBFA8" },
+  { id: "purple", label: "Violet", dot: "#AA99CF" },
+  { id: "yellow", label: "Jaune", dot: "#D7C37F" },
+  { id: "gray", label: "Gris", dot: "#A9AA91" },
+  { id: "coral", label: "Corail", dot: "#E9897E" },
+  { id: "teal", label: "Turquoise", dot: "#72B7B2" },
+  { id: "sky", label: "Ciel", dot: "#8FC7E8" },
+  { id: "lilac", label: "Lilas", dot: "#C4A7E7" },
+  { id: "cream", label: "Crème", dot: "#E8D7B1" },
+];
 
 const presetPhotos = [
   {
@@ -54,6 +76,7 @@ function normalizePhotoPosition(position) {
 
   if (typeof position === "string") {
     const [xRaw, yRaw] = position.split(" ");
+
     return {
       x: parseInt(xRaw, 10) || 50,
       y: parseInt(yRaw, 10) || 50,
@@ -164,12 +187,21 @@ function PhotoPicker({
               onMouseLeave={() => setDragging(false)}
               onMouseMove={(event) => {
                 if (!dragging) return;
-                updatePosition(event.clientX, event.clientY, event.currentTarget);
+                updatePosition(
+                  event.clientX,
+                  event.clientY,
+                  event.currentTarget
+                );
               }}
               onTouchMove={(event) => {
                 const touch = event.touches?.[0];
                 if (!touch) return;
-                updatePosition(touch.clientX, touch.clientY, event.currentTarget);
+
+                updatePosition(
+                  touch.clientX,
+                  touch.clientY,
+                  event.currentTarget
+                );
               }}
               className="relative mx-auto flex h-72 w-full max-w-[380px] cursor-move items-center justify-center overflow-hidden rounded-[2rem] bg-[#EEF0E7] ring-1 ring-[#D8C8B6]"
             >
@@ -362,7 +394,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     [children]
   );
 
-  const availableColors = colorOptions.filter(
+  const availableColors = childColorOptions.filter(
     (color) => !usedColors.includes(color.id) || color.id === newChild.color
   );
 
@@ -492,7 +524,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       const selectedColor =
         availableColors.find((color) => color.id === newChild.color) ||
         availableColors[0] ||
-        colorOptions[0];
+        childColorOptions[0];
 
       const response = await fetch(`${API_BASE_URL}/api/children`, {
         method: "POST",
@@ -1062,7 +1094,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             <FormField label="Couleur du calendrier">
               <ColorPicker
                 value={selectedChild.color || "sage"}
-                options={colorOptions}
+                options={childColorOptions}
                 onChange={(colorId) =>
                   setSelectedChild({
                     ...selectedChild,
@@ -1140,50 +1172,70 @@ function FormField({ label, children }) {
 }
 
 function ColorPicker({ value, onChange, options }) {
+  const [open, setOpen] = useState(false);
+
+  const selectedColor =
+    options.find((color) => color.id === value) || options[0];
+
   return (
-    <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      {options.map((color) => {
-        const selected = value === color.id;
-        const dotClass = getCalendarColorDot(color);
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center justify-between rounded-2xl border border-[#EFE4D6] bg-[#FFF8EC] px-4 py-3 text-sm font-bold text-[#4F4A45] shadow-sm"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span
+            className="h-5 w-5 shrink-0 rounded-full"
+            style={{ backgroundColor: selectedColor?.dot }}
+          />
 
-        return (
-          <button
-            key={color.id}
-            type="button"
-            onClick={() => onChange(color.id)}
-            className={`flex w-full items-center justify-between gap-2 rounded-2xl border px-3 py-3 text-sm font-semibold transition ${
-              selected
-                ? "border-[#A8B193] bg-[#F4F7EF] text-[#4F4A45]"
-                : "border-[#EFE4D6] bg-[#FFF8EC] text-[#746F64] hover:bg-[#FAF4EC]"
-            }`}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span
-                className={`h-4 w-4 shrink-0 rounded-full ${getCalendarColorDot(
-                  color
-                )}`}
-              />
-              <span className="truncate">{color.label}</span>
-            </span>
+          <span className="truncate">
+            {selectedColor?.label || "Choisir une couleur"}
+          </span>
+        </span>
 
-            {selected && <Check className="h-4 w-4 shrink-0 text-[#8F9874]" />}
-          </button>
-        );
-      })}
+        {open ? (
+          <ChevronUp className="h-4 w-4 shrink-0 text-[#746F64]" />
+        ) : (
+          <ChevronDown className="h-4 w-4 shrink-0 text-[#746F64]" />
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 rounded-2xl bg-white p-4 shadow-xl ring-1 ring-[#EFE4D6]">
+          <p className="mb-3 text-sm font-bold text-[#55534C]">
+            Choisir une couleur
+          </p>
+
+          <div className="grid grid-cols-5 gap-3">
+            {options.map((color) => {
+              const selected = value === color.id;
+
+              return (
+                <button
+                  key={color.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(color.id);
+                    setOpen(false);
+                  }}
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition hover:scale-105 ${
+                    selected ? "border-[#55534C]" : "border-[#EFE4D6]"
+                  }`}
+                  title={color.label}
+                  aria-label={color.label}
+                >
+                  <span
+                    className="h-7 w-7 rounded-full"
+                    style={{ backgroundColor: color.dot }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-function getCalendarColorDot(color) {
-  const id = String(color.id || "").toLowerCase();
-  const label = String(color.label || "").toLowerCase();
-
-  if (id.includes("rose") || label.includes("rose")) return "bg-[#E99AAA]";
-  if (id.includes("lav") || label.includes("lav")) return "bg-[#AD9BCF]";
-  if (id.includes("sable") || label.includes("sable")) return "bg-[#D8B77F]";
-  if (id.includes("bleu") || id.includes("blue") || label.includes("bleu")) {
-    return "bg-[#9EBBE1]";
-  }
-
-  return "bg-[#A8B193]";
 }
