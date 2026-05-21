@@ -4,6 +4,7 @@ import {
   ArrowUp,
   CreditCard,
   GripVertical,
+  LogOut,
   Quote,
   Settings,
   UserRound,
@@ -16,6 +17,7 @@ const inputClass =
   "mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]";
 
 const APP_VERSION = "1.0.0";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 const memorablePhrasesSection = {
   id: "memorable-phrases",
@@ -89,6 +91,10 @@ export default function SettingsView({ parentProfile, setParentProfile }) {
 
       return updated;
     });
+  };
+
+  const handleLogout = () => {
+    window.location.href = `${API_BASE_URL}/logout`;
   };
 
   return (
@@ -197,6 +203,17 @@ export default function SettingsView({ parentProfile, setParentProfile }) {
         </div>
 
         <InfoBox label="Plan actuel" value="Gratuit" />
+      </div>
+
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F]"
+        >
+          <LogOut className="h-5 w-5" />
+          Se déconnecter
+        </button>
       </div>
 
       <div className="pb-5 text-center">
