@@ -160,9 +160,6 @@ function validateS3Config(req, res, next) {
   return next();
 }
 
-  return next();
-}
-
 async function getClient() {
   if (!COGNITO_ISSUER || !COGNITO_CLIENT_ID) {
     throw new Error("Variables manquantes: COGNITO_ISSUER et COGNITO_CLIENT_ID.");
