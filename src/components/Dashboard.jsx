@@ -1,21 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Baby,
-  FileText,
-  CalendarDays,
-  Calculator,
-  FolderOpen,
-  Image,
-  HeartPulse,
-  Receipt,
-  StickyNote,
-  Settings,
   Plus,
   ArrowLeft,
   Grid2X2,
   List,
   UserRound,
-  Quote,
 } from "lucide-react";
 
 import Children from "./Children.jsx";
@@ -32,7 +21,6 @@ import MemorablePhrases from "./MemorablePhrases.jsx";
 import { sections } from "./sectionsData.js";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
-
 
 function getAgeFromBirthDate(birthDate) {
   if (!birthDate || birthDate === "À compléter") return "À compléter";
@@ -89,6 +77,15 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("home");
   const [viewMode, setViewMode] = useState("grid");
 
+  const DEFAULT_SECTION_ORDER = sections.map((section) => section.id);
+  const [sectionOrderIds, setSectionOrderIds] = useState(DEFAULT_SECTION_ORDER);
+
+  const orderedSections = useMemo(() => {
+    return sectionOrderIds
+      .map((id) => sections.find((section) => section.id === id))
+      .filter(Boolean);
+  }, [sectionOrderIds]);
+
   const [children, setChildren] = useState([]);
   const [isLoadingChildren, setIsLoadingChildren] = useState(true);
 
@@ -140,6 +137,7 @@ export default function Dashboard() {
         const formattedChildren = (data.children || []).map(
           formatChildFromServer
         );
+
         setChildren(formattedChildren);
       } catch (error) {
         console.error("Erreur chargement enfants:", error);
@@ -233,6 +231,8 @@ export default function Dashboard() {
           <SettingsView
             parentProfile={parentProfile}
             setParentProfile={setParentProfile}
+            sectionOrderIds={sectionOrderIds}
+            setSectionOrderIds={setSectionOrderIds}
             onBack={goHome}
           />
         );
@@ -407,7 +407,7 @@ export default function Dashboard() {
                   </h2>
 
                   <p className="text-sm text-[#8b8278]">
-                    {sections.length} sections disponibles
+                    {orderedSections.length} sections disponibles
                   </p>
                 </div>
 
@@ -451,7 +451,7 @@ export default function Dashboard() {
                     : "grid grid-cols-2 gap-3 md:gap-4"
                 }
               >
-                {sections.map((section) => {
+                {orderedSections.map((section) => {
                   const Icon = section.icon;
 
                   return (
