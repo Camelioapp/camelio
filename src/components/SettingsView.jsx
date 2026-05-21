@@ -103,11 +103,13 @@ function SectionOrderItem({
           </button>
 
           <button
-            type="button"
-            onClick={() => removeSection(section.id)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#C96F6F] ring-1 ring-[#F2CACA]"
-            title="Masquer cette section"
-          >
+  type="button"
+  onClick={() => removeSection(section.id)}
+  className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#C96F6F] ring-1 ring-[#F2CACA]"
+  title="Masquer cette section"
+>
+  <EyeOff className="h-4 w-4" />
+</button>
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
