@@ -1,11 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Plus,
-  ArrowLeft,
-  Grid2X2,
-  List,
-  UserRound,
-} from "lucide-react";
+import { Plus, ArrowLeft, Grid2X2, List, UserRound } from "lucide-react";
 
 import Children from "./Children.jsx";
 import ParentalPlan from "./ParentalPlan.jsx";
@@ -18,9 +12,13 @@ import Invoices from "./Invoices.jsx";
 import Notes from "./Notes.jsx";
 import SettingsView from "./SettingsView.jsx";
 import MemorablePhrases from "./MemorablePhrases.jsx";
-import { sections } from "./sectionsData.js";
+import { sections, getSectionTheme } from "./sectionsData.js";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+
+const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
+const SECTION_THEME_STORAGE_KEY = "camelio-section-themes";
 
 function getAgeFromBirthDate(birthDate) {
   if (!birthDate || birthDate === "À compléter") return "À compléter";
@@ -77,44 +75,70 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("home");
   const [viewMode, setViewMode] = useState("grid");
 
-  const DEFAULT_SECTION_ORDER = sections.map((section) => section.id);
-const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
+  const defaultSectionOrder = useMemo(() => {
+    return sections
+      .filter((section) => section.id !== "settings")
+      .map((section) => section.id);
+  }, []);
 
-const [sectionOrderIds, setSectionOrderIds] = useState(() => {
-  try {
-    const savedOrder = localStorage.getItem(SECTION_ORDER_STORAGE_KEY);
+  const [sectionOrderIds, setSectionOrderIds] = useState(() => {
+    try {
+      const savedOrder = localStorage.getItem(SECTION_ORDER_STORAGE_KEY);
 
-    if (!savedOrder) return DEFAULT_SECTION_ORDER;
+      if (!savedOrder) {
+        return sections
+          .filter((section) => section.id !== "settings")
+          .map((section) => section.id);
+      }
 
-    const parsedOrder = JSON.parse(savedOrder);
+      const parsedOrder = JSON.parse(savedOrder);
 
-    if (!Array.isArray(parsedOrder)) return DEFAULT_SECTION_ORDER;
+      if (!Array.isArray(parsedOrder)) {
+        return sections
+          .filter((section) => section.id !== "settings")
+          .map((section) => section.id);
+      }
 
-    const validSavedIds = parsedOrder.filter((id) =>
-      DEFAULT_SECTION_ORDER.includes(id)
+      const availableIds = sections
+        .filter((section) => section.id !== "settings")
+        .map((section) => section.id);
+
+      return parsedOrder.filter((id) => availableIds.includes(id));
+    } catch {
+      return sections
+        .filter((section) => section.id !== "settings")
+        .map((section) => section.id);
+    }
+  });
+
+  const [sectionThemeOverrides, setSectionThemeOverrides] = useState(() => {
+    try {
+      const savedThemes = localStorage.getItem(SECTION_THEME_STORAGE_KEY);
+      return savedThemes ? JSON.parse(savedThemes) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(
+      SECTION_ORDER_STORAGE_KEY,
+      JSON.stringify(sectionOrderIds)
     );
+  }, [sectionOrderIds]);
 
-    const missingIds = DEFAULT_SECTION_ORDER.filter(
-      (id) => !validSavedIds.includes(id)
+  useEffect(() => {
+    localStorage.setItem(
+      SECTION_THEME_STORAGE_KEY,
+      JSON.stringify(sectionThemeOverrides)
     );
-
-    return [...validSavedIds, ...missingIds];
-  } catch {
-    return DEFAULT_SECTION_ORDER;
-  }
-});
-useEffect(() => {
-  localStorage.setItem(
-    SECTION_ORDER_STORAGE_KEY,
-    JSON.stringify(sectionOrderIds)
-  );
-}, [sectionOrderIds]);
+  }, [sectionThemeOverrides]);
 
   const orderedSections = useMemo(() => {
-  return sectionOrderIds
-    .map((id) => sections.find((section) => section.id === id))
-    .filter((section) => section && section.id !== "settings");
-}, [sectionOrderIds]);
+    return sectionOrderIds
+      .map((id) => sections.find((section) => section.id === id))
+      .filter(Boolean);
+  }, [sectionOrderIds]);
 
   const [children, setChildren] = useState([]);
   const [isLoadingChildren, setIsLoadingChildren] = useState(true);
@@ -263,6 +287,9 @@ useEffect(() => {
             setParentProfile={setParentProfile}
             sectionOrderIds={sectionOrderIds}
             setSectionOrderIds={setSectionOrderIds}
+            sectionThemeOverrides={sectionThemeOverrides}
+            setSectionThemeOverrides={setSectionThemeOverrides}
+            defaultSectionOrder={defaultSectionOrder}
             onBack={goHome}
           />
         );
@@ -483,16 +510,22 @@ useEffect(() => {
               >
                 {orderedSections.map((section) => {
                   const Icon = section.icon;
+                  const theme = getSectionTheme(section, sectionThemeOverrides);
 
                   return (
                     <button
                       key={section.id}
                       type="button"
                       onClick={() => openSection(section.id)}
-                      className={`min-h-[148px] rounded-[24px] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[138px] md:rounded-[26px] md:p-5 ${section.bg} ${section.border}`}
+                      className="min-h-[148px] rounded-[24px] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[138px] md:rounded-[26px] md:p-5"
+                      style={{
+                        backgroundColor: theme.bgColor,
+                        borderColor: theme.borderColor,
+                      }}
                     >
                       <div
-                        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-white md:h-12 md:w-12 ${section.iconBg}`}
+                        className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-white md:h-12 md:w-12"
+                        style={{ backgroundColor: theme.iconColor }}
                       >
                         <Icon size={22} />
                       </div>

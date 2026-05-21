@@ -12,6 +12,69 @@ import {
   Settings,
 } from "lucide-react";
 
+export const sectionThemes = {
+  rose: {
+    label: "Rose",
+    bgColor: "#fff3f6",
+    borderColor: "#f4c9d5",
+    iconColor: "#e99aaa",
+  },
+  peach: {
+    label: "Pêche",
+    bgColor: "#fff4f0",
+    borderColor: "#efcabc",
+    iconColor: "#df9f8a",
+  },
+  mauve: {
+    label: "Mauve",
+    bgColor: "#fff7fb",
+    borderColor: "#f0cfe0",
+    iconColor: "#d99ab9",
+  },
+  green: {
+    label: "Vert",
+    bgColor: "#f7fbf3",
+    borderColor: "#d8e6ca",
+    iconColor: "#a8b58f",
+  },
+  mint: {
+    label: "Menthe",
+    bgColor: "#f4fbf8",
+    borderColor: "#c8e4d8",
+    iconColor: "#8fbfa8",
+  },
+  sand: {
+    label: "Sable",
+    bgColor: "#fff9ef",
+    borderColor: "#ead7b8",
+    iconColor: "#d8b77f",
+  },
+  purple: {
+    label: "Violet",
+    bgColor: "#f8f5ff",
+    borderColor: "#d8cef1",
+    iconColor: "#aa99cf",
+  },
+  blue: {
+    label: "Bleu",
+    bgColor: "#f1f7ff",
+    borderColor: "#c6daf4",
+    iconColor: "#9ebbe1",
+  },
+  yellow: {
+    label: "Jaune",
+    bgColor: "#fffdf3",
+    borderColor: "#eadfac",
+    iconColor: "#d7c37f",
+  },
+  gray: {
+    label: "Gris",
+    bgColor: "#f5f5f2",
+    borderColor: "#d8d8cd",
+    iconColor: "#a9aa91",
+  },
+};
+
 export const colorOptions = [
   { value: "sage", label: "Sauge", bg: "bg-[#eef0e7]", text: "text-[#8f9874]" },
   { value: "rose", label: "Rose", bg: "bg-[#fff3f6]", text: "text-[#e99aaa]" },
@@ -26,13 +89,7 @@ export function getColor(value = "sage") {
 
 export function displayName(child) {
   if (!child) return "Enfant";
-
-  return (
-    child.nickname ||
-    child.name ||
-    child.firstName ||
-    "Enfant"
-  );
+  return child.nickname || child.name || child.firstName || "Enfant";
 }
 
 export const sections = [
@@ -41,98 +98,81 @@ export const sections = [
     title: "Profil enfant",
     description: "Photos, école, rappels, santé.",
     icon: Baby,
-    bg: "bg-[#fff3f6]",
-    border: "border-[#f4c9d5]",
-    iconBg: "bg-[#e99aaa]",
+    defaultTheme: "rose",
   },
   {
     id: "photos",
     title: "Photos",
     description: "Souvenirs et albums.",
     icon: Image,
-    bg: "bg-[#fff4f0]",
-    border: "border-[#efcabc]",
-    iconBg: "bg-[#df9f8a]",
+    defaultTheme: "peach",
   },
   {
     id: "memorable-phrases",
     title: "Phrases mémorables",
     description: "Citations et mots d’enfants.",
     icon: Quote,
-    bg: "bg-[#fff7fb]",
-    border: "border-[#f0cfe0]",
-    iconBg: "bg-[#d99ab9]",
+    defaultTheme: "mauve",
   },
   {
     id: "calendar",
     title: "Calendrier",
     description: "Gardes, activités, rendez-vous.",
     icon: CalendarDays,
-    bg: "bg-[#f7fbf3]",
-    border: "border-[#d8e6ca]",
-    iconBg: "bg-[#a8b58f]",
+    defaultTheme: "green",
   },
   {
     id: "sante",
     title: "Médical",
     description: "Santé et médicaments.",
     icon: HeartPulse,
-    bg: "bg-[#f4fbf8]",
-    border: "border-[#c8e4d8]",
-    iconBg: "bg-[#8fbfa8]",
+    defaultTheme: "mint",
   },
   {
     id: "documents",
     title: "Zone documents",
     description: "Ententes et formulaires.",
     icon: FolderOpen,
-    bg: "bg-[#fff9ef]",
-    border: "border-[#ead7b8]",
-    iconBg: "bg-[#d8b77f]",
+    defaultTheme: "sand",
   },
   {
     id: "invoices",
     title: "Factures / reçus",
     description: "Dépenses et paiements.",
     icon: Receipt,
-    bg: "bg-[#f8f5ff]",
-    border: "border-[#d8cef1]",
-    iconBg: "bg-[#aa99cf]",
+    defaultTheme: "purple",
   },
   {
     id: "calculator",
     title: "Calculateur de journées",
     description: "Répartition annuelle.",
     icon: Calculator,
-    bg: "bg-[#f1f7ff]",
-    border: "border-[#c6daf4]",
-    iconBg: "bg-[#9ebbe1]",
+    defaultTheme: "blue",
   },
   {
     id: "parental-plan",
     title: "Plan parental",
     description: "Horaire, décisions, ententes.",
     icon: FileText,
-    bg: "bg-[#f7f3ff]",
-    border: "border-[#d9cdf4]",
-    iconBg: "bg-[#ad9bcf]",
+    defaultTheme: "gray",
   },
   {
     id: "notes",
     title: "Zone notes",
     description: "Rappels et suivis.",
     icon: StickyNote,
-    bg: "bg-[#fffdf3]",
-    border: "border-[#eadfac]",
-    iconBg: "bg-[#d7c37f]",
+    defaultTheme: "yellow",
   },
   {
     id: "settings",
     title: "Paramètres",
     description: "Compte et accès.",
     icon: Settings,
-    bg: "bg-[#f5f5f2]",
-    border: "border-[#d8d8cd]",
-    iconBg: "bg-[#a9aa91]",
+    defaultTheme: "gray",
   },
 ];
+
+export function getSectionTheme(section, themeOverrides = {}) {
+  const themeKey = themeOverrides[section.id] || section.defaultTheme || "gray";
+  return sectionThemes[themeKey] || sectionThemes.gray;
+}
