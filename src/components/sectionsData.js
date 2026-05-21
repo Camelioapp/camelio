@@ -12,6 +12,29 @@ import {
   Settings,
 } from "lucide-react";
 
+export const colorOptions = [
+  { value: "sage", label: "Sauge", bg: "bg-[#eef0e7]", text: "text-[#8f9874]" },
+  { value: "rose", label: "Rose", bg: "bg-[#fff3f6]", text: "text-[#e99aaa]" },
+  { value: "blue", label: "Bleu", bg: "bg-[#f1f7ff]", text: "text-[#9ebbe1]" },
+  { value: "mauve", label: "Mauve", bg: "bg-[#f7f3ff]", text: "text-[#ad9bcf]" },
+  { value: "gold", label: "Doré", bg: "bg-[#fff9ef]", text: "text-[#d8b77f]" },
+];
+
+export function getColor(value = "sage") {
+  return colorOptions.find((color) => color.value === value) || colorOptions[0];
+}
+
+export function displayName(child) {
+  if (!child) return "Enfant";
+
+  return (
+    child.nickname ||
+    child.name ||
+    child.firstName ||
+    "Enfant"
+  );
+}
+
 export const sections = [
   {
     id: "children",
