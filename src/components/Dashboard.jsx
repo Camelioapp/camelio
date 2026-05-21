@@ -78,13 +78,43 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState("grid");
 
   const DEFAULT_SECTION_ORDER = sections.map((section) => section.id);
-  const [sectionOrderIds, setSectionOrderIds] = useState(DEFAULT_SECTION_ORDER);
+const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
+
+const [sectionOrderIds, setSectionOrderIds] = useState(() => {
+  try {
+    const savedOrder = localStorage.getItem(SECTION_ORDER_STORAGE_KEY);
+
+    if (!savedOrder) return DEFAULT_SECTION_ORDER;
+
+    const parsedOrder = JSON.parse(savedOrder);
+
+    if (!Array.isArray(parsedOrder)) return DEFAULT_SECTION_ORDER;
+
+    const validSavedIds = parsedOrder.filter((id) =>
+      DEFAULT_SECTION_ORDER.includes(id)
+    );
+
+    const missingIds = DEFAULT_SECTION_ORDER.filter(
+      (id) => !validSavedIds.includes(id)
+    );
+
+    return [...validSavedIds, ...missingIds];
+  } catch {
+    return DEFAULT_SECTION_ORDER;
+  }
+});
+useEffect(() => {
+  localStorage.setItem(
+    SECTION_ORDER_STORAGE_KEY,
+    JSON.stringify(sectionOrderIds)
+  );
+}, [sectionOrderIds]);
 
   const orderedSections = useMemo(() => {
-    return sectionOrderIds
-      .map((id) => sections.find((section) => section.id === id))
-      .filter(Boolean);
-  }, [sectionOrderIds]);
+  return sectionOrderIds
+    .map((id) => sections.find((section) => section.id === id))
+    .filter((section) => section && section.id !== "settings");
+}, [sectionOrderIds]);
 
   const [children, setChildren] = useState([]);
   const [isLoadingChildren, setIsLoadingChildren] = useState(true);
