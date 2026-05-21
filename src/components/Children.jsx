@@ -122,23 +122,31 @@ function PhotoPicker({
   onZoomChange,
 }) {
   const [isCropping, setIsCropping] = useState(false);
-  const [dragging, setDragging] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const currentPosition = normalizePhotoPosition(position);
 
-  const updatePosition = (clientX, clientY, target) => {
+  const clamp = (value) => Math.max(0, Math.min(100, value));
+
+  const updatePositionFromPointer = (event) => {
     if (!photo) return;
 
-    const rect = target.getBoundingClientRect();
+    const rect = event.currentTarget.getBoundingClientRect();
 
+    const x = clamp(
+      Math.round(((event.clientX - rect.left) / rect.width) * 100)
+    );
+
+    const y = clamp(
+      Math.round(((event.clientY - rect.top) / rect.height) * 100)
+    );
+
+    onPositionChange({ x, y });
+  };
+
+  const movePosition = (deltaX, deltaY) => {
     onPositionChange({
-      x: Math.max(
-        0,
-        Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100))
-      ),
-      y: Math.max(
-        0,
-        Math.min(100, Math.round(((clientY - rect.top) / rect.height) * 100))
-      ),
+      x: clamp(currentPosition.x + deltaX),
+      y: clamp(currentPosition.y + deltaY),
     });
   };
 
@@ -182,29 +190,26 @@ function PhotoPicker({
 
         {isCropping && photo && (
           <div className="mt-5 space-y-4">
-            <div
-              onMouseDown={() => setDragging(true)}
-              onMouseUp={() => setDragging(false)}
-              onMouseLeave={() => setDragging(false)}
-              onMouseMove={(event) => {
-                if (!dragging) return;
-                updatePosition(
-                  event.clientX,
-                  event.clientY,
-                  event.currentTarget
-                );
-              }}
-              onTouchMove={(event) => {
-                const touch = event.touches?.[0];
-                if (!touch) return;
+            <p className="text-center text-xs font-semibold text-[#746F64]">
+              Glisse l’image avec ton doigt pour ajuster le cadrage.
+            </p>
 
-                updatePosition(
-                  touch.clientX,
-                  touch.clientY,
-                  event.currentTarget
-                );
+            <div
+              onPointerDown={(event) => {
+                setIsDragging(true);
+                event.currentTarget.setPointerCapture(event.pointerId);
+                updatePositionFromPointer(event);
               }}
-              className="relative mx-auto flex h-72 w-full max-w-[380px] cursor-move items-center justify-center overflow-hidden rounded-[2rem] bg-[#EEF0E7] ring-1 ring-[#D8C8B6]"
+              onPointerMove={(event) => {
+                if (!isDragging) return;
+                updatePositionFromPointer(event);
+              }}
+              onPointerUp={(event) => {
+                setIsDragging(false);
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }}
+              onPointerCancel={() => setIsDragging(false)}
+              className="relative mx-auto flex h-72 w-full max-w-[380px] touch-none select-none items-center justify-center overflow-hidden rounded-[2rem] bg-[#EEF0E7] ring-1 ring-[#D8C8B6]"
             >
               <PhotoImage
                 src={photo}
@@ -213,6 +218,8 @@ function PhotoPicker({
                 zoom={zoom}
                 className="h-full w-full"
               />
+
+              <div className="pointer-events-none absolute inset-0 rounded-[2rem] ring-4 ring-white/50" />
             </div>
 
             <div className="rounded-2xl bg-white p-4 ring-1 ring-[#EFE4D6]">
@@ -220,14 +227,70 @@ function PhotoPicker({
                 Zoom
                 <input
                   type="range"
-                  min="0.5"
+                  min="0.7"
                   max="2.5"
                   step="0.05"
                   value={zoom}
                   onChange={(event) => onZoomChange(Number(event.target.value))}
-                  className="mt-2 w-full"
+                  className="mt-3 w-full accent-[#A8B193]"
                 />
               </label>
+            </div>
+
+            <div className="rounded-2xl bg-white p-4 ring-1 ring-[#EFE4D6]">
+              <p className="mb-3 text-xs font-bold text-[#746F64]">
+                Ajustement précis
+              </p>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div />
+
+                <button
+                  type="button"
+                  onClick={() => movePosition(0, -5)}
+                  className="rounded-xl bg-[#FFF8EC] px-3 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+                >
+                  ↑
+                </button>
+
+                <div />
+
+                <button
+                  type="button"
+                  onClick={() => movePosition(-5, 0)}
+                  className="rounded-xl bg-[#FFF8EC] px-3 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+                >
+                  ←
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onPositionChange(defaultPhotoPosition)}
+                  className="rounded-xl bg-[#EEF0E7] px-3 py-2 text-xs font-bold text-[#6F785F] ring-1 ring-[#D8DDCB]"
+                >
+                  Centrer
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => movePosition(5, 0)}
+                  className="rounded-xl bg-[#FFF8EC] px-3 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+                >
+                  →
+                </button>
+
+                <div />
+
+                <button
+                  type="button"
+                  onClick={() => movePosition(0, 5)}
+                  className="rounded-xl bg-[#FFF8EC] px-3 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+                >
+                  ↓
+                </button>
+
+                <div />
+              </div>
             </div>
           </div>
         )}
