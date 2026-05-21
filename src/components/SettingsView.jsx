@@ -1,30 +1,22 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   ArrowDown,
   ArrowUp,
   CreditCard,
   GripVertical,
   LogOut,
-  Quote,
   Settings,
   UserRound,
 } from "lucide-react";
 
 import { SectionTitle, Field, InfoBox } from "./shared";
-import { sections } from "./sectionsData";
+import { sections } from "./sectionsData.js";
 
 const inputClass =
   "mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]";
 
 const APP_VERSION = "1.0.0";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
-
-const memorablePhrasesSection = {
-  id: "memorable-phrases",
-  title: "Phrases mémorables",
-  icon: Quote,
-  color: "bg-[#D99AB9]",
-};
 
 function SectionOrderItem({ section, index, total, moveSection }) {
   const Icon = section.icon;
@@ -35,7 +27,7 @@ function SectionOrderItem({ section, index, total, moveSection }) {
 
       <div
         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
-          section.color || "bg-[#A8AA91]"
+          section.iconBg || "bg-[#A8AA91]"
         } text-white`}
       >
         <Icon className="h-5 w-5" />
@@ -69,28 +61,32 @@ function SectionOrderItem({ section, index, total, moveSection }) {
   );
 }
 
-export default function SettingsView({ parentProfile, setParentProfile }) {
-  const defaultSections = sections.filter((section) => section.id !== "settings");
-
-  const sectionsWithMemorablePhrases = defaultSections.some(
-    (section) => section.id === "memorable-phrases"
-  )
-    ? defaultSections
-    : [...defaultSections, memorablePhrasesSection];
-
-  const [sectionOrder, setSectionOrder] = useState(sectionsWithMemorablePhrases);
+export default function SettingsView({
+  parentProfile,
+  setParentProfile,
+  sectionOrderIds,
+  setSectionOrderIds,
+}) {
+  const orderedSections = sectionOrderIds
+    .map((id) => sections.find((section) => section.id === id))
+    .filter((section) => section && section.id !== "settings");
 
   const moveSection = (fromIndex, toIndex) => {
-    if (toIndex < 0 || toIndex >= sectionOrder.length) return;
+    if (toIndex < 0 || toIndex >= orderedSections.length) return;
 
-    setSectionOrder((current) => {
-      const updated = [...current];
-      const [movedSection] = updated.splice(fromIndex, 1);
+    const visibleSectionIds = orderedSections.map((section) => section.id);
+    const [movedSection] = visibleSectionIds.splice(fromIndex, 1);
 
-      updated.splice(toIndex, 0, movedSection);
+    visibleSectionIds.splice(toIndex, 0, movedSection);
 
-      return updated;
-    });
+    const finalOrder = [
+      ...visibleSectionIds,
+      ...sectionOrderIds.filter(
+        (id) => !visibleSectionIds.includes(id) && id === "settings"
+      ),
+    ];
+
+    setSectionOrderIds(finalOrder);
   };
 
   const handleLogout = () => {
@@ -115,6 +111,7 @@ export default function SettingsView({ parentProfile, setParentProfile }) {
             <h3 className="font-bold text-[#55534C]">
               Profil principal parent
             </h3>
+
             <p className="text-sm text-[#746F64]">
               Informations du compte principal.
             </p>
@@ -176,17 +173,17 @@ export default function SettingsView({ parentProfile, setParentProfile }) {
 
           <p className="mt-1 text-sm leading-5 text-[#746F64]">
             Choisissez l’ordre d’affichage des sections, comme Profil enfant,
-            Calendrier, Photos, Notes ou Phrases mémorables.
+            Photos, Phrases mémorables, Calendrier ou Zone notes.
           </p>
         </div>
 
         <div className="space-y-3">
-          {sectionOrder.map((section, index) => (
+          {orderedSections.map((section, index) => (
             <SectionOrderItem
               key={section.id}
               section={section}
               index={index}
-              total={sectionOrder.length}
+              total={orderedSections.length}
               moveSection={moveSection}
             />
           ))}
