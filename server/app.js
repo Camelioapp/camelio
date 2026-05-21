@@ -68,6 +68,8 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3001",
   "https://camelio-frontend.onrender.com",
+  "https://camelio.app",
+  "https://www.camelio.app",
 ];
 
 app.use(
