@@ -1,17 +1,15 @@
 import React from "react";
 
 export default function Login() {
-  const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN;
-  const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID;
-  const REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI;
+  const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
-const loginWithCognito = () => {
-  window.location.href = `${import.meta.env.VITE_API_URL || "https://camelio.onrender.com"}/login`;
-};
+  const loginWithCognito = () => {
+    window.location.href = `${API_URL}/login`;
+  };
 
-const loginWithGoogle = () => {
-  window.location.href = `${import.meta.env.VITE_API_URL || "https://camelio.onrender.com"}/login`;
-};
+  const loginWithGoogle = () => {
+    window.location.href = `${API_URL}/login`;
+  };
 
   return (
     <div style={styles.page}>
@@ -31,6 +29,16 @@ const loginWithGoogle = () => {
         <button style={styles.primaryButton} onClick={loginWithCognito}>
           Continuer avec courriel
         </button>
+
+        <div style={styles.securityBox}>
+          <div style={styles.securityIcon}>🔐</div>
+          <div>
+            <p style={styles.securityTitle}>Connexion sécurisée</p>
+            <p style={styles.securityText}>
+              Une vérification par SMS peut être demandée lors de la connexion.
+            </p>
+          </div>
+        </div>
 
         <p style={styles.footerText}>
           Vos informations sont protégées avec AWS Cognito.
@@ -113,6 +121,39 @@ const styles = {
     fontSize: "15px",
     fontWeight: "700",
     cursor: "pointer",
+  },
+  securityBox: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    background: "#F7F4FF",
+    border: "1px solid #E6DFFF",
+    borderRadius: "18px",
+    padding: "14px",
+    marginTop: "20px",
+  },
+  securityIcon: {
+    width: "34px",
+    height: "34px",
+    borderRadius: "12px",
+    background: "#FFFFFF",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "17px",
+    flexShrink: 0,
+  },
+  securityTitle: {
+    margin: 0,
+    color: "#2F2D3A",
+    fontSize: "14px",
+    fontWeight: "700",
+  },
+  securityText: {
+    margin: "4px 0 0",
+    color: "#7A7685",
+    fontSize: "13px",
+    lineHeight: "1.4",
   },
   footerText: {
     color: "#9A938A",

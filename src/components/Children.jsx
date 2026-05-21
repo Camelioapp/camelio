@@ -27,19 +27,21 @@ const defaultPhotoPosition = { x: 50, y: 50 };
 const childColorOptions = [
   { id: "sage", label: "Sauge", dot: "#A8B193" },
   { id: "rose", label: "Rose", dot: "#E99AAA" },
-  { id: "blue", label: "Bleu", dot: "#9EBBE1" },
-  { id: "mauve", label: "Mauve", dot: "#AD9BCF" },
-  { id: "gold", label: "Doré", dot: "#D8B77F" },
-  { id: "peach", label: "Pêche", dot: "#DF9F8A" },
-  { id: "mint", label: "Menthe", dot: "#8FBFA8" },
-  { id: "purple", label: "Violet", dot: "#AA99CF" },
-  { id: "yellow", label: "Jaune", dot: "#D7C37F" },
-  { id: "gray", label: "Gris", dot: "#A9AA91" },
-  { id: "coral", label: "Corail", dot: "#E9897E" },
-  { id: "teal", label: "Turquoise", dot: "#72B7B2" },
-  { id: "sky", label: "Ciel", dot: "#8FC7E8" },
-  { id: "lilac", label: "Lilas", dot: "#C4A7E7" },
-  { id: "cream", label: "Crème", dot: "#E8D7B1" },
+  { id: "blue", label: "Bleu doux", dot: "#8FB8DE" },
+  { id: "mauve", label: "Mauve", dot: "#AA90C8" },
+  { id: "gold", label: "Doré", dot: "#D4A85F" },
+
+  { id: "peach", label: "Pêche", dot: "#E8A07E" },
+  { id: "mint", label: "Menthe", dot: "#7CBFA2" },
+  { id: "lavender", label: "Lavande", dot: "#C7B3E5" },
+  { id: "mustard", label: "Moutarde", dot: "#D9BF5E" },
+  { id: "olive", label: "Olive", dot: "#8E9A72" },
+
+  { id: "coral", label: "Corail", dot: "#E8786D" },
+  { id: "teal", label: "Sarcelle", dot: "#5BAEAA" },
+  { id: "sky", label: "Ciel", dot: "#76BFE3" },
+  { id: "grape", label: "Raisin", dot: "#8F78B8" },
+  { id: "sand", label: "Sable", dot: "#D8C49A" },
 ];
 
 const presetPhotos = [
@@ -1195,7 +1197,7 @@ function ColorPicker({ value, onChange, options }) {
       >
         <span className="flex min-w-0 items-center gap-3">
           <span
-            className="h-5 w-5 shrink-0 rounded-full"
+            className="h-5 w-5 shrink-0 rounded-full shadow-inner"
             style={{ backgroundColor: selectedColor?.dot }}
           />
 
@@ -1230,13 +1232,15 @@ function ColorPicker({ value, onChange, options }) {
                     setOpen(false);
                   }}
                   className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition hover:scale-105 ${
-                    selected ? "border-[#55534C]" : "border-[#EFE4D6]"
+                    selected
+                      ? "border-[#4F4A45] bg-[#FFF8EC] shadow-sm"
+                      : "border-[#EFE4D6] bg-white"
                   }`}
                   title={color.label}
                   aria-label={color.label}
                 >
                   <span
-                    className="h-7 w-7 rounded-full"
+                    className="h-7 w-7 rounded-full shadow-inner"
                     style={{ backgroundColor: color.dot }}
                   />
                 </button>
