@@ -135,7 +135,7 @@ function validateAwsConfig(req, res, next) {
 function validateS3Config(req, res, next) {
   const missing = [];
 
-  if (!process.env.AWS_REGION) missing.push("AWS_REGION");
+  if (!process.env.S3_REGION) missing.push("S3_REGION");
 
   if (!process.env.AWS_ACCESS_KEY_ID && process.env.NODE_ENV !== "production") {
     missing.push("AWS_ACCESS_KEY_ID");
@@ -156,6 +156,9 @@ function validateS3Config(req, res, next) {
       missing,
     });
   }
+
+  return next();
+}
 
   return next();
 }
