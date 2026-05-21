@@ -5,7 +5,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Baby,
   Camera,
-  Check,
   ChevronDown,
   ChevronUp,
   FileText,
@@ -298,6 +297,17 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   const textareaClass =
     "w-full min-h-[150px] rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold leading-6 text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
 
+  const fileToDataUrl = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+
+      reader.readAsDataURL(file);
+    });
+  };
+
   const uploadAvatarToS3 = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -411,12 +421,13 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const localPreview = URL.createObjectURL(file);
+    const localPreview = await fileToDataUrl(file);
 
     setPreviewPhoto(localPreview);
     setNewChild((current) => ({
       ...current,
       photo: localPreview,
+      avatar: localPreview,
       photoPosition: defaultPhotoPosition,
       photoZoom: 1,
     }));
@@ -432,8 +443,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
         photoZoom: 1,
       }));
     } catch (error) {
-      console.error(error);
-      alert("Impossible d’envoyer la photo vers S3.");
+      console.error("Upload S3 impossible, conservation locale:", error);
     }
   };
 
@@ -441,7 +451,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const localPreview = URL.createObjectURL(file);
+    const localPreview = await fileToDataUrl(file);
 
     const localUpdate = {
       photo: localPreview,
@@ -488,8 +498,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
         }));
       }
     } catch (error) {
-      console.error(error);
-      alert("Impossible d’envoyer la photo vers S3.");
+      console.error("Upload S3 impossible, conservation locale:", error);
     }
   };
 
