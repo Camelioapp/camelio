@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   CreditCard,
   GripVertical,
   LogOut,
+  Palette,
   RotateCcw,
   Settings,
   Trash2,
@@ -30,6 +31,8 @@ function SectionOrderItem({
   sectionThemeOverrides,
   setSectionThemeOverrides,
 }) {
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+
   const Icon = section.icon;
   const theme = getSectionTheme(section, sectionThemeOverrides);
 
@@ -41,11 +44,13 @@ function SectionOrderItem({
       ...current,
       [section.id]: themeKey,
     }));
+
+    setIsColorPickerOpen(false);
   };
 
   return (
     <div
-      className="rounded-2xl border p-3 shadow-sm"
+      className="relative rounded-2xl border p-3 shadow-sm"
       style={{
         backgroundColor: theme.bgColor,
         borderColor: theme.borderColor,
@@ -67,6 +72,18 @@ function SectionOrderItem({
         </div>
 
         <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => setIsColorPickerOpen((current) => !current)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#746F64] ring-1 ring-[#EFE4D6]"
+            title="Changer la couleur"
+          >
+            <span
+              className="h-4 w-4 rounded-full"
+              style={{ backgroundColor: theme.iconColor }}
+            />
+          </button>
+
           <button
             type="button"
             disabled={index === 0}
@@ -96,23 +113,32 @@ function SectionOrderItem({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-10">
-        {Object.entries(sectionThemes).map(([themeKey, themeValue]) => (
-          <button
-            key={themeKey}
-            type="button"
-            onClick={() => changeTheme(themeKey)}
-            className={`h-8 rounded-full border-2 transition ${
-              selectedThemeKey === themeKey
-                ? "scale-105 border-[#55534C]"
-                : "border-white"
-            }`}
-            style={{ backgroundColor: themeValue.iconColor }}
-            title={themeValue.label}
-            aria-label={`Couleur ${themeValue.label}`}
-          />
-        ))}
-      </div>
+      {isColorPickerOpen && (
+        <div className="absolute right-3 top-14 z-20 w-64 rounded-2xl bg-white p-4 shadow-xl ring-1 ring-[#EFE4D6]">
+          <div className="mb-3 flex items-center gap-2 text-sm font-bold text-[#55534C]">
+            <Palette className="h-4 w-4" />
+            Choisir une couleur
+          </div>
+
+          <div className="grid grid-cols-5 gap-2">
+            {Object.entries(sectionThemes).map(([themeKey, themeValue]) => (
+              <button
+                key={themeKey}
+                type="button"
+                onClick={() => changeTheme(themeKey)}
+                className={`h-9 rounded-full border-2 transition hover:scale-105 ${
+                  selectedThemeKey === themeKey
+                    ? "border-[#55534C]"
+                    : "border-[#EFE4D6]"
+                }`}
+                style={{ backgroundColor: themeValue.iconColor }}
+                title={themeValue.label}
+                aria-label={`Couleur ${themeValue.label}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -248,8 +274,8 @@ export default function SettingsView({
             </h3>
 
             <p className="mt-1 text-sm leading-5 text-[#746F64]">
-              Changez l’ordre, choisissez les couleurs ou masquez les sections
-              que vous ne voulez pas afficher sur le Dashboard.
+              Changez l’ordre, la couleur ou masquez les sections affichées sur
+              le Dashboard.
             </p>
           </div>
 
