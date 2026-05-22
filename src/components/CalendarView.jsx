@@ -11,7 +11,8 @@ import {
 import { Field, Popup, SectionTitle } from "./shared.jsx";
 import { colorOptions, displayName, getColor } from "./sectionsData.js";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 const MONTHS = [
   "Janvier",
@@ -252,7 +253,9 @@ function QuickList({ title, items, childrenList, type, onEdit }) {
                         : "bg-[#F0F3EA] text-[#7A8564] ring-1 ring-[#DDE4D2]"
                     }`}
                   >
-                    {type === "appointment" ? item.appointmentEmoji || "⚑" : "✓"}
+                    {type === "appointment"
+                      ? item.appointmentEmoji || "⚑"
+                      : "✓"}
                   </span>
                 </div>
               </button>
@@ -791,34 +794,68 @@ export default function CalendarView({ children = [] }) {
           {openCalendarColors && (
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl bg-white p-3 ring-1 ring-[#EFE4D6]">
-                <p className="text-sm font-bold text-[#55534C]">Rendez-vous</p>
+                <p className="text-sm font-bold text-[#55534C]">
+                  Rendez-vous
+                </p>
+
                 <p className="mt-1 text-xs text-[#746F64]">
                   Couleur et icône des rendez-vous.
                 </p>
 
-                <select
-                  value={appointmentColor}
-                  onChange={(event) => setAppointmentColor(event.target.value)}
-                  className={selectClass}
-                >
-                  {colorOptions.map((color) => (
-                    <option key={color.id} value={color.id}>
-                      {color.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-4">
+                  <p className="text-xs font-bold text-[#746F64]">
+                    Couleur du rendez-vous
+                  </p>
 
-                <select
-                  value={appointmentEmoji}
-                  onChange={(event) => setAppointmentEmoji(event.target.value)}
-                  className={`${selectClass} mt-3`}
-                >
-                  {EMOJIS.map((emoji) => (
-                    <option key={emoji} value={emoji}>
-                      {emoji}
-                    </option>
-                  ))}
-                </select>
+                  <div className="mt-3 grid !grid-cols-5 gap-3">
+                    {colorOptions.map((color) => {
+                      const selected = appointmentColor === color.id;
+
+                      return (
+                        <button
+                          key={color.id}
+                          type="button"
+                          onClick={() => setAppointmentColor(color.id)}
+                          className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition hover:scale-105 ${
+                            selected
+                              ? "border-[#4F4A45] bg-[#FFF8EC] shadow-sm"
+                              : "border-[#EFE4D6] bg-white"
+                          }`}
+                          title={color.label}
+                          aria-label={color.label}
+                        >
+                          <span
+                            className={`h-8 w-8 rounded-full shadow-inner ${color.dot}`}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <p className="mt-3 text-xs font-bold text-[#746F64]">
+                    Couleur sélectionnée : {getColor(appointmentColor).label}
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-xs font-bold text-[#746F64]">
+                    Icône du rendez-vous
+                  </p>
+
+                  <select
+                    value={appointmentEmoji}
+                    onChange={(event) =>
+                      setAppointmentEmoji(event.target.value)
+                    }
+                    className={`${selectClass} mt-2`}
+                  >
+                    {EMOJIS.map((emoji) => (
+                      <option key={emoji} value={emoji}>
+                        {emoji}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1082,7 +1119,9 @@ export default function CalendarView({ children = [] }) {
       {showEditor && (
         <Popup
           title={`${selectedDay} ${MONTHS[month].toLowerCase()} ${year}`}
-          kicker={selectedEventId ? "Modifier un événement" : "Nouvel événement"}
+          kicker={
+            selectedEventId ? "Modifier un événement" : "Nouvel événement"
+          }
           close={() => setShowEditor(false)}
         >
           <div className="space-y-5">
@@ -1190,7 +1229,8 @@ export default function CalendarView({ children = [] }) {
               <div className="mt-3 space-y-2">
                 {children.length === 0 ? (
                   <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-                    Aucun enfant n’est disponible. Ajoute d’abord un profil enfant.
+                    Aucun enfant n’est disponible. Ajoute d’abord un profil
+                    enfant.
                   </div>
                 ) : (
                   children.map((child) => {
