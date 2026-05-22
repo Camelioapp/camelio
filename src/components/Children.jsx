@@ -30,13 +30,11 @@ const childColorOptions = [
   { id: "blue", label: "Bleu doux", dot: "#8FB8DE" },
   { id: "mauve", label: "Mauve", dot: "#AA90C8" },
   { id: "gold", label: "Doré", dot: "#D4A85F" },
-
   { id: "peach", label: "Pêche", dot: "#E8A07E" },
   { id: "mint", label: "Menthe", dot: "#7CBFA2" },
   { id: "lavender", label: "Lavande", dot: "#C7B3E5" },
   { id: "mustard", label: "Moutarde", dot: "#D9BF5E" },
   { id: "olive", label: "Olive", dot: "#8E9A72" },
-
   { id: "coral", label: "Corail", dot: "#E8786D" },
   { id: "teal", label: "Sarcelle", dot: "#5BAEAA" },
   { id: "sky", label: "Ciel", dot: "#76BFE3" },
@@ -44,33 +42,15 @@ const childColorOptions = [
   { id: "sand", label: "Sable", dot: "#D8C49A" },
 ];
 
-const presetPhotos = [
-  {
-    id: "camelio-enfant-1",
-    label: "Enfant 1",
-    url: "https://studiocameleon.ca/wp-content/uploads/2026/05/Camelio_enfant1.png",
-  },
-  {
-    id: "enfant-blond-mauve",
-    label: "Enfant blond",
-    url: "https://studiocameleon.ca/wp-content/uploads/2026/05/enfant_06_sans_lunettes_clair_blond_mauve.png",
-  },
-  {
-    id: "enfant-olive-roux",
-    label: "Enfant roux",
-    url: "https://studiocameleon.ca/wp-content/uploads/2026/05/enfant_48_sans_lunettes_olive_roux_rouge.png",
-  },
-  {
-    id: "enfant-fonce-roux",
-    label: "Enfant turquoise",
-    url: "https://studiocameleon.ca/wp-content/uploads/2026/05/enfant_50_sans_lunettes_fonce_roux_turquoise.png",
-  },
-  {
-    id: "garcon-peau-foncee",
-    label: "Garçon",
-    url: "https://studiocameleon.ca/wp-content/uploads/2026/05/garcon_sans_lunettes_brun_peau_foncee.png",
-  },
-];
+const presetPhotos = Array.from({ length: 15 }, (_, index) => {
+  const number = String(index + 1).padStart(2, "0");
+
+  return {
+    id: `fille-profil-${number}`,
+    label: `Profil ${number}`,
+    url: `/Profil/Fille/profil_${number}.png`,
+  };
+});
 
 function normalizePhotoPosition(position) {
   if (!position) return defaultPhotoPosition;
@@ -307,27 +287,48 @@ function PhotoPicker({
         </label>
       </div>
 
-      <div className="rounded-[1.75rem] bg-white p-4 ring-1 ring-[#EFE4D6]">
-        <p className="text-sm font-bold text-[#4F4A45]">
-          Photos préprogrammées
-        </p>
+      <div className="rounded-[1.5rem] bg-white/90 p-3 ring-1 ring-[#EFE4D6]">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-bold text-[#4F4A45]">
+            Images de présélection
+          </p>
 
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {presetPhotos.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onChoosePreset(item.url)}
-              className="overflow-hidden rounded-2xl bg-[#FFFDF8] p-2 ring-1 ring-[#EFE4D6] transition hover:bg-[#FAF4EC]"
-            >
-              <img
-                src={item.url}
-                alt={item.label}
-                className="h-16 w-full rounded-xl object-cover"
-              />
-            </button>
-          ))}
+          <span className="rounded-full bg-[#FFF8EC] px-2.5 py-1 text-[11px] font-bold text-[#8B7D6B] ring-1 ring-[#EFE4D6]">
+            {presetPhotos.length}
+          </span>
         </div>
+
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {presetPhotos.map((item) => {
+            const selected = photo === item.url;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onChoosePreset(item.url)}
+                title={item.label}
+                aria-label={item.label}
+                className={`h-14 w-14 shrink-0 overflow-hidden rounded-full p-[2px] transition hover:scale-105 ${
+                  selected
+                    ? "bg-[#A8B193] shadow-sm ring-2 ring-[#A8B193]/30"
+                    : "bg-white ring-1 ring-[#EFE4D6] hover:bg-[#FAF4EC]"
+                }`}
+              >
+                <img
+                  src={item.url}
+                  alt={item.label}
+                  className="h-full w-full rounded-full bg-[#F4EFE7] object-cover"
+                  loading="lazy"
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="mt-2 text-xs font-semibold text-[#9A8D7C]">
+          Fais glisser horizontalement pour voir les autres choix.
+        </p>
       </div>
     </div>
   );
