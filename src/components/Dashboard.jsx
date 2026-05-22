@@ -20,6 +20,121 @@ const API_BASE_URL =
 const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
 const SECTION_THEME_STORAGE_KEY = "camelio-section-themes";
 
+const childColorOptions = [
+  {
+    id: "sage",
+    label: "Sauge",
+    dot: "#A8B193",
+    soft: "#EEF0E7",
+    text: "#6F785F",
+  },
+  {
+    id: "rose",
+    label: "Rose",
+    dot: "#E99AAA",
+    soft: "#FBECEF",
+    text: "#B96B77",
+  },
+  {
+    id: "blue",
+    label: "Bleu doux",
+    dot: "#8FB8DE",
+    soft: "#EEF5FB",
+    text: "#657F9F",
+  },
+  {
+    id: "mauve",
+    label: "Mauve",
+    dot: "#AA90C8",
+    soft: "#F4F0FA",
+    text: "#8475A5",
+  },
+  {
+    id: "gold",
+    label: "Doré",
+    dot: "#D4A85F",
+    soft: "#FFF8EC",
+    text: "#9A7A43",
+  },
+  {
+    id: "peach",
+    label: "Pêche",
+    dot: "#E8A07E",
+    soft: "#FFF1EA",
+    text: "#B8755F",
+  },
+  {
+    id: "mint",
+    label: "Menthe",
+    dot: "#7CBFA2",
+    soft: "#EDF8F2",
+    text: "#5F927A",
+  },
+  {
+    id: "lavender",
+    label: "Lavande",
+    dot: "#C7B3E5",
+    soft: "#F7F1FF",
+    text: "#8F76B8",
+  },
+  {
+    id: "mustard",
+    label: "Moutarde",
+    dot: "#D9BF5E",
+    soft: "#FFF8D8",
+    text: "#9C842F",
+  },
+  {
+    id: "olive",
+    label: "Olive",
+    dot: "#8E9A72",
+    soft: "#EEF0E7",
+    text: "#6B7658",
+  },
+  {
+    id: "coral",
+    label: "Corail",
+    dot: "#E8786D",
+    soft: "#FFF0EF",
+    text: "#B85F58",
+  },
+  {
+    id: "teal",
+    label: "Sarcelle",
+    dot: "#5BAEAA",
+    soft: "#EAF7F6",
+    text: "#4B8A87",
+  },
+  {
+    id: "sky",
+    label: "Ciel",
+    dot: "#76BFE3",
+    soft: "#EAF7FF",
+    text: "#5B93B0",
+  },
+  {
+    id: "grape",
+    label: "Raisin",
+    dot: "#8F78B8",
+    soft: "#F2EEF8",
+    text: "#735F9A",
+  },
+  {
+    id: "sand",
+    label: "Sable",
+    dot: "#D8C49A",
+    soft: "#FBF4E8",
+    text: "#9A7F50",
+  },
+];
+
+function getChildColorTheme(colorId) {
+  return (
+    childColorOptions.find((color) => color.id === colorId) ||
+    childColorOptions[0]
+  );
+}
+
 function getAgeFromBirthDate(birthDate) {
   if (!birthDate || birthDate === "À compléter") return "À compléter";
 
@@ -419,6 +534,7 @@ export default function Dashboard() {
                       {children.map((child, index) => {
                         const photo = child.image || child.photo || "";
                         const initials = getInitials(child);
+                        const childTheme = getChildColorTheme(child.color);
 
                         return (
                           <button
@@ -430,7 +546,13 @@ export default function Dashboard() {
                             }`}
                             style={{ zIndex: children.length + index }}
                           >
-                            <div className="flex h-[132px] w-[132px] items-center justify-center overflow-hidden rounded-full border-[10px] border-white bg-[#eef0e7] text-3xl font-bold text-[#8f9874] shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] md:h-[150px] md:w-[150px]">
+                            <div
+                              className="flex h-[132px] w-[132px] items-center justify-center overflow-hidden rounded-full border-[10px] border-white text-3xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] md:h-[150px] md:w-[150px]"
+                              style={{
+                                backgroundColor: childTheme.soft,
+                                color: childTheme.text,
+                              }}
+                            >
                               {photo ? (
                                 <img
                                   src={photo}
@@ -444,7 +566,12 @@ export default function Dashboard() {
                               )}
                             </div>
 
-                            <div className="-mt-5 min-w-[104px] rotate-[-2deg] rounded-[18px] bg-[#a8aa91] px-5 py-2 text-center text-lg font-semibold text-white shadow-sm transition group-hover:bg-[#929b7b] md:min-w-[120px] md:text-xl">
+                            <div
+                              className="-mt-5 min-w-[104px] rotate-[-2deg] rounded-[18px] px-5 py-2 text-center text-lg font-semibold text-white shadow-sm transition group-hover:brightness-95 md:min-w-[120px] md:text-xl"
+                              style={{
+                                backgroundColor: childTheme.dot,
+                              }}
+                            >
                               {child.name}
                             </div>
                           </button>
