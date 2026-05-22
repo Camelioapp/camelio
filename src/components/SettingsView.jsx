@@ -4,19 +4,15 @@ import {
   ArrowUp,
   Cookie,
   CreditCard,
-  Download,
   Eye,
   EyeOff,
   FileText,
   Grid2X2,
-  LifeBuoy,
   LogOut,
-  Mail,
   Palette,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
-  Trash2,
   UserRound,
 } from "lucide-react";
 
@@ -186,9 +182,7 @@ export default function SettingsView({
   const hideSection = (sectionId) => {
     if (!setSectionOrderIds) return;
 
-    setSectionOrderIds((current) =>
-      current.filter((id) => id !== sectionId)
-    );
+    setSectionOrderIds((current) => current.filter((id) => id !== sectionId));
   };
 
   const showSection = (sectionId) => {
@@ -224,11 +218,6 @@ export default function SettingsView({
   };
 
   const handlePrivacyAction = (item) => {
-    if (item.path.startsWith("mailto:")) {
-      window.location.href = item.path;
-      return;
-    }
-
     window.location.href = item.path;
   };
 
@@ -305,89 +294,6 @@ export default function SettingsView({
 
       <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
         <div className="mb-5 flex items-center gap-3">
-          <div className="rounded-2xl bg-[#8EA79B] p-3 text-white">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-
-          <div>
-            <h3 className="font-bold text-[#55534C]">
-              Confidentialité et sécurité
-            </h3>
-            <p className="text-sm text-[#746F64]">
-              Gérez vos préférences de confidentialité, vos consentements et vos données personnelles.
-            </p>
-          </div>
-        </div>
-
-        <div className="mb-5 rounded-[1.5rem] border border-[#DDE9E3] bg-[#F7FBF8] p-4">
-          <div className="flex gap-3">
-            <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#8EA79B] text-white">
-              <LifeBuoy className="h-4 w-4" />
-            </div>
-
-            <div>
-              <p className="text-sm font-bold text-[#55534C]">
-                Vos données restent sous votre contrôle.
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
-                Vous pouvez consulter les documents légaux, gérer vos préférences,
-                demander une copie de vos données ou demander la suppression du compte.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          {privacyItems.map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <div
-                key={item.id}
-                className={`rounded-[1.5rem] border p-4 transition hover:shadow-sm ${
-                  item.danger
-                    ? "border-[#F0D2D2] bg-[#FFF8F8]"
-                    : "border-[#EFE4D6] bg-[#FFFDF8]"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white ${
-                      item.danger ? "bg-[#C96F6F]" : "bg-[#A8AA91]"
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <h4 className="font-bold text-[#55534C]">
-                      {item.title}
-                    </h4>
-                    <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handlePrivacyAction(item)}
-                  className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-bold transition ${
-                    item.danger
-                      ? "bg-[#C96F6F] text-white hover:bg-[#B85F5F]"
-                      : "bg-white text-[#55534C] ring-1 ring-[#EFE4D6] hover:bg-[#FFF7EA]"
-                  }`}
-                >
-                  {item.actionLabel}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="mb-5 flex items-center gap-3">
           <div className="rounded-2xl bg-[#A8AA91] p-3 text-white">
             <SlidersHorizontal className="h-5 w-5" />
           </div>
@@ -409,8 +315,7 @@ export default function SettingsView({
             const isOpen = openedSectionId === section.id;
             const visibleIndex = visibleSectionIds.indexOf(section.id);
             const baseTheme = getBaseTheme(section);
-            const activeTheme =
-              sectionThemeOverrides[section.id] || baseTheme;
+            const activeTheme = sectionThemeOverrides[section.id] || baseTheme;
 
             return (
               <div
@@ -553,6 +458,59 @@ export default function SettingsView({
                     </div>
                   </div>
                 )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="rounded-2xl bg-[#8EA79B] p-3 text-white">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+
+          <div>
+            <h3 className="font-bold text-[#55534C]">
+              Confidentialité et sécurité
+            </h3>
+            <p className="text-sm text-[#746F64]">
+              Gérez vos documents légaux et vos préférences de confidentialité.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          {privacyItems.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <div
+                key={item.id}
+                className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 transition hover:shadow-sm"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#A8AA91] text-white">
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-[#55534C]">
+                      {item.title}
+                    </h4>
+                    <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handlePrivacyAction(item)}
+                  className="mt-4 w-full rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#55534C] ring-1 ring-[#EFE4D6] transition hover:bg-[#FFF7EA]"
+                >
+                  {item.actionLabel}
+                </button>
               </div>
             );
           })}
