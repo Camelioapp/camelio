@@ -1257,6 +1257,7 @@ app.post(
         cancel_url: `${APP_URL}/billing?canceled=true`,
         allow_promotion_codes: true,
         billing_address_collection: "auto",
+
         subscription_data: {
           ...(wantsTrial ? { trial_period_days: 30 } : {}),
           metadata: {
@@ -1267,6 +1268,7 @@ app.post(
             trial: wantsTrial ? "true" : "false",
           },
         },
+
         metadata: {
           userId: req.session.user.sub,
           userEmail: req.session.user.email || "",
