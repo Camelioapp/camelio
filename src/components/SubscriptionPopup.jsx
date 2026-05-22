@@ -19,7 +19,7 @@ export default function SubscriptionPopup() {
         },
         credentials: "include",
         body: JSON.stringify({
-          lookup_key: "camelio_monthly_499",
+          lookup_key: "camelio_monthly_595",
           trial,
         }),
       });
@@ -65,7 +65,7 @@ export default function SubscriptionPopup() {
           <p className="text-sm font-bold text-[#3F3B35]">Forfait Camelio</p>
 
           <p className="mt-1 text-2xl font-bold text-[#8FA173]">
-            4,99 $ CA / mois
+            5,95 $ CA / mois
           </p>
 
           <p className="mt-1 text-xs text-[#7C756D]">

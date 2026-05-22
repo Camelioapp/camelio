@@ -26,7 +26,7 @@ function ProductDisplay() {
         },
         credentials: "include",
         body: JSON.stringify({
-          lookup_key: "camelio_monthly_499",
+          lookup_key: "camelio_monthly_595",
         }),
       });
 
@@ -56,7 +56,7 @@ function ProductDisplay() {
 
       <div className="billing-description">
         <h1>Forfait Camelio</h1>
-        <h2>4,99 $ CA / mois + taxes</h2>
+        <h2>5,95 $ CA / mois + taxes</h2>
         <p>
           Accédez à Camelio avec 5 Go de stockage inclus pour vos photos et
           documents familiaux.
