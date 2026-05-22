@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   Cookie,
   CreditCard,
   Eye,
@@ -125,6 +126,57 @@ function getBaseTheme(section) {
   };
 }
 
+function DropdownSection({
+  id,
+  title,
+  description,
+  icon: Icon,
+  iconColor = "#A8AA91",
+  openSection,
+  setOpenSection,
+  children,
+}) {
+  const isOpen = openSection === id;
+
+  return (
+    <section className="overflow-hidden rounded-[2rem] bg-white shadow-sm ring-1 ring-[#EFE4D6]">
+      <button
+        type="button"
+        onClick={() => setOpenSection(isOpen ? null : id)}
+        className="flex w-full items-center justify-between gap-4 p-5 text-left transition hover:bg-[#FFFDF8]"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
+            style={{ backgroundColor: iconColor }}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+
+          <div className="min-w-0">
+            <h3 className="font-bold text-[#55534C]">{title}</h3>
+            <p className="mt-1 text-sm leading-5 text-[#746F64]">
+              {description}
+            </p>
+          </div>
+        </div>
+
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FFF8EC] text-[#746F64] ring-1 ring-[#EFE4D6] transition ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        >
+          <ChevronDown className="h-5 w-5" />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="border-t border-[#EFE4D6] p-5">{children}</div>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsView({
   parentProfile = { name: "", email: "", phone: "" },
   setParentProfile = () => {},
@@ -135,6 +187,7 @@ export default function SettingsView({
   defaultSectionOrder,
 }) {
   const [openedSectionId, setOpenedSectionId] = useState(null);
+  const [openMainSection, setOpenMainSection] = useState("profile");
   const [pdfModal, setPdfModal] = useState(null);
   const [showCookieModal, setShowCookieModal] = useState(false);
 
@@ -285,29 +338,22 @@ export default function SettingsView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SectionTitle
         title="Paramètres"
         subtitle="Profil parent, sections, confidentialité, abonnement et version de l’application."
         icon={Settings}
       />
 
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="rounded-2xl bg-[#55534C] p-3 text-white">
-            <UserRound className="h-5 w-5" />
-          </div>
-
-          <div>
-            <h3 className="font-bold text-[#55534C]">
-              Profil principal parent
-            </h3>
-            <p className="text-sm text-[#746F64]">
-              Informations du compte principal.
-            </p>
-          </div>
-        </div>
-
+      <DropdownSection
+        id="profile"
+        title="Profil principal parent"
+        description="Informations du compte principal."
+        icon={UserRound}
+        iconColor="#55534C"
+        openSection={openMainSection}
+        setOpenSection={setOpenMainSection}
+      >
         <div className="space-y-5">
           <Field label="Nom complet">
             <input
@@ -353,24 +399,17 @@ export default function SettingsView({
             />
           </Field>
         </div>
-      </div>
+      </DropdownSection>
 
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="rounded-2xl bg-[#A8AA91] p-3 text-white">
-            <SlidersHorizontal className="h-5 w-5" />
-          </div>
-
-          <div>
-            <h3 className="font-bold text-[#55534C]">
-              Personnaliser les sections
-            </h3>
-            <p className="text-sm text-[#746F64]">
-              Cliquez sur l’engrenage pour modifier une section.
-            </p>
-          </div>
-        </div>
-
+      <DropdownSection
+        id="sections"
+        title="Personnaliser les sections"
+        description="Modifier l’ordre, les couleurs et la visibilité du dashboard."
+        icon={SlidersHorizontal}
+        iconColor="#A8AA91"
+        openSection={openMainSection}
+        setOpenSection={setOpenMainSection}
+      >
         <div className="space-y-3">
           {orderedSections.map((section) => {
             const Icon = section.icon;
@@ -391,7 +430,11 @@ export default function SettingsView({
                   borderColor: activeTheme.borderColor,
                 }}
               >
-                <div className="flex items-center gap-3 p-3">
+                <button
+                  type="button"
+                  onClick={() => setOpenedSectionId(isOpen ? null : section.id)}
+                  className="flex w-full items-center gap-3 p-3 text-left"
+                >
                   <div
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
                     style={{ backgroundColor: activeTheme.iconColor }}
@@ -411,17 +454,14 @@ export default function SettingsView({
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setOpenedSectionId(isOpen ? null : section.id)
-                    }
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-[#746F64] ring-1 ring-white/70 transition hover:scale-105 hover:bg-white"
-                    aria-label={`Options de ${section.title}`}
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/80 text-[#746F64] ring-1 ring-white/70 transition ${
+                      isOpen ? "rotate-180" : ""
+                    }`}
                   >
-                    <Settings className="h-5 w-5" />
-                  </button>
-                </div>
+                    <ChevronDown className="h-5 w-5" />
+                  </div>
+                </button>
 
                 {isOpen && (
                   <div
@@ -525,24 +565,17 @@ export default function SettingsView({
             );
           })}
         </div>
-      </div>
+      </DropdownSection>
 
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="rounded-2xl bg-[#8EA79B] p-3 text-white">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-
-          <div>
-            <h3 className="font-bold text-[#55534C]">
-              Confidentialité et sécurité
-            </h3>
-            <p className="text-sm text-[#746F64]">
-              Gérez vos documents légaux et vos préférences de confidentialité.
-            </p>
-          </div>
-        </div>
-
+      <DropdownSection
+        id="privacy"
+        title="Confidentialité et sécurité"
+        description="Documents légaux et préférences de confidentialité."
+        icon={ShieldCheck}
+        iconColor="#8EA79B"
+        openSection={openMainSection}
+        setOpenSection={setOpenMainSection}
+      >
         <div className="grid gap-3 md:grid-cols-3">
           {privacyItems.map((item) => {
             const Icon = item.icon;
@@ -558,9 +591,7 @@ export default function SettingsView({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-bold text-[#55534C]">
-                      {item.title}
-                    </h4>
+                    <h4 className="font-bold text-[#55534C]">{item.title}</h4>
                     <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
                       {item.description}
                     </p>
@@ -578,21 +609,29 @@ export default function SettingsView({
             );
           })}
         </div>
-      </div>
+      </DropdownSection>
 
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="rounded-2xl bg-[#EEC988] p-3 text-white">
-            <CreditCard className="h-5 w-5" />
-          </div>
-
-          <h3 className="font-bold text-[#55534C]">Abonnement</h3>
-        </div>
-
+      <DropdownSection
+        id="subscription"
+        title="Abonnement"
+        description="Plan actuel et informations de facturation."
+        icon={CreditCard}
+        iconColor="#EEC988"
+        openSection={openMainSection}
+        setOpenSection={setOpenMainSection}
+      >
         <InfoBox label="Plan actuel" value="Gratuit" />
-      </div>
+      </DropdownSection>
 
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+      <DropdownSection
+        id="account"
+        title="Compte"
+        description="Options du compte et déconnexion."
+        icon={LogOut}
+        iconColor="#C96F6F"
+        openSection={openMainSection}
+        setOpenSection={setOpenMainSection}
+      >
         <button
           type="button"
           onClick={handleLogout}
@@ -601,7 +640,7 @@ export default function SettingsView({
           <LogOut className="h-5 w-5" />
           Se déconnecter
         </button>
-      </div>
+      </DropdownSection>
 
       <div className="pb-5 text-center">
         <p className="text-xs font-bold text-[#A8A096]">
