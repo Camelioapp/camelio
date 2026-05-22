@@ -1,17 +1,19 @@
 import React from "react";
 
 export default function Login() {
-  const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN;
-  const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID;
-  const REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI;
+  const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
-const loginWithCognito = () => {
-  window.location.href = `${import.meta.env.VITE_API_URL || "https://camelio.onrender.com"}/login`;
-};
+  const loginWithCognito = () => {
+    window.location.href = `${API_URL}/login`;
+  };
 
-const loginWithGoogle = () => {
-  window.location.href = `${import.meta.env.VITE_API_URL || "https://camelio.onrender.com"}/login`;
-};
+  const loginWithGoogle = () => {
+    window.location.href = `${API_URL}/login`;
+  };
+
+  const signupWithCognito = () => {
+    window.location.href = `${API_URL}/signup`;
+  };
 
   return (
     <div style={styles.page}>
@@ -21,8 +23,12 @@ const loginWithGoogle = () => {
         <h1 style={styles.title}>Bienvenue sur Camélio</h1>
 
         <p style={styles.subtitle}>
-          Connectez-vous à votre espace familial sécurisé.
+          Connectez-vous ou créez votre espace familial sécurisé.
         </p>
+
+        <button style={styles.signupButton} onClick={signupWithCognito}>
+          Créer un compte
+        </button>
 
         <button style={styles.googleButton} onClick={loginWithGoogle}>
           Continuer avec Google
@@ -69,7 +75,7 @@ const styles = {
     width: "54px",
     height: "54px",
     borderRadius: "18px",
-    background: "#7C6CF2",
+    background: "#8FA173",
     color: "#FFFFFF",
     display: "flex",
     alignItems: "center",
@@ -91,6 +97,18 @@ const styles = {
     marginTop: "12px",
     marginBottom: "28px",
   },
+  signupButton: {
+    width: "100%",
+    padding: "15px 18px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#8FA173",
+    color: "#FFFFFF",
+    fontSize: "15px",
+    fontWeight: "700",
+    cursor: "pointer",
+    marginBottom: "12px",
+  },
   googleButton: {
     width: "100%",
     padding: "15px 18px",
@@ -107,9 +125,9 @@ const styles = {
     width: "100%",
     padding: "15px 18px",
     borderRadius: "16px",
-    border: "none",
-    background: "#7C6CF2",
-    color: "#FFFFFF",
+    border: "1px solid #8FA173",
+    background: "#FFFFFF",
+    color: "#7A8B69",
     fontSize: "15px",
     fontWeight: "700",
     cursor: "pointer",
@@ -126,7 +144,7 @@ const styles = {
     justifyContent: "center",
     padding: "80px",
     background:
-      "radial-gradient(circle at top left, #E7DDFF, transparent 35%), radial-gradient(circle at bottom right, #DDEBFF, transparent 35%)",
+      "radial-gradient(circle at top left, #EEF4E8, transparent 35%), radial-gradient(circle at bottom right, #F2ECF7, transparent 35%)",
   },
   sideTitle: {
     color: "#2F2D3A",
