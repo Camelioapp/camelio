@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Camera,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Download,
   Trash2,
 } from "lucide-react";
@@ -20,8 +22,16 @@ const textareaClass =
 function PhotoCard({ photo, children, onOpen, onDelete }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-white ring-1 ring-[#EFE4D6]">
-      <button type="button" onClick={() => onOpen(photo)} className="block w-full">
-        <img src={photo.url} alt={photo.title} className="h-44 w-full object-cover" />
+      <button
+        type="button"
+        onClick={() => onOpen(photo)}
+        className="block w-full"
+      >
+        <img
+          src={photo.url}
+          alt={photo.title}
+          className="h-44 w-full object-cover"
+        />
       </button>
 
       <div className="p-4">
@@ -523,6 +533,8 @@ export default function Photos({ children = [] }) {
 
   const [showPhotoPopup, setShowPhotoPopup] = useState(false);
   const [showAlbumPopup, setShowAlbumPopup] = useState(false);
+  const [showRecentPhotos, setShowRecentPhotos] = useState(true);
+  const [recentChildFilter, setRecentChildFilter] = useState("all");
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -569,6 +581,20 @@ export default function Photos({ children = [] }) {
 
     return Array.from(albumMap.values());
   }, [albums, photos]);
+
+  const recentPhotos = useMemo(() => {
+    const sortedPhotos = [...photos].sort((a, b) =>
+      (b.date || "").localeCompare(a.date || "")
+    );
+
+    if (recentChildFilter === "all") {
+      return sortedPhotos;
+    }
+
+    return sortedPhotos.filter((photo) =>
+      photo.children?.includes(recentChildFilter)
+    );
+  }, [photos, recentChildFilter]);
 
   const loadPhotos = async () => {
     try {
@@ -736,44 +762,44 @@ export default function Photos({ children = [] }) {
     }
   };
 
-const addPhoto = async () => {
-  if (!photoForm.files.length) {
-    alert("Ajoute au moins une photo avant d’enregistrer.");
-    return;
-  }
-
-  try {
-    setIsSaving(true);
-    setErrorMessage("");
-
-    const baseTitle = photoForm.title.trim() || "Photo";
-
-    for (let index = 0; index < photoForm.files.length; index += 1) {
-      const file = photoForm.files[index];
-
-      const title =
-        photoForm.files.length > 1 ? `${baseTitle} ${index + 1}` : baseTitle;
-
-      await uploadOnePhoto(file, title, photoForm.album, photoForm.children);
+  const addPhoto = async () => {
+    if (!photoForm.files.length) {
+      alert("Ajoute au moins une photo avant d’enregistrer.");
+      return;
     }
 
-    setPhotoForm({
-      title: "",
-      album: photoForm.album,
-      children: [],
-      urls: [],
-      files: [],
-    });
+    try {
+      setIsSaving(true);
+      setErrorMessage("");
 
-    setShowPhotoPopup(false);
-    await loadPhotos();
-  } catch (error) {
-    console.error("Erreur ajout photo:", error);
-    alert(error.message || "Impossible d’ajouter la photo.");
-  } finally {
-    setIsSaving(false);
-  }
-};
+      const baseTitle = photoForm.title.trim() || "Photo";
+
+      for (let index = 0; index < photoForm.files.length; index += 1) {
+        const file = photoForm.files[index];
+
+        const title =
+          photoForm.files.length > 1 ? `${baseTitle} ${index + 1}` : baseTitle;
+
+        await uploadOnePhoto(file, title, photoForm.album, photoForm.children);
+      }
+
+      setPhotoForm({
+        title: "",
+        album: photoForm.album,
+        children: [],
+        urls: [],
+        files: [],
+      });
+
+      setShowPhotoPopup(false);
+      await loadPhotos();
+    } catch (error) {
+      console.error("Erreur ajout photo:", error);
+      alert(error.message || "Impossible d’ajouter la photo.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const confirmDeletePhoto = async () => {
     if (!photoToDelete) return;
@@ -967,29 +993,74 @@ const addPhoto = async () => {
       </div>
 
       <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <h3 className="text-lg font-bold text-[#55534C]">Photos récentes</h3>
+        <button
+          type="button"
+          onClick={() => setShowRecentPhotos((current) => !current)}
+          className="flex w-full items-start justify-between gap-3 text-left"
+        >
+          <div>
+            <h3 className="text-lg font-bold text-[#55534C]">
+              Photos récentes
+            </h3>
 
-        <div className="mt-5 space-y-4">
-          {isLoading ? (
-            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-              Chargement des photos...
+            <p className="mt-1 text-sm leading-5 text-[#746F64]">
+              {recentPhotos.length} photo{recentPhotos.length > 1 ? "s" : ""}{" "}
+              affichée{recentPhotos.length > 1 ? "s" : ""}
+            </p>
+          </div>
+
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FFF8F9] text-[#B96B77] ring-1 ring-[#F3CDD3]">
+            {showRecentPhotos ? (
+              <ChevronUp className="h-5 w-5" />
+            ) : (
+              <ChevronDown className="h-5 w-5" />
+            )}
+          </div>
+        </button>
+
+        {showRecentPhotos && (
+          <div className="mt-5 space-y-4">
+            <div className="rounded-2xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
+              <Field label="Filtrer par enfant">
+                <select
+                  className={inputClass}
+                  value={recentChildFilter}
+                  onChange={(event) => setRecentChildFilter(event.target.value)}
+                >
+                  <option value="all">Tous les enfants</option>
+
+                  {children.map((child) => (
+                    <option key={child.name} value={child.name}>
+                      {displayName(child)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
-          ) : photos.length ? (
-            photos.map((photo) => (
-              <PhotoCard
-                key={photo.id}
-                photo={photo}
-                children={children}
-                onOpen={setSelectedPhoto}
-                onDelete={setPhotoToDelete}
-              />
-            ))
-          ) : (
-            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-              Aucune photo ajoutée.
-            </div>
-          )}
-        </div>
+
+            {isLoading ? (
+              <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
+                Chargement des photos...
+              </div>
+            ) : recentPhotos.length ? (
+              <div className="grid !grid-cols-2 gap-3">
+                {recentPhotos.map((photo) => (
+                  <PhotoCard
+                    key={photo.id}
+                    photo={photo}
+                    children={children}
+                    onOpen={setSelectedPhoto}
+                    onDelete={setPhotoToDelete}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
+                Aucune photo ne correspond au filtre sélectionné.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {selectedGalleryChild && (
@@ -1059,7 +1130,7 @@ const addPhoto = async () => {
       {selectedPhoto && (
         <PhotoViewer
           photo={selectedPhoto}
-          photos={photos}
+          photos={recentPhotos.length ? recentPhotos : photos}
           close={() => setSelectedPhoto(null)}
           onDelete={setPhotoToDelete}
         />
