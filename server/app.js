@@ -353,6 +353,39 @@ app.get("/login", async (req, res, next) => {
   }
 });
 
+app.get("/signup", async (req, res, next) => {
+  try {
+    const client = await getClient();
+
+    const codeVerifier = generators.codeVerifier();
+    const codeChallenge = generators.codeChallenge(codeVerifier);
+    const state = generators.state();
+    const nonce = generators.nonce();
+
+    req.session.codeVerifier = codeVerifier;
+    req.session.state = state;
+    req.session.nonce = nonce;
+
+    const authorizationUrl = client.authorizationUrl({
+      scope: "openid email",
+      state,
+      nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+      lang: "fr",
+    });
+
+    const signupUrl = authorizationUrl.replace("/login?", "/signup?");
+
+    req.session.save((err) => {
+      if (err) return next(err);
+      return res.redirect(signupUrl);
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/callback", async (req, res, next) => {
   try {
     if (!req.session.state || !req.session.nonce || !req.session.codeVerifier) {
