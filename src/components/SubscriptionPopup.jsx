@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { X, Sparkles, CheckCircle2 } from "lucide-react";
+import { Sparkles, CheckCircle2 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
-export default function SubscriptionPopup({ onClose }) {
+export default function SubscriptionPopup() {
   const [loadingType, setLoadingType] = useState("");
   const [error, setError] = useState("");
 
@@ -44,40 +44,25 @@ export default function SubscriptionPopup({ onClose }) {
     }
   };
 
-  const closePopup = () => {
-    localStorage.setItem("camelio_subscription_popup_seen", "true");
-    if (onClose) onClose();
-  };
-
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/35 px-4">
       <div className="relative w-full max-w-[430px] rounded-[2rem] bg-[#FFFCF7] p-6 shadow-2xl ring-1 ring-black/5">
-        <button
-          type="button"
-          onClick={closePopup}
-          className="absolute right-4 top-4 rounded-full bg-[#F4EFE7] p-2 text-[#6B6258] transition hover:brightness-95"
-          aria-label="Fermer"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
         <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF4E8] text-[#8FA173]">
           <Sparkles className="h-7 w-7" />
         </div>
 
-        <h2 className="pr-8 text-[1.55rem] font-bold leading-tight text-[#3F3B35]">
+        <h2 className="text-[1.55rem] font-bold leading-tight text-[#3F3B35]">
           Activez votre espace Camelio
         </h2>
 
         <p className="mt-3 text-[0.95rem] leading-6 text-[#6B6258]">
-          Commencez avec un essai gratuit de 1 mois, ou passez directement à la
-          version payante pour utiliser Camelio sans interruption.
+          Pour continuer, choisissez votre option d’abonnement. Vous pouvez
+          commencer avec un essai gratuit de 1 mois ou passer directement à la
+          version payante.
         </p>
 
         <div className="mt-5 rounded-2xl bg-[#F8F3EA] p-4">
-          <p className="text-sm font-bold text-[#3F3B35]">
-            Forfait Camelio
-          </p>
+          <p className="text-sm font-bold text-[#3F3B35]">Forfait Camelio</p>
 
           <p className="mt-1 text-2xl font-bold text-[#8FA173]">
             4,99 $ CA / mois
@@ -134,14 +119,6 @@ export default function SubscriptionPopup({ onClose }) {
               : "Passer à la version payante"}
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={closePopup}
-          className="mt-4 w-full text-sm font-semibold text-[#8A8178] underline-offset-4 hover:underline"
-        >
-          Plus tard
-        </button>
       </div>
     </div>
   );
