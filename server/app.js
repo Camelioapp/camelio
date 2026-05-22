@@ -1227,6 +1227,7 @@ app.post(
   async (req, res, next) => {
     try {
       const lookupKey = req.body.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
+      const wantsTrial = req.body.trial === true;
 
       const prices = await stripe.prices.list({
         lookup_keys: [lookupKey],
@@ -1256,19 +1257,22 @@ app.post(
         cancel_url: `${APP_URL}/billing?canceled=true`,
         allow_promotion_codes: true,
         billing_address_collection: "auto",
-        metadata: {
-          userId: req.session.user.sub,
-          userEmail: req.session.user.email || "",
-          plan: lookupKey,
-          storageGb: STRIPE_STORAGE_GB,
-        },
         subscription_data: {
+          ...(wantsTrial ? { trial_period_days: 30 } : {}),
           metadata: {
             userId: req.session.user.sub,
             userEmail: req.session.user.email || "",
             plan: lookupKey,
             storageGb: STRIPE_STORAGE_GB,
+            trial: wantsTrial ? "true" : "false",
           },
+        },
+        metadata: {
+          userId: req.session.user.sub,
+          userEmail: req.session.user.email || "",
+          plan: lookupKey,
+          storageGb: STRIPE_STORAGE_GB,
+          trial: wantsTrial ? "true" : "false",
         },
       });
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, ArrowLeft, Grid2X2, List, UserRound } from "lucide-react";
 
+import SubscriptionPopup from "./SubscriptionPopup";
 import Children from "./Children.jsx";
 import ParentalPlan from "./ParentalPlan.jsx";
 import CalendarView from "./CalendarView.jsx";
@@ -23,111 +24,21 @@ const SECTION_THEME_STORAGE_KEY = "camelio-section-themes";
 const defaultPhotoPosition = { x: 50, y: 50 };
 
 const childColorOptions = [
-  {
-    id: "sage",
-    label: "Sauge",
-    dot: "#A8B193",
-    soft: "#EEF0E7",
-    text: "#6F785F",
-  },
-  {
-    id: "rose",
-    label: "Rose",
-    dot: "#E99AAA",
-    soft: "#FBECEF",
-    text: "#B96B77",
-  },
-  {
-    id: "blue",
-    label: "Bleu doux",
-    dot: "#8FB8DE",
-    soft: "#EEF5FB",
-    text: "#657F9F",
-  },
-  {
-    id: "mauve",
-    label: "Mauve",
-    dot: "#AA90C8",
-    soft: "#F4F0FA",
-    text: "#8475A5",
-  },
-  {
-    id: "gold",
-    label: "Doré",
-    dot: "#D4A85F",
-    soft: "#FFF8EC",
-    text: "#9A7A43",
-  },
-  {
-    id: "peach",
-    label: "Pêche",
-    dot: "#E8A07E",
-    soft: "#FFF1EA",
-    text: "#B8755F",
-  },
-  {
-    id: "mint",
-    label: "Menthe",
-    dot: "#7CBFA2",
-    soft: "#EDF8F2",
-    text: "#5F927A",
-  },
-  {
-    id: "lavender",
-    label: "Lavande",
-    dot: "#C7B3E5",
-    soft: "#F7F1FF",
-    text: "#8F76B8",
-  },
-  {
-    id: "mustard",
-    label: "Moutarde",
-    dot: "#D9BF5E",
-    soft: "#FFF8D8",
-    text: "#9C842F",
-  },
-  {
-    id: "olive",
-    label: "Olive",
-    dot: "#8E9A72",
-    soft: "#EEF0E7",
-    text: "#6B7658",
-  },
-  {
-    id: "coral",
-    label: "Corail",
-    dot: "#E8786D",
-    soft: "#FFF0EF",
-    text: "#B85F58",
-  },
-  {
-    id: "teal",
-    label: "Sarcelle",
-    dot: "#5BAEAA",
-    soft: "#EAF7F6",
-    text: "#4B8A87",
-  },
-  {
-    id: "sky",
-    label: "Ciel",
-    dot: "#76BFE3",
-    soft: "#EAF7FF",
-    text: "#5B93B0",
-  },
-  {
-    id: "grape",
-    label: "Raisin",
-    dot: "#8F78B8",
-    soft: "#F2EEF8",
-    text: "#735F9A",
-  },
-  {
-    id: "sand",
-    label: "Sable",
-    dot: "#D8C49A",
-    soft: "#FBF4E8",
-    text: "#9A7F50",
-  },
+  { id: "sage", label: "Sauge", dot: "#A8B193", soft: "#EEF0E7", text: "#6F785F" },
+  { id: "rose", label: "Rose", dot: "#E99AAA", soft: "#FBECEF", text: "#B96B77" },
+  { id: "blue", label: "Bleu doux", dot: "#8FB8DE", soft: "#EEF5FB", text: "#657F9F" },
+  { id: "mauve", label: "Mauve", dot: "#AA90C8", soft: "#F4F0FA", text: "#8475A5" },
+  { id: "gold", label: "Doré", dot: "#D4A85F", soft: "#FFF8EC", text: "#9A7A43" },
+  { id: "peach", label: "Pêche", dot: "#E8A07E", soft: "#FFF1EA", text: "#B8755F" },
+  { id: "mint", label: "Menthe", dot: "#7CBFA2", soft: "#EDF8F2", text: "#5F927A" },
+  { id: "lavender", label: "Lavande", dot: "#C7B3E5", soft: "#F7F1FF", text: "#8F76B8" },
+  { id: "mustard", label: "Moutarde", dot: "#D9BF5E", soft: "#FFF8D8", text: "#9C842F" },
+  { id: "olive", label: "Olive", dot: "#8E9A72", soft: "#EEF0E7", text: "#6B7658" },
+  { id: "coral", label: "Corail", dot: "#E8786D", soft: "#FFF0EF", text: "#B85F58" },
+  { id: "teal", label: "Sarcelle", dot: "#5BAEAA", soft: "#EAF7F6", text: "#4B8A87" },
+  { id: "sky", label: "Ciel", dot: "#76BFE3", soft: "#EAF7FF", text: "#5B93B0" },
+  { id: "grape", label: "Raisin", dot: "#8F78B8", soft: "#F2EEF8", text: "#735F9A" },
+  { id: "sand", label: "Sable", dot: "#D8C49A", soft: "#FBF4E8", text: "#9A7F50" },
 ];
 
 function getChildColorTheme(colorId) {
@@ -233,6 +144,15 @@ function getInitials(child) {
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("home");
   const [viewMode, setViewMode] = useState("grid");
+  const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false);
+
+  useEffect(() => {
+    const alreadySeen = localStorage.getItem("camelio_subscription_popup_seen");
+
+    if (!alreadySeen) {
+      setShowSubscriptionPopup(true);
+    }
+  }, []);
 
   const defaultSectionOrder = useMemo(() => {
     return sections
@@ -458,277 +378,292 @@ export default function Dashboard() {
     }
   }
 
+  const subscriptionPopup = showSubscriptionPopup ? (
+    <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
+  ) : null;
+
   if (activeSection !== "home") {
     return (
-      <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
-        <div className="mx-auto max-w-6xl p-3 md:p-6">
-          <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
-            <header className="flex items-center justify-between border-b border-[#eadfcf] px-5 py-5 md:px-8">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#8f9874]">
-                  Camelio
-                </p>
+      <>
+        {subscriptionPopup}
 
-                <h1 className="text-2xl font-semibold text-[#4f4a45]">
-                  {activeSectionData?.title || "Section"}
-                </h1>
-              </div>
+        <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
+          <div className="mx-auto max-w-6xl p-3 md:p-6">
+            <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
+              <header className="flex items-center justify-between border-b border-[#eadfcf] px-5 py-5 md:px-8">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#8f9874]">
+                    Camelio
+                  </p>
 
-              <button
-                type="button"
-                onClick={goHome}
-                className="flex h-12 w-12 items-center justify-center rounded-full border border-[#eadfcf] bg-white text-[#8f9874] shadow-sm transition hover:bg-[#f7f1e8]"
-                aria-label="Retour à l'accueil"
-              >
-                <ArrowLeft size={22} />
-              </button>
-            </header>
+                  <h1 className="text-2xl font-semibold text-[#4f4a45]">
+                    {activeSectionData?.title || "Section"}
+                  </h1>
+                </div>
 
-            <main className="p-4 md:p-8">{renderActiveSection()}</main>
+                <button
+                  type="button"
+                  onClick={goHome}
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-[#eadfcf] bg-white text-[#8f9874] shadow-sm transition hover:bg-[#f7f1e8]"
+                  aria-label="Retour à l'accueil"
+                >
+                  <ArrowLeft size={22} />
+                </button>
+              </header>
+
+              <main className="p-4 md:p-8">{renderActiveSection()}</main>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
-      <div className="mx-auto max-w-6xl p-3 md:p-6">
-        <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
-          <div className="flex justify-center pt-4">
-            <div className="h-1.5 w-16 rounded-full bg-[#e5d2c1]" />
-          </div>
+    <>
+      {subscriptionPopup}
 
-          <header className="relative flex min-h-[96px] items-center justify-between border-b border-[#eadfcf] px-5 py-5 md:min-h-[110px] md:px-8">
-            <div className="flex items-center">
-              <img
-                src="https://studiocameleon.ca/wp-content/uploads/2026/05/Logo-horizontal-couleur-scaled-e1779141504554.png"
-                alt="Camelio"
-                className="h-10 w-auto object-contain sm:h-16 md:h-18"
-              />
+      <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
+        <div className="mx-auto max-w-6xl p-3 md:p-6">
+          <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
+            <div className="flex justify-center pt-4">
+              <div className="h-1.5 w-16 rounded-full bg-[#e5d2c1]" />
             </div>
 
-            <button
-              type="button"
-              onClick={() => openSection("settings")}
-              className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-[#eadfcf] bg-white shadow-sm transition hover:scale-105 hover:bg-[#faf4ec] sm:h-16 sm:w-16"
-              aria-label="Paramètres"
-            >
-              <img
-                src="https://studiocameleon.ca/wp-content/uploads/2026/05/pere_2_enfants_filles.png"
-                alt="Profil"
-                className="h-full w-full object-cover"
-              />
-            </button>
-          </header>
-
-          <main className="p-4 md:p-8">
-            <section className="relative overflow-hidden rounded-[30px] border border-[#eadfcf] bg-white shadow-sm">
-              <FamilySoftCircles />
-
-              <div className="relative z-10 px-5 py-6 md:px-8 md:py-8">
-                <div className="mb-5 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#a8aa91] md:text-sm">
-                      Bienvenue
-                    </p>
-
-                    <h2 className="mt-1 text-2xl font-semibold text-[#4f4a45] md:text-3xl">
-                      Ma famille
-                    </h2>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => openSection("children")}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
-                    aria-label="Ajouter un enfant"
-                  >
-                    <Plus size={22} strokeWidth={1.8} />
-                  </button>
-                </div>
-
-                {isLoadingChildren ? (
-                  <div className="flex min-h-[180px] w-full items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center">
-                    <p className="text-sm font-semibold text-[#8b8278]">
-                      Chargement de votre famille...
-                    </p>
-                  </div>
-                ) : children.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => openSection("children")}
-                    className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center transition hover:bg-[#faf4ec] hover:shadow-sm"
-                  >
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#d8c8b6] bg-[#eef0e7] text-[#8f9874] shadow-sm">
-                      <Plus size={32} strokeWidth={1.7} />
-                    </div>
-
-                    <p className="mt-4 text-lg font-semibold text-[#4f4a45]">
-                      Ajouter votre enfant
-                    </p>
-
-                    <p className="mt-1 text-sm text-[#8b8278]">
-                      Créez un premier profil pour commencer.
-                    </p>
-                  </button>
-                ) : (
-                  <div className="relative -mx-2 overflow-hidden">
-                    <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      <div className="flex min-h-[170px] items-end gap-4 px-2 sm:min-h-[205px] sm:gap-5 md:justify-center md:gap-0 md:px-8">
-                        {children.map((child, index) => {
-                          const photo = child.image || child.photo || "";
-                          const initials = getInitials(child);
-                          const childTheme = getChildColorTheme(child.color);
-
-                          return (
-                            <button
-                              key={child.id || child.name}
-                              type="button"
-                              onClick={() => openSection("children")}
-                              className={`group relative flex w-[104px] shrink-0 snap-center flex-col items-center sm:w-[132px] md:w-auto ${
-                                index === 0 ? "" : "md:-ml-7"
-                              }`}
-                              style={{ zIndex: children.length + index }}
-                            >
-                              <div
-                                className="flex h-[108px] w-[108px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_12px_24px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
-                                style={{
-                                  backgroundColor: childTheme.soft,
-                                  color: childTheme.text,
-                                }}
-                              >
-                                {photo ? (
-                                  <PhotoImage
-                                    src={photo}
-                                    alt={child.name}
-                                    position={child.photoPosition}
-                                    zoom={child.photoZoom || 1}
-                                    className="h-full w-full"
-                                  />
-                                ) : initials ? (
-                                  initials
-                                ) : (
-                                  <UserRound className="h-10 w-10" />
-                                )}
-                              </div>
-
-                              <div
-                                className="-mt-4 max-w-[108px] rounded-[16px] px-4 py-2 text-center text-sm font-semibold text-white shadow-sm transition group-hover:brightness-95 sm:max-w-[132px] sm:text-base md:-mt-5 md:min-w-[120px] md:text-xl"
-                                style={{
-                                  backgroundColor: childTheme.dot,
-                                }}
-                              >
-                                <span className="block truncate">
-                                  {child.name}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {children.length > 2 && (
-                      <p className="mt-1 text-center text-xs font-semibold text-[#9A8D7C] md:hidden">
-                        Glisse pour voir tous les profils.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="mt-7">
-              <div className="mb-4 flex items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-semibold text-[#4f4a45]">
-                    Sections
-                  </h2>
-
-                  <p className="text-sm text-[#8b8278]">
-                    {orderedSections.length} sections disponibles
-                  </p>
-                </div>
-
-                <div className="flex shrink-0 rounded-full border border-[#eadfcf] bg-white p-1 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("grid")}
-                    className={`flex items-center gap-1 rounded-full px-3 py-2 text-xs font-semibold transition md:gap-2 md:px-4 ${
-                      viewMode === "grid"
-                        ? "bg-[#a8aa91] text-white"
-                        : "text-[#8b8278] hover:bg-[#f7f1e8]"
-                    }`}
-                  >
-                    <Grid2X2 size={14} />
-
-                    <span className="hidden min-[430px]:inline">
-                      2 colonnes
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("list")}
-                    className={`flex items-center gap-1 rounded-full px-3 py-2 text-xs font-semibold transition md:gap-2 md:px-4 ${
-                      viewMode === "list"
-                        ? "bg-[#a8aa91] text-white"
-                        : "text-[#8b8278] hover:bg-[#f7f1e8]"
-                    }`}
-                  >
-                    <List size={14} />
-
-                    <span className="hidden min-[430px]:inline">Liste</span>
-                  </button>
-                </div>
+            <header className="relative flex min-h-[96px] items-center justify-between border-b border-[#eadfcf] px-5 py-5 md:min-h-[110px] md:px-8">
+              <div className="flex items-center">
+                <img
+                  src="https://studiocameleon.ca/wp-content/uploads/2026/05/Logo-horizontal-couleur-scaled-e1779141504554.png"
+                  alt="Camelio"
+                  className="h-10 w-auto object-contain sm:h-16 md:h-18"
+                />
               </div>
 
-              <div
-                className={
-                  viewMode === "list"
-                    ? "grid grid-cols-1 gap-4"
-                    : "grid grid-cols-2 gap-3 md:gap-4"
-                }
+              <button
+                type="button"
+                onClick={() => openSection("settings")}
+                className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-[#eadfcf] bg-white shadow-sm transition hover:scale-105 hover:bg-[#faf4ec] sm:h-16 sm:w-16"
+                aria-label="Paramètres"
               >
-                {orderedSections.map((section) => {
-                  const Icon = section.icon;
-                  const theme = getSectionTheme(section, sectionThemeOverrides);
+                <img
+                  src="https://studiocameleon.ca/wp-content/uploads/2026/05/pere_2_enfants_filles.png"
+                  alt="Profil"
+                  className="h-full w-full object-cover"
+                />
+              </button>
+            </header>
 
-                  return (
+            <main className="p-4 md:p-8">
+              <section className="relative overflow-hidden rounded-[30px] border border-[#eadfcf] bg-white shadow-sm">
+                <FamilySoftCircles />
+
+                <div className="relative z-10 px-5 py-6 md:px-8 md:py-8">
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#a8aa91] md:text-sm">
+                        Bienvenue
+                      </p>
+
+                      <h2 className="mt-1 text-2xl font-semibold text-[#4f4a45] md:text-3xl">
+                        Ma famille
+                      </h2>
+                    </div>
+
                     <button
-                      key={section.id}
                       type="button"
-                      onClick={() => openSection(section.id)}
-                      className="min-h-[148px] rounded-[24px] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[138px] md:rounded-[26px] md:p-5"
-                      style={{
-                        backgroundColor: theme.bgColor,
-                        borderColor: theme.borderColor,
-                      }}
+                      onClick={() => openSection("children")}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
+                      aria-label="Ajouter un enfant"
                     >
-                      <div
-                        className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-white md:h-12 md:w-12"
-                        style={{ backgroundColor: theme.iconColor }}
-                      >
-                        <Icon size={22} />
+                      <Plus size={22} strokeWidth={1.8} />
+                    </button>
+                  </div>
+
+                  {isLoadingChildren ? (
+                    <div className="flex min-h-[180px] w-full items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center">
+                      <p className="text-sm font-semibold text-[#8b8278]">
+                        Chargement de votre famille...
+                      </p>
+                    </div>
+                  ) : children.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => openSection("children")}
+                      className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center transition hover:bg-[#faf4ec] hover:shadow-sm"
+                    >
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#d8c8b6] bg-[#eef0e7] text-[#8f9874] shadow-sm">
+                        <Plus size={32} strokeWidth={1.7} />
                       </div>
 
-                      <h3 className="text-base font-semibold leading-5 text-[#4f4a45] md:text-xl">
-                        {section.title}
-                      </h3>
+                      <p className="mt-4 text-lg font-semibold text-[#4f4a45]">
+                        Ajouter votre enfant
+                      </p>
 
-                      <p className="mt-2 text-xs leading-5 text-[#7d756e] md:text-sm">
-                        {section.description}
+                      <p className="mt-1 text-sm text-[#8b8278]">
+                        Créez un premier profil pour commencer.
                       </p>
                     </button>
-                  );
-                })}
-              </div>
-            </section>
-          </main>
+                  ) : (
+                    <div className="relative -mx-2 overflow-hidden">
+                      <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <div className="flex min-h-[170px] items-end gap-4 px-2 sm:min-h-[205px] sm:gap-5 md:justify-center md:gap-0 md:px-8">
+                          {children.map((child, index) => {
+                            const photo = child.image || child.photo || "";
+                            const initials = getInitials(child);
+                            const childTheme = getChildColorTheme(child.color);
+
+                            return (
+                              <button
+                                key={child.id || child.name}
+                                type="button"
+                                onClick={() => openSection("children")}
+                                className={`group relative flex w-[104px] shrink-0 snap-center flex-col items-center sm:w-[132px] md:w-auto ${
+                                  index === 0 ? "" : "md:-ml-7"
+                                }`}
+                                style={{ zIndex: children.length + index }}
+                              >
+                                <div
+                                  className="flex h-[108px] w-[108px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_12px_24px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+                                  style={{
+                                    backgroundColor: childTheme.soft,
+                                    color: childTheme.text,
+                                  }}
+                                >
+                                  {photo ? (
+                                    <PhotoImage
+                                      src={photo}
+                                      alt={child.name}
+                                      position={child.photoPosition}
+                                      zoom={child.photoZoom || 1}
+                                      className="h-full w-full"
+                                    />
+                                  ) : initials ? (
+                                    initials
+                                  ) : (
+                                    <UserRound className="h-10 w-10" />
+                                  )}
+                                </div>
+
+                                <div
+                                  className="-mt-4 max-w-[108px] rounded-[16px] px-4 py-2 text-center text-sm font-semibold text-white shadow-sm transition group-hover:brightness-95 sm:max-w-[132px] sm:text-base md:-mt-5 md:min-w-[120px] md:text-xl"
+                                  style={{
+                                    backgroundColor: childTheme.dot,
+                                  }}
+                                >
+                                  <span className="block truncate">
+                                    {child.name}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {children.length > 2 && (
+                        <p className="mt-1 text-center text-xs font-semibold text-[#9A8D7C] md:hidden">
+                          Glisse pour voir tous les profils.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="mt-7">
+                <div className="mb-4 flex items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-semibold text-[#4f4a45]">
+                      Sections
+                    </h2>
+
+                    <p className="text-sm text-[#8b8278]">
+                      {orderedSections.length} sections disponibles
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 rounded-full border border-[#eadfcf] bg-white p-1 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("grid")}
+                      className={`flex items-center gap-1 rounded-full px-3 py-2 text-xs font-semibold transition md:gap-2 md:px-4 ${
+                        viewMode === "grid"
+                          ? "bg-[#a8aa91] text-white"
+                          : "text-[#8b8278] hover:bg-[#f7f1e8]"
+                      }`}
+                    >
+                      <Grid2X2 size={14} />
+
+                      <span className="hidden min-[430px]:inline">
+                        2 colonnes
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("list")}
+                      className={`flex items-center gap-1 rounded-full px-3 py-2 text-xs font-semibold transition md:gap-2 md:px-4 ${
+                        viewMode === "list"
+                          ? "bg-[#a8aa91] text-white"
+                          : "text-[#8b8278] hover:bg-[#f7f1e8]"
+                      }`}
+                    >
+                      <List size={14} />
+
+                      <span className="hidden min-[430px]:inline">Liste</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  className={
+                    viewMode === "list"
+                      ? "grid grid-cols-1 gap-4"
+                      : "grid grid-cols-2 gap-3 md:gap-4"
+                  }
+                >
+                  {orderedSections.map((section) => {
+                    const Icon = section.icon;
+                    const theme = getSectionTheme(
+                      section,
+                      sectionThemeOverrides
+                    );
+
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        onClick={() => openSection(section.id)}
+                        className="min-h-[148px] rounded-[24px] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[138px] md:rounded-[26px] md:p-5"
+                        style={{
+                          backgroundColor: theme.bgColor,
+                          borderColor: theme.borderColor,
+                        }}
+                      >
+                        <div
+                          className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-white md:h-12 md:w-12"
+                          style={{ backgroundColor: theme.iconColor }}
+                        >
+                          <Icon size={22} />
+                        </div>
+
+                        <h3 className="text-base font-semibold leading-5 text-[#4f4a45] md:text-xl">
+                          {section.title}
+                        </h3>
+
+                        <p className="mt-2 text-xs leading-5 text-[#7d756e] md:text-sm">
+                          {section.description}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </main>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
