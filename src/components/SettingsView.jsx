@@ -2,14 +2,21 @@ import React, { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Cookie,
   CreditCard,
+  Download,
   Eye,
   EyeOff,
+  FileText,
   Grid2X2,
+  LifeBuoy,
   LogOut,
+  Mail,
   Palette,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UserRound,
 } from "lucide-react";
 
@@ -73,6 +80,64 @@ const themeChoices = [
     bgColor: "#fff9ef",
     borderColor: "#ead7b8",
     iconColor: "#d8b77f",
+  },
+];
+
+const privacyItems = [
+  {
+    id: "privacy",
+    title: "Politique de confidentialité",
+    description:
+      "Consulter les informations sur la collecte, l’utilisation et la conservation des données.",
+    icon: ShieldCheck,
+    actionLabel: "Consulter",
+    path: "/privacy",
+  },
+  {
+    id: "terms",
+    title: "Conditions d’utilisation",
+    description:
+      "Voir les règles d’utilisation de l’application et les responsabilités de l’utilisateur.",
+    icon: FileText,
+    actionLabel: "Consulter",
+    path: "/terms",
+  },
+  {
+    id: "cookies",
+    title: "Gestion des cookies",
+    description:
+      "Accepter, refuser ou modifier les préférences liées aux témoins.",
+    icon: Cookie,
+    actionLabel: "Gérer",
+    path: "/cookies",
+  },
+  {
+    id: "download",
+    title: "Télécharger mes données",
+    description:
+      "Demander une copie des informations associées au compte.",
+    icon: Download,
+    actionLabel: "Demander",
+    path: "/data-export",
+  },
+  {
+    id: "delete",
+    title: "Supprimer mon compte",
+    description:
+      "Demander la suppression du compte et des données associées.",
+    icon: Trash2,
+    actionLabel: "Supprimer",
+    path: "/delete-account",
+    danger: true,
+  },
+  {
+    id: "contact",
+    title: "Contact confidentialité",
+    description:
+      "Contacter la personne responsable de la protection des renseignements personnels.",
+    icon: Mail,
+    actionLabel: "Contacter",
+    path: "mailto:info@camelio.app?subject=Confidentialité%20et%20données",
   },
 ];
 
@@ -186,11 +251,20 @@ export default function SettingsView({
     window.location.href = `${API_BASE_URL}/logout`;
   };
 
+  const handlePrivacyAction = (item) => {
+    if (item.path.startsWith("mailto:")) {
+      window.location.href = item.path;
+      return;
+    }
+
+    window.location.href = item.path;
+  };
+
   return (
     <div className="space-y-6">
       <SectionTitle
         title="Paramètres"
-        subtitle="Profil parent, sections, abonnement et version de l’application."
+        subtitle="Profil parent, sections, confidentialité, abonnement et version de l’application."
         icon={Settings}
       />
 
@@ -254,6 +328,89 @@ export default function SettingsView({
               placeholder="Ex. 514 555-1234"
             />
           </Field>
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="rounded-2xl bg-[#8EA79B] p-3 text-white">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+
+          <div>
+            <h3 className="font-bold text-[#55534C]">
+              Confidentialité et sécurité
+            </h3>
+            <p className="text-sm text-[#746F64]">
+              Gérez vos préférences de confidentialité, vos consentements et vos données personnelles.
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-5 rounded-[1.5rem] border border-[#DDE9E3] bg-[#F7FBF8] p-4">
+          <div className="flex gap-3">
+            <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#8EA79B] text-white">
+              <LifeBuoy className="h-4 w-4" />
+            </div>
+
+            <div>
+              <p className="text-sm font-bold text-[#55534C]">
+                Vos données restent sous votre contrôle.
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                Vous pouvez consulter les documents légaux, gérer vos préférences,
+                demander une copie de vos données ou demander la suppression du compte.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {privacyItems.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <div
+                key={item.id}
+                className={`rounded-[1.5rem] border p-4 transition hover:shadow-sm ${
+                  item.danger
+                    ? "border-[#F0D2D2] bg-[#FFF8F8]"
+                    : "border-[#EFE4D6] bg-[#FFFDF8]"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white ${
+                      item.danger ? "bg-[#C96F6F]" : "bg-[#A8AA91]"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-[#55534C]">
+                      {item.title}
+                    </h4>
+                    <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handlePrivacyAction(item)}
+                  className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-bold transition ${
+                    item.danger
+                      ? "bg-[#C96F6F] text-white hover:bg-[#B85F5F]"
+                      : "bg-white text-[#55534C] ring-1 ring-[#EFE4D6] hover:bg-[#FFF7EA]"
+                  }`}
+                >
+                  {item.actionLabel}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
