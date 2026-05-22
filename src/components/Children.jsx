@@ -430,8 +430,6 @@ function PhotoPicker({
         onClose={() => setShowPresetModal(false)}
         onChoose={(url) => {
           onChoosePreset(url);
-          onPositionChange(defaultPhotoPosition);
-          onZoomChange(1);
         }}
       />
     </div>
@@ -930,26 +928,26 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
               fallback={<UserRound className="h-10 w-10" />}
               onChoosePreset={(url) => {
                 setPreviewPhoto("");
-                setNewChild({
-                  ...newChild,
+                setNewChild((current) => ({
+                  ...current,
                   photo: url,
                   avatar: url,
                   photoPosition: defaultPhotoPosition,
                   photoZoom: 1,
-                });
+                }));
               }}
               onUpload={handlePreviewPhoto}
               onPositionChange={(position) =>
-                setNewChild({
-                  ...newChild,
+                setNewChild((current) => ({
+                  ...current,
                   photoPosition: position,
-                })
+                }))
               }
               onZoomChange={(zoom) =>
-                setNewChild({
-                  ...newChild,
+                setNewChild((current) => ({
+                  ...current,
                   photoZoom: zoom,
-                })
+                }))
               }
             />
 
@@ -960,10 +958,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                     className={inputClass}
                     value={newChild.firstName}
                     onChange={(event) =>
-                      setNewChild({
-                        ...newChild,
+                      setNewChild((current) => ({
+                        ...current,
                         firstName: event.target.value,
-                      })
+                      }))
                     }
                     placeholder="Ex. Léo"
                     autoFocus
@@ -975,10 +973,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                     className={inputClass}
                     value={newChild.lastName}
                     onChange={(event) =>
-                      setNewChild({
-                        ...newChild,
+                      setNewChild((current) => ({
+                        ...current,
                         lastName: event.target.value,
-                      })
+                      }))
                     }
                     placeholder="Ex. Tremblay"
                   />
@@ -989,10 +987,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                     className={inputClass}
                     value={newChild.nickname}
                     onChange={(event) =>
-                      setNewChild({
-                        ...newChild,
+                      setNewChild((current) => ({
+                        ...current,
                         nickname: event.target.value,
-                      })
+                      }))
                     }
                     placeholder="Ex. Coco"
                   />
@@ -1003,7 +1001,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                     className={selectClass}
                     value={newChild.sex}
                     onChange={(event) =>
-                      setNewChild({ ...newChild, sex: event.target.value })
+                      setNewChild((current) => ({
+                        ...current,
+                        sex: event.target.value,
+                      }))
                     }
                   >
                     <option>Garçon</option>
@@ -1018,10 +1019,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                     className={inputClass}
                     value={newChild.birthDate}
                     onChange={(event) =>
-                      setNewChild({
-                        ...newChild,
+                      setNewChild((current) => ({
+                        ...current,
                         birthDate: event.target.value,
-                      })
+                      }))
                     }
                   />
                 </FormField>
@@ -1032,10 +1033,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   value={newChild.color}
                   options={availableColors}
                   onChange={(colorId) =>
-                    setNewChild({
-                      ...newChild,
+                    setNewChild((current) => ({
+                      ...current,
                       color: colorId,
-                    })
+                    }))
                   }
                 />
               </FormField>
@@ -1166,27 +1167,27 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
               zoom={selectedChild.photoZoom || 1}
               fallback={getInitials(selectedChild)}
               onChoosePreset={(url) =>
-                setSelectedChild({
-                  ...selectedChild,
+                setSelectedChild((current) => ({
+                  ...current,
                   photo: url,
                   image: url,
                   avatar: url,
                   photoPosition: defaultPhotoPosition,
                   photoZoom: 1,
-                })
+                }))
               }
               onUpload={(event) => handlePhotoChange(selectedChild.id, event)}
               onPositionChange={(position) =>
-                setSelectedChild({
-                  ...selectedChild,
+                setSelectedChild((current) => ({
+                  ...current,
                   photoPosition: position,
-                })
+                }))
               }
               onZoomChange={(zoom) =>
-                setSelectedChild({
-                  ...selectedChild,
+                setSelectedChild((current) => ({
+                  ...current,
                   photoZoom: zoom,
-                })
+                }))
               }
             />
 
@@ -1196,10 +1197,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   className={inputClass}
                   value={selectedChild.firstName || ""}
                   onChange={(event) =>
-                    setSelectedChild({
-                      ...selectedChild,
+                    setSelectedChild((current) => ({
+                      ...current,
                       firstName: event.target.value,
-                    })
+                    }))
                   }
                 />
               </FormField>
@@ -1209,10 +1210,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   className={inputClass}
                   value={selectedChild.lastName || ""}
                   onChange={(event) =>
-                    setSelectedChild({
-                      ...selectedChild,
+                    setSelectedChild((current) => ({
+                      ...current,
                       lastName: event.target.value,
-                    })
+                    }))
                   }
                 />
               </FormField>
@@ -1222,10 +1223,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   className={inputClass}
                   value={selectedChild.nickname || ""}
                   onChange={(event) =>
-                    setSelectedChild({
-                      ...selectedChild,
+                    setSelectedChild((current) => ({
+                      ...current,
                       nickname: event.target.value,
-                    })
+                    }))
                   }
                 />
               </FormField>
@@ -1235,11 +1236,11 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   className={selectClass}
                   value={selectedChild.sex || selectedChild.gender || ""}
                   onChange={(event) =>
-                    setSelectedChild({
-                      ...selectedChild,
+                    setSelectedChild((current) => ({
+                      ...current,
                       sex: event.target.value,
                       gender: event.target.value,
-                    })
+                    }))
                   }
                 >
                   <option value="">À compléter</option>
@@ -1260,11 +1261,11 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                       : ""
                   }
                   onChange={(event) =>
-                    setSelectedChild({
-                      ...selectedChild,
+                    setSelectedChild((current) => ({
+                      ...current,
                       birthDate: event.target.value,
                       age: getAgeFromBirthDate(event.target.value),
-                    })
+                    }))
                   }
                 />
               </FormField>
@@ -1275,10 +1276,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                 value={selectedChild.color || "sage"}
                 options={childColorOptions}
                 onChange={(colorId) =>
-                  setSelectedChild({
-                    ...selectedChild,
+                  setSelectedChild((current) => ({
+                    ...current,
                     color: colorId,
-                  })
+                  }))
                 }
               />
             </FormField>
@@ -1289,10 +1290,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                 rows={5}
                 value={selectedChild.profileNote || ""}
                 onChange={(event) =>
-                  setSelectedChild({
-                    ...selectedChild,
+                  setSelectedChild((current) => ({
+                    ...current,
                     profileNote: event.target.value,
-                  })
+                  }))
                 }
                 placeholder="Habitudes, préférences, informations utiles..."
               />
