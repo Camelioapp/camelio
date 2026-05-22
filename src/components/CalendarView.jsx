@@ -41,6 +41,45 @@ const RECURRENCES = [
   "Tous les jours",
 ];
 
+const CALENDAR_COLOR_HEX = {
+  sage: "#A8B193",
+  rose: "#E99AAA",
+  blue: "#8FB8DE",
+  mauve: "#AA90C8",
+  gold: "#D4A85F",
+  peach: "#E8A07E",
+  mint: "#7CBFA2",
+  lavender: "#C7B3E5",
+  mustard: "#D9BF5E",
+  olive: "#8E9A72",
+  coral: "#E8786D",
+  teal: "#5BAEAA",
+  sky: "#76BFE3",
+  grape: "#8F78B8",
+  sand: "#D8C49A",
+  purple: "#AA90C8",
+  yellow: "#D9BF5E",
+  gray: "#8E9A72",
+  lilac: "#C7B3E5",
+  cream: "#D8C49A",
+};
+
+function getColorHex(color) {
+  if (!color) return "#A8B193";
+
+  return (
+    color.hex ||
+    color.value ||
+    color.color ||
+    CALENDAR_COLOR_HEX[color.id] ||
+    "#A8B193"
+  );
+}
+
+function getColorHexById(colorId) {
+  return CALENDAR_COLOR_HEX[colorId] || "#A8B193";
+}
+
 const inputClass =
   "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
 
@@ -810,6 +849,7 @@ export default function CalendarView({ children = [] }) {
                   <div className="mt-3 grid !grid-cols-5 gap-3">
                     {colorOptions.map((color) => {
                       const selected = appointmentColor === color.id;
+                      const colorHex = getColorHex(color);
 
                       return (
                         <button
@@ -825,7 +865,8 @@ export default function CalendarView({ children = [] }) {
                           aria-label={color.label}
                         >
                           <span
-                            className={`h-8 w-8 rounded-full shadow-inner ${color.dot}`}
+                            className="h-8 w-8 rounded-full shadow-inner"
+                            style={{ backgroundColor: colorHex }}
                           />
                         </button>
                       );
@@ -868,6 +909,7 @@ export default function CalendarView({ children = [] }) {
                     const childColor = getColor(child.color);
                     const photo = getChildPhoto(child);
                     const initials = getChildInitials(child);
+                    const childColorHex = getColorHexById(child.color);
 
                     return (
                       <div
@@ -897,9 +939,11 @@ export default function CalendarView({ children = [] }) {
                           </p>
                         </div>
 
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${childColor.soft}`}
-                        >
+                        <span className="flex items-center gap-2 rounded-full bg-[#FFFDF8] px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
+                          <span
+                            className="h-3 w-3 rounded-full"
+                            style={{ backgroundColor: childColorHex }}
+                          />
                           {childColor.label}
                         </span>
                       </div>
@@ -998,16 +1042,15 @@ export default function CalendarView({ children = [] }) {
                 </p>
 
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {date.events.slice(0, 4).map((event) => {
-                    const color = getColor(event.color);
-
-                    return (
-                      <span
-                        key={event.id}
-                        className={`h-2.5 w-2.5 rounded-full ${color.dot}`}
-                      />
-                    );
-                  })}
+                  {date.events.slice(0, 4).map((event) => (
+                    <span
+                      key={event.id}
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{
+                        backgroundColor: getColorHexById(event.color),
+                      }}
+                    />
+                  ))}
                 </div>
 
                 {hasAppointment && (
