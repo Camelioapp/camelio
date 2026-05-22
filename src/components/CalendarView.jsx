@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 import { Field, Popup, SectionTitle } from "./shared.jsx";
-import { colorOptions, displayName, getColor } from "./sectionsData.js";
+import { displayName, getColor } from "./sectionsData.js";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
@@ -41,43 +41,29 @@ const RECURRENCES = [
   "Tous les jours",
 ];
 
-const CALENDAR_COLOR_HEX = {
-  sage: "#A8B193",
-  rose: "#E99AAA",
-  blue: "#8FB8DE",
-  mauve: "#AA90C8",
-  gold: "#D4A85F",
-  peach: "#E8A07E",
-  mint: "#7CBFA2",
-  lavender: "#C7B3E5",
-  mustard: "#D9BF5E",
-  olive: "#8E9A72",
-  coral: "#E8786D",
-  teal: "#5BAEAA",
-  sky: "#76BFE3",
-  grape: "#8F78B8",
-  sand: "#D8C49A",
-  purple: "#AA90C8",
-  yellow: "#D9BF5E",
-  gray: "#8E9A72",
-  lilac: "#C7B3E5",
-  cream: "#D8C49A",
-};
+const calendarColorOptions = [
+  { id: "sage", label: "Sauge", hex: "#A8B193" },
+  { id: "rose", label: "Rose", hex: "#E99AAA" },
+  { id: "blue", label: "Bleu", hex: "#8FB8DE" },
+  { id: "mauve", label: "Mauve", hex: "#AA90C8" },
+  { id: "gold", label: "Doré", hex: "#D4A85F" },
+  { id: "peach", label: "Pêche", hex: "#E8A07E" },
+  { id: "mint", label: "Menthe", hex: "#7CBFA2" },
+  { id: "lavender", label: "Lavande", hex: "#C7B3E5" },
+  { id: "mustard", label: "Moutarde", hex: "#D9BF5E" },
+  { id: "olive", label: "Olive", hex: "#8E9A72" },
+  { id: "coral", label: "Corail", hex: "#E8786D" },
+  { id: "teal", label: "Sarcelle", hex: "#5BAEAA" },
+  { id: "sky", label: "Ciel", hex: "#76BFE3" },
+  { id: "grape", label: "Raisin", hex: "#8F78B8" },
+  { id: "sand", label: "Sable", hex: "#D8C49A" },
+];
 
-function getColorHex(color) {
-  if (!color) return "#A8B193";
-
+function getCalendarColor(colorId) {
   return (
-    color.hex ||
-    color.value ||
-    color.color ||
-    CALENDAR_COLOR_HEX[color.id] ||
-    "#A8B193"
+    calendarColorOptions.find((color) => color.id === colorId) ||
+    calendarColorOptions[0]
   );
-}
-
-function getColorHexById(colorId) {
-  return CALENDAR_COLOR_HEX[colorId] || "#A8B193";
 }
 
 const inputClass =
@@ -324,7 +310,7 @@ export default function CalendarView({ children = [] }) {
   const [selectedEventId, setSelectedEventId] = useState(null);
 
   const [openCalendarColors, setOpenCalendarColors] = useState(false);
-  const [appointmentColor, setAppointmentColor] = useState("sand");
+  const [appointmentColor, setAppointmentColor] = useState("sage");
   const [appointmentEmoji, setAppointmentEmoji] = useState("⚑");
 
   const [isLoading, setIsLoading] = useState(false);
@@ -797,6 +783,7 @@ export default function CalendarView({ children = [] }) {
     }
   }
 
+  const selectedAppointmentColor = getCalendarColor(appointmentColor);
   const appointmentColorOption = getColor(appointmentColor);
 
   return (
@@ -847,9 +834,8 @@ export default function CalendarView({ children = [] }) {
                   </p>
 
                   <div className="mt-3 grid !grid-cols-5 gap-3">
-                    {colorOptions.map((color) => {
+                    {calendarColorOptions.map((color) => {
                       const selected = appointmentColor === color.id;
-                      const colorHex = getColorHex(color);
 
                       return (
                         <button
@@ -866,7 +852,7 @@ export default function CalendarView({ children = [] }) {
                         >
                           <span
                             className="h-8 w-8 rounded-full shadow-inner"
-                            style={{ backgroundColor: colorHex }}
+                            style={{ backgroundColor: color.hex }}
                           />
                         </button>
                       );
@@ -874,7 +860,7 @@ export default function CalendarView({ children = [] }) {
                   </div>
 
                   <p className="mt-3 text-xs font-bold text-[#746F64]">
-                    Couleur sélectionnée : {getColor(appointmentColor).label}
+                    Couleur sélectionnée : {selectedAppointmentColor.label}
                   </p>
                 </div>
 
@@ -909,7 +895,6 @@ export default function CalendarView({ children = [] }) {
                     const childColor = getColor(child.color);
                     const photo = getChildPhoto(child);
                     const initials = getChildInitials(child);
-                    const childColorHex = getColorHexById(child.color);
 
                     return (
                       <div
@@ -939,11 +924,9 @@ export default function CalendarView({ children = [] }) {
                           </p>
                         </div>
 
-                        <span className="flex items-center gap-2 rounded-full bg-[#FFFDF8] px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
-                          <span
-                            className="h-3 w-3 rounded-full"
-                            style={{ backgroundColor: childColorHex }}
-                          />
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${childColor.soft}`}
+                        >
                           {childColor.label}
                         </span>
                       </div>
@@ -1042,15 +1025,17 @@ export default function CalendarView({ children = [] }) {
                 </p>
 
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {date.events.slice(0, 4).map((event) => (
-                    <span
-                      key={event.id}
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{
-                        backgroundColor: getColorHexById(event.color),
-                      }}
-                    />
-                  ))}
+                  {date.events.slice(0, 4).map((event) => {
+                    const eventColor = getCalendarColor(event.color);
+
+                    return (
+                      <span
+                        key={event.id}
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: eventColor.hex }}
+                      />
+                    );
+                  })}
                 </div>
 
                 {hasAppointment && (
