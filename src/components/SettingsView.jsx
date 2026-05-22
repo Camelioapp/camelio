@@ -111,34 +111,6 @@ const privacyItems = [
     actionLabel: "Gérer",
     path: "/cookies",
   },
-  {
-    id: "download",
-    title: "Télécharger mes données",
-    description:
-      "Demander une copie des informations associées au compte.",
-    icon: Download,
-    actionLabel: "Demander",
-    path: "/data-export",
-  },
-  {
-    id: "delete",
-    title: "Supprimer mon compte",
-    description:
-      "Demander la suppression du compte et des données associées.",
-    icon: Trash2,
-    actionLabel: "Supprimer",
-    path: "/delete-account",
-    danger: true,
-  },
-  {
-    id: "contact",
-    title: "Contact confidentialité",
-    description:
-      "Contacter la personne responsable de la protection des renseignements personnels.",
-    icon: Mail,
-    actionLabel: "Contacter",
-    path: "mailto:info@camelio.app?subject=Confidentialité%20et%20données",
-  },
 ];
 
 function hexFromClass(className = "", fallback = "#a8aa91") {
