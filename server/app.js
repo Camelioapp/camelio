@@ -5,6 +5,7 @@ const session = require("express-session");
 const cors = require("cors");
 const { Issuer, generators } = require("openid-client");
 const { randomUUID } = require("crypto");
+const Stripe = require("stripe");
 
 const {
   PutCommand,
@@ -47,6 +48,13 @@ const COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
 const AWS_REGION = process.env.AWS_REGION || "us-east-2";
 const S3_REGION = process.env.S3_REGION || "ca-central-1";
 const S3_DOCUMENTS_BUCKET = process.env.S3_DOCUMENTS_BUCKET;
+
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_PRICE_LOOKUP_KEY =
+  process.env.STRIPE_PRICE_LOOKUP_KEY || "camelio_monthly_499";
+const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
+
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 const s3 = new S3Client({
   region: S3_REGION,
@@ -155,6 +163,24 @@ function validateS3Config(req, res, next) {
     return res.status(500).json({
       error: "s3_config_missing",
       message: "Configuration S3 incomplète.",
+      missing,
+    });
+  }
+
+  return next();
+}
+
+function validateStripeConfig(req, res, next) {
+  const missing = [];
+
+  if (!process.env.STRIPE_SECRET_KEY) {
+    missing.push("STRIPE_SECRET_KEY");
+  }
+
+  if (missing.length > 0 || !stripe) {
+    return res.status(500).json({
+      error: "stripe_config_missing",
+      message: "Configuration Stripe incomplète.",
       missing,
     });
   }
@@ -1143,6 +1169,111 @@ app.delete(
       res.json({
         success: true,
         deletedId: photoId,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/* =========================
+   Stripe Checkout
+   ========================= */
+
+app.post(
+  "/create-checkout-session",
+  requireAuth,
+  validateStripeConfig,
+  async (req, res, next) => {
+    try {
+      const lookupKey = req.body.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
+
+      const prices = await stripe.prices.list({
+        lookup_keys: [lookupKey],
+        active: true,
+        expand: ["data.product"],
+      });
+
+      if (!prices.data.length) {
+        return res.status(404).json({
+          error: "stripe_price_not_found",
+          message: `Aucun prix Stripe actif trouvé pour le lookup_key : ${lookupKey}`,
+        });
+      }
+
+      const price = prices.data[0];
+
+      const checkoutSession = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        customer_email: req.session.user.email || undefined,
+        line_items: [
+          {
+            price: price.id,
+            quantity: 1,
+          },
+        ],
+        success_url: `${APP_URL}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${APP_URL}/billing?canceled=true`,
+        allow_promotion_codes: true,
+        billing_address_collection: "auto",
+        metadata: {
+          userId: req.session.user.sub,
+          userEmail: req.session.user.email || "",
+          plan: lookupKey,
+          storageGb: STRIPE_STORAGE_GB,
+        },
+        subscription_data: {
+          metadata: {
+            userId: req.session.user.sub,
+            userEmail: req.session.user.email || "",
+            plan: lookupKey,
+            storageGb: STRIPE_STORAGE_GB,
+          },
+        },
+      });
+
+      return res.json({
+        success: true,
+        url: checkoutSession.url,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/create-portal-session",
+  requireAuth,
+  validateStripeConfig,
+  async (req, res, next) => {
+    try {
+      const { session_id } = req.body;
+
+      if (!session_id) {
+        return res.status(400).json({
+          error: "missing_session_id",
+          message: "session_id est requis.",
+        });
+      }
+
+      const checkoutSession = await stripe.checkout.sessions.retrieve(session_id);
+
+      if (!checkoutSession.customer) {
+        return res.status(400).json({
+          error: "stripe_customer_missing",
+          message: "Aucun client Stripe trouvé pour cette session.",
+        });
+      }
+
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: checkoutSession.customer,
+        return_url: `${APP_URL}/billing`,
+      });
+
+      return res.json({
+        success: true,
+        url: portalSession.url,
       });
     } catch (error) {
       next(error);

@@ -1,4 +1,164 @@
 @import "tailwindcss";
 
-html, body, #root { margin: 0; min-width: 320px; min-height: 100vh; }
-body { background: #f8f3ea; }
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+body {
+  background: #f8f3ea;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+/* =========================
+   Billing / Stripe
+   ========================= */
+
+.billing-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f8f3ea;
+}
+
+.billing-card {
+  width: 100%;
+  max-width: 460px;
+  background: #ffffff;
+  border-radius: 28px;
+  padding: 30px;
+  box-shadow: 0 18px 45px rgba(70, 52, 36, 0.12);
+  text-align: center;
+  border: 1px solid rgba(120, 87, 60, 0.12);
+}
+
+.billing-logo {
+  font-size: 44px;
+  margin-bottom: 14px;
+}
+
+.billing-description h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #2f241d;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.billing-description h2 {
+  margin: 10px 0;
+  font-size: 21px;
+  color: #7c4a24;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.billing-description p {
+  color: #6d5d50;
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 14px 0 0;
+}
+
+.billing-features {
+  margin: 22px 0;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  background: #fbf7ef;
+  border-radius: 18px;
+  padding: 16px;
+  color: #3f332b;
+  font-size: 15px;
+}
+
+.billing-button,
+.billing-link-button {
+  width: 100%;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 8px;
+  border: none;
+  border-radius: 16px;
+  padding: 15px 18px;
+  background: #7c4a24;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s ease, opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.billing-button:hover,
+.billing-link-button:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.billing-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  transform: none;
+}
+
+.billing-error {
+  margin: 14px 0;
+  color: #b42318;
+  background: #fff1f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+/* =========================
+   Responsive mobile
+   ========================= */
+
+@media (max-width: 520px) {
+  .billing-page {
+    padding: 16px;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+
+  .billing-card {
+    padding: 24px 20px;
+    border-radius: 24px;
+  }
+
+  .billing-logo {
+    font-size: 38px;
+  }
+
+  .billing-description h1 {
+    font-size: 24px;
+  }
+
+  .billing-description h2 {
+    font-size: 18px;
+  }
+
+  .billing-description p {
+    font-size: 14px;
+  }
+
+  .billing-features {
+    font-size: 14px;
+    padding: 14px;
+  }
+
+  .billing-button,
+  .billing-link-button {
+    font-size: 15px;
+    padding: 14px 16px;
+  }
+}
