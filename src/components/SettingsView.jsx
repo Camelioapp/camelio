@@ -201,7 +201,6 @@ export default function SettingsView({
 
   const hideSection = (sectionId) => {
     if (!setSectionOrderIds) return;
-
     setSectionOrderIds((current) => current.filter((id) => id !== sectionId));
   };
 
@@ -611,13 +610,11 @@ export default function SettingsView({
       </div>
 
       {pdfModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-[#EFE4D6] p-4">
               <div>
-                <h3 className="font-bold text-[#55534C]">
-                  {pdfModal.title}
-                </h3>
+                <h3 className="font-bold text-[#55534C]">{pdfModal.title}</h3>
                 <p className="text-sm text-[#746F64]">
                   Document légal Camelio
                 </p>
@@ -643,19 +640,19 @@ export default function SettingsView({
       )}
 
       {showCookieModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-[2rem] bg-white p-5 shadow-xl ring-1 ring-[#EFE4D6]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white p-5 shadow-2xl ring-1 ring-[#EFE4D6]">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div className="flex gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#A8AA91] text-white">
-                  <Cookie className="h-5 w-5" />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#7F9275] text-white shadow-sm">
+                  <Cookie className="h-6 w-6" />
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-[#55534C]">
+                  <h3 className="text-lg font-bold text-[#3F3D38]">
                     Gestion des cookies
                   </h3>
-                  <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                  <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
                     Camelio utilise des cookies essentiels au fonctionnement de
                     l’application. Vous pouvez aussi accepter ou refuser les
                     cookies optionnels.
@@ -666,7 +663,7 @@ export default function SettingsView({
               <button
                 type="button"
                 onClick={() => setShowCookieModal(false)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FFF7EA] text-[#55534C] ring-1 ring-[#EFE4D6] transition hover:bg-[#F8EBD8]"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFF4E4] text-[#3F3D38] ring-1 ring-[#E8D8BE] transition hover:bg-[#F4DFC0]"
                 aria-label="Fermer la gestion des cookies"
               >
                 <X className="h-5 w-5" />
@@ -674,31 +671,31 @@ export default function SettingsView({
             </div>
 
             <div className="space-y-3">
-              <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4">
+              <div className="rounded-[1.5rem] border border-[#D8C8AF] bg-[#FFFDF8] p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-bold text-[#55534C]">
+                    <p className="font-bold text-[#3F3D38]">
                       Cookies essentiels
                     </p>
-                    <p className="mt-1 text-sm text-[#746F64]">
+                    <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
                       Nécessaires pour la connexion, la sécurité et le bon
                       fonctionnement de l’application.
                     </p>
                   </div>
 
-                  <span className="rounded-full bg-[#EEF4EA] px-3 py-1 text-xs font-bold text-[#7A8B69]">
+                  <span className="shrink-0 rounded-full bg-[#DDE8D6] px-4 py-2 text-xs font-bold text-[#4F6B42]">
                     Toujours actifs
                   </span>
                 </div>
               </div>
 
-              <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4">
+              <div className="rounded-[1.5rem] border border-[#D8C8AF] bg-[#FFFDF8] p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-bold text-[#55534C]">
+                    <p className="font-bold text-[#3F3D38]">
                       Cookies d’analyse
                     </p>
-                    <p className="mt-1 text-sm text-[#746F64]">
+                    <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
                       Aident à comprendre l’utilisation de l’application afin
                       d’améliorer l’expérience.
                     </p>
@@ -712,29 +709,39 @@ export default function SettingsView({
                         analytics: !current.analytics,
                       }))
                     }
-                    className={`relative h-7 w-12 rounded-full transition ${
+                    className={`relative h-8 w-14 shrink-0 rounded-full transition ${
                       cookiePreferences.analytics
-                        ? "bg-[#A8AA91]"
-                        : "bg-[#D8D0C4]"
+                        ? "bg-[#5F7F52]"
+                        : "bg-[#B9B2A5]"
                     }`}
                     aria-label="Activer ou désactiver les cookies d’analyse"
                   >
                     <span
-                      className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                        cookiePreferences.analytics ? "left-6" : "left-1"
+                      className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${
+                        cookiePreferences.analytics ? "left-7" : "left-1"
                       }`}
                     />
                   </button>
                 </div>
+
+                <p
+                  className={`mt-3 text-xs font-bold ${
+                    cookiePreferences.analytics
+                      ? "text-[#5F7F52]"
+                      : "text-[#8A6F5A]"
+                  }`}
+                >
+                  {cookiePreferences.analytics ? "Activés" : "Désactivés"}
+                </p>
               </div>
 
-              <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4">
+              <div className="rounded-[1.5rem] border border-[#D8C8AF] bg-[#FFFDF8] p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-bold text-[#55534C]">
+                    <p className="font-bold text-[#3F3D38]">
                       Cookies de préférences
                     </p>
-                    <p className="mt-1 text-sm text-[#746F64]">
+                    <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
                       Permettent de mémoriser certains choix d’affichage et de
                       personnalisation.
                     </p>
@@ -748,46 +755,56 @@ export default function SettingsView({
                         preferences: !current.preferences,
                       }))
                     }
-                    className={`relative h-7 w-12 rounded-full transition ${
+                    className={`relative h-8 w-14 shrink-0 rounded-full transition ${
                       cookiePreferences.preferences
-                        ? "bg-[#A8AA91]"
-                        : "bg-[#D8D0C4]"
+                        ? "bg-[#5F7F52]"
+                        : "bg-[#B9B2A5]"
                     }`}
                     aria-label="Activer ou désactiver les cookies de préférences"
                   >
                     <span
-                      className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                        cookiePreferences.preferences ? "left-6" : "left-1"
+                      className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${
+                        cookiePreferences.preferences ? "left-7" : "left-1"
                       }`}
                     />
                   </button>
                 </div>
+
+                <p
+                  className={`mt-3 text-xs font-bold ${
+                    cookiePreferences.preferences
+                      ? "text-[#5F7F52]"
+                      : "text-[#8A6F5A]"
+                  }`}
+                >
+                  {cookiePreferences.preferences ? "Activés" : "Désactivés"}
+                </p>
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="mt-5 grid gap-3">
               <button
                 type="button"
-                onClick={refuseOptionalCookies}
-                className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#55534C] ring-1 ring-[#EFE4D6] transition hover:bg-[#FFF7EA]"
+                onClick={acceptAllCookies}
+                className="rounded-2xl bg-[#5F7F52] px-4 py-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#4E6D43]"
               >
-                Refuser optionnels
+                Tout accepter
               </button>
 
               <button
                 type="button"
                 onClick={saveCustomCookies}
-                className="rounded-2xl bg-[#F4E7D1] px-4 py-3 text-sm font-bold text-[#55534C] transition hover:bg-[#ECD8B8]"
+                className="rounded-2xl bg-[#EEC988] px-4 py-4 text-sm font-bold text-[#3F3D38] shadow-sm transition hover:bg-[#E4BB72]"
               >
                 Enregistrer mes choix
               </button>
 
               <button
                 type="button"
-                onClick={acceptAllCookies}
-                className="rounded-2xl bg-[#A8AA91] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#969A7F]"
+                onClick={refuseOptionalCookies}
+                className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-[#3F3D38] ring-1 ring-[#D8C8AF] transition hover:bg-[#FFF4E4]"
               >
-                Tout accepter
+                Refuser les cookies optionnels
               </button>
             </div>
           </div>
