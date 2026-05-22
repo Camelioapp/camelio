@@ -99,12 +99,12 @@ export default function WelcomeScreen() {
 
         <div className="mt-4 flex shrink-0 flex-col gap-3 sm:mt-5">
           <button
-            type="button"
-            onClick={handleSignup}
-            className="w-full rounded-2xl bg-[#8FA173] px-5 py-3.5 text-[1rem] font-bold tracking-wide text-white shadow-sm transition hover:brightness-95 sm:rounded-3xl sm:py-4 sm:text-[1.12rem]"
-          >
-            Inscription
-          </button>
+  type="button"
+  onClick={handleSignup}
+  className="w-full rounded-2xl bg-[#8FA173] px-5 py-3.5 text-[1rem] font-bold tracking-wide text-white shadow-sm transition hover:brightness-95 sm:rounded-3xl sm:py-4 sm:text-[1.12rem]"
+>
+  Inscription
+</button>
 
           <button
             type="button"

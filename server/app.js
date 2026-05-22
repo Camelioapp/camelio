@@ -355,7 +355,13 @@ app.get("/login", async (req, res, next) => {
 
 app.get("/signup", async (req, res, next) => {
   try {
-    const client = await getClient();
+    if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID || !COGNITO_REDIRECT_URI) {
+      return res.status(500).json({
+        error: "cognito_signup_config_missing",
+        message:
+          "Configuration Cognito incomplète pour l'inscription. Vérifie COGNITO_DOMAIN, COGNITO_CLIENT_ID et COGNITO_REDIRECT_URI.",
+      });
+    }
 
     const codeVerifier = generators.codeVerifier();
     const codeChallenge = generators.codeChallenge(codeVerifier);
@@ -366,20 +372,21 @@ app.get("/signup", async (req, res, next) => {
     req.session.state = state;
     req.session.nonce = nonce;
 
-    const authorizationUrl = client.authorizationUrl({
-      scope: "openid email",
-      state,
-      nonce,
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-      lang: "fr",
-    });
+    const signupUrl = new URL(`${COGNITO_DOMAIN.replace(/\/$/, "")}/signup`);
 
-    const signupUrl = authorizationUrl.replace("/login?", "/signup?");
+    signupUrl.searchParams.set("client_id", COGNITO_CLIENT_ID);
+    signupUrl.searchParams.set("code_challenge", codeChallenge);
+    signupUrl.searchParams.set("code_challenge_method", "S256");
+    signupUrl.searchParams.set("lang", "fr");
+    signupUrl.searchParams.set("nonce", nonce);
+    signupUrl.searchParams.set("redirect_uri", COGNITO_REDIRECT_URI);
+    signupUrl.searchParams.set("response_type", "code");
+    signupUrl.searchParams.set("scope", "openid email");
+    signupUrl.searchParams.set("state", state);
 
     req.session.save((err) => {
       if (err) return next(err);
-      return res.redirect(signupUrl);
+      return res.redirect(signupUrl.toString());
     });
   } catch (error) {
     next(error);
