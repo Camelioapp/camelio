@@ -20,6 +20,8 @@ const API_BASE_URL =
 const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
 const SECTION_THEME_STORAGE_KEY = "camelio-section-themes";
 
+const defaultPhotoPosition = { x: 50, y: 50 };
+
 const childColorOptions = [
   {
     id: "sage",
@@ -135,6 +137,45 @@ function getChildColorTheme(colorId) {
   );
 }
 
+function normalizePhotoPosition(position) {
+  if (!position) return defaultPhotoPosition;
+
+  if (typeof position === "string") {
+    const [xRaw, yRaw] = position.split(" ");
+
+    return {
+      x: parseInt(xRaw, 10) || 50,
+      y: parseInt(yRaw, 10) || 50,
+    };
+  }
+
+  return {
+    x: Number.isFinite(position.x) ? position.x : 50,
+    y: Number.isFinite(position.y) ? position.y : 50,
+  };
+}
+
+function getObjectPosition(position) {
+  const clean = normalizePhotoPosition(position);
+  return `${clean.x}% ${clean.y}%`;
+}
+
+function PhotoImage({ src, alt, position, zoom = 1, className = "" }) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      className={`select-none object-cover ${className}`}
+      style={{
+        objectPosition: getObjectPosition(position),
+        transform: `scale(${zoom})`,
+        transformOrigin: getObjectPosition(position),
+      }}
+    />
+  );
+}
+
 function getAgeFromBirthDate(birthDate) {
   if (!birthDate || birthDate === "À compléter") return "À compléter";
 
@@ -173,6 +214,9 @@ function formatChildFromServer(child) {
     age: getAgeFromBirthDate(child.birthDate),
     photo,
     image: photo,
+    avatar: photo,
+    photoPosition: normalizePhotoPosition(child.photoPosition),
+    photoZoom: child.photoZoom || 1,
     profileNote: child.notes || child.profileNote || "",
   };
 }
@@ -529,55 +573,67 @@ export default function Dashboard() {
                     </p>
                   </button>
                 ) : (
-                  <div className="relative flex min-h-[210px] items-center justify-center overflow-x-auto px-2 pb-4 pt-2">
-                    <div className="flex items-end justify-center pl-7 pr-7">
-                      {children.map((child, index) => {
-                        const photo = child.image || child.photo || "";
-                        const initials = getInitials(child);
-                        const childTheme = getChildColorTheme(child.color);
+                  <div className="relative -mx-2 overflow-hidden">
+                    <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="flex min-h-[170px] items-end gap-4 px-2 sm:min-h-[205px] sm:gap-5 md:justify-center md:gap-0 md:px-8">
+                        {children.map((child, index) => {
+                          const photo = child.image || child.photo || "";
+                          const initials = getInitials(child);
+                          const childTheme = getChildColorTheme(child.color);
 
-                        return (
-                          <button
-                            key={child.id || child.name}
-                            type="button"
-                            onClick={() => openSection("children")}
-                            className={`group relative flex shrink-0 flex-col items-center ${
-                              index === 0 ? "" : "-ml-5 md:-ml-7"
-                            }`}
-                            style={{ zIndex: children.length + index }}
-                          >
-                            <div
-                              className="flex h-[132px] w-[132px] items-center justify-center overflow-hidden rounded-full border-[10px] border-white text-3xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] md:h-[150px] md:w-[150px]"
-                              style={{
-                                backgroundColor: childTheme.soft,
-                                color: childTheme.text,
-                              }}
+                          return (
+                            <button
+                              key={child.id || child.name}
+                              type="button"
+                              onClick={() => openSection("children")}
+                              className={`group relative flex w-[104px] shrink-0 snap-center flex-col items-center sm:w-[132px] md:w-auto ${
+                                index === 0 ? "" : "md:-ml-7"
+                              }`}
+                              style={{ zIndex: children.length + index }}
                             >
-                              {photo ? (
-                                <img
-                                  src={photo}
-                                  alt={child.name}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : initials ? (
-                                initials
-                              ) : (
-                                <UserRound className="h-10 w-10" />
-                              )}
-                            </div>
+                              <div
+                                className="flex h-[108px] w-[108px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_12px_24px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+                                style={{
+                                  backgroundColor: childTheme.soft,
+                                  color: childTheme.text,
+                                }}
+                              >
+                                {photo ? (
+                                  <PhotoImage
+                                    src={photo}
+                                    alt={child.name}
+                                    position={child.photoPosition}
+                                    zoom={child.photoZoom || 1}
+                                    className="h-full w-full"
+                                  />
+                                ) : initials ? (
+                                  initials
+                                ) : (
+                                  <UserRound className="h-10 w-10" />
+                                )}
+                              </div>
 
-                            <div
-                              className="-mt-5 min-w-[104px] rotate-[-2deg] rounded-[18px] px-5 py-2 text-center text-lg font-semibold text-white shadow-sm transition group-hover:brightness-95 md:min-w-[120px] md:text-xl"
-                              style={{
-                                backgroundColor: childTheme.dot,
-                              }}
-                            >
-                              {child.name}
-                            </div>
-                          </button>
-                        );
-                      })}
+                              <div
+                                className="-mt-4 max-w-[108px] rounded-[16px] px-4 py-2 text-center text-sm font-semibold text-white shadow-sm transition group-hover:brightness-95 sm:max-w-[132px] sm:text-base md:-mt-5 md:min-w-[120px] md:text-xl"
+                                style={{
+                                  backgroundColor: childTheme.dot,
+                                }}
+                              >
+                                <span className="block truncate">
+                                  {child.name}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
+
+                    {children.length > 2 && (
+                      <p className="mt-1 text-center text-xs font-semibold text-[#9A8D7C] md:hidden">
+                        Glisse pour voir tous les profils.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
