@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  ImagePlus,
   Plus,
   ScrollText,
   StickyNote,
@@ -42,15 +43,29 @@ const childColorOptions = [
   { id: "sand", label: "Sable", dot: "#D8C49A" },
 ];
 
-const presetPhotos = Array.from({ length: 15 }, (_, index) => {
+const girlPresetPhotos = Array.from({ length: 15 }, (_, index) => {
   const number = String(index + 1).padStart(2, "0");
 
   return {
     id: `fille-profil-${number}`,
-    label: `Profil ${number}`,
+    label: `Fille ${number}`,
+    category: "fille",
     url: `/Profil/Fille/profil_${number}.png`,
   };
 });
+
+const boyPresetPhotos = Array.from({ length: 18 }, (_, index) => {
+  const number = String(index + 1).padStart(2, "0");
+
+  return {
+    id: `garcon-profil-${number}`,
+    label: `Garçon ${number}`,
+    category: "garcon",
+    url: `/Profil/Garcon/Garcon_${number}.png`,
+  };
+});
+
+const presetPhotos = [...girlPresetPhotos, ...boyPresetPhotos];
 
 function normalizePhotoPosition(position) {
   if (!position) return defaultPhotoPosition;
@@ -91,6 +106,110 @@ function PhotoImage({ src, alt, position, zoom = 1, className = "" }) {
   );
 }
 
+function PresetPhotoModal({ open, selectedPhoto, onClose, onChoose }) {
+  const [filter, setFilter] = useState("tout");
+
+  if (!open) return null;
+
+  const filteredPhotos =
+    filter === "tout"
+      ? presetPhotos
+      : presetPhotos.filter((photo) => photo.category === filter);
+
+  const filters = [
+    { id: "tout", label: "Tout" },
+    { id: "fille", label: "Fille" },
+    { id: "garcon", label: "Garçon" },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-[#2F2A24]/35 p-0 backdrop-blur-sm sm:items-center sm:p-5">
+      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-[2rem] bg-[#FFFDF8] shadow-2xl ring-1 ring-[#EFE4D6] sm:rounded-[2rem]">
+        <div className="flex items-center justify-between border-b border-[#EFE4D6] bg-white px-5 py-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#A8B193]">
+              Image prédéfinie
+            </p>
+
+            <h3 className="mt-1 text-lg font-bold text-[#4F4A45]">
+              Choisir une image
+            </h3>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFF8EC] text-[#746F64] ring-1 ring-[#EFE4D6]"
+            aria-label="Fermer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="border-b border-[#EFE4D6] bg-[#FFFDF8] px-5 py-3">
+          <div className="grid grid-cols-3 gap-2 rounded-full bg-[#F4EFE7] p-1">
+            {filters.map((item) => {
+              const active = filter === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFilter(item.id)}
+                  className={`rounded-full px-3 py-2 text-sm font-bold transition ${
+                    active
+                      ? "bg-white text-[#4F4A45] shadow-sm"
+                      : "text-[#8B7D6B]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-4 sm:p-5">
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6">
+            {filteredPhotos.map((item) => {
+              const selected = selectedPhoto === item.url;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    onChoose(item.url);
+                    onClose();
+                  }}
+                  className={`group overflow-hidden rounded-[1.35rem] bg-white p-2 transition hover:-translate-y-0.5 hover:shadow-sm ${
+                    selected
+                      ? "ring-2 ring-[#A8B193]"
+                      : "ring-1 ring-[#EFE4D6]"
+                  }`}
+                >
+                  <div className="aspect-square overflow-hidden rounded-2xl bg-[#F4EFE7]">
+                    <img
+                      src={item.url}
+                      alt={item.label}
+                      className="h-full w-full object-cover transition group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  </div>
+
+                  <p className="mt-2 truncate text-center text-[11px] font-bold text-[#746F64]">
+                    {item.label}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PhotoPicker({
   photo,
   position = defaultPhotoPosition,
@@ -103,6 +222,7 @@ function PhotoPicker({
 }) {
   const [isCropping, setIsCropping] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showPresetModal, setShowPresetModal] = useState(false);
   const currentPosition = normalizePhotoPosition(position);
 
   const clamp = (value) => Math.max(0, Math.min(100, value));
@@ -132,13 +252,9 @@ function PhotoPicker({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[1.75rem] border border-dashed border-[#D8C8B6] bg-[#FFFDF8] p-5">
-        <div className="flex flex-col items-center">
-          <p className="mb-3 text-sm font-bold text-[#4F4A45]">
-            Aperçu du profil
-          </p>
-
-          <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[#EEF0E7] text-3xl font-bold text-[#8F9874] shadow-sm">
+      <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4">
+        <div className="flex items-center gap-4">
+          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[#EEF0E7] text-3xl font-bold text-[#8F9874] shadow-sm">
             {photo ? (
               <PhotoImage
                 src={photo}
@@ -152,21 +268,53 @@ function PhotoPicker({
             )}
           </div>
 
-          {photo && (
-            <button
-              type="button"
-              onClick={() => setIsCropping((current) => !current)}
-              className={`mt-4 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-bold shadow-sm ring-1 ${
-                isCropping
-                  ? "bg-[#A8B193] text-white ring-[#A8B193]"
-                  : "bg-white text-[#746F64] ring-[#EFE4D6]"
-              }`}
-            >
-              <Camera className="h-4 w-4" />
-              {isCropping ? "Terminer le recadrage" : "Recadrer"}
-            </button>
-          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-[#4F4A45]">
+              Photo du profil
+            </p>
+
+            <p className="mt-1 text-xs font-semibold leading-5 text-[#8B7D6B]">
+              Importe une photo ou choisis une image prédéfinie.
+            </p>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setShowPresetModal(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+              >
+                <ImagePlus className="h-4 w-4" />
+                Choisir
+              </button>
+
+              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#EFE4D6] bg-white px-4 py-2.5 text-sm font-bold text-[#746F64] shadow-sm transition hover:bg-[#FAF4EC]">
+                <Camera className="h-4 w-4" />
+                Importer
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onUpload}
+                />
+              </label>
+            </div>
+          </div>
         </div>
+
+        {photo && (
+          <button
+            type="button"
+            onClick={() => setIsCropping((current) => !current)}
+            className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-bold shadow-sm ring-1 ${
+              isCropping
+                ? "bg-[#A8B193] text-white ring-[#A8B193]"
+                : "bg-white text-[#746F64] ring-[#EFE4D6]"
+            }`}
+          >
+            <Camera className="h-4 w-4" />
+            {isCropping ? "Terminer le recadrage" : "Recadrer la photo"}
+          </button>
+        )}
 
         {isCropping && photo && (
           <div className="mt-5 space-y-4">
@@ -189,7 +337,7 @@ function PhotoPicker({
                 event.currentTarget.releasePointerCapture(event.pointerId);
               }}
               onPointerCancel={() => setIsDragging(false)}
-              className="relative mx-auto flex h-72 w-full max-w-[380px] touch-none select-none items-center justify-center overflow-hidden rounded-[2rem] bg-[#EEF0E7] ring-1 ring-[#D8C8B6]"
+              className="relative mx-auto flex h-64 w-full max-w-[380px] touch-none select-none items-center justify-center overflow-hidden rounded-[1.5rem] bg-[#EEF0E7] ring-1 ring-[#D8C8B6]"
             >
               <PhotoImage
                 src={photo}
@@ -199,7 +347,7 @@ function PhotoPicker({
                 className="h-full w-full"
               />
 
-              <div className="pointer-events-none absolute inset-0 rounded-[2rem] ring-4 ring-white/50" />
+              <div className="pointer-events-none absolute inset-0 rounded-[1.5rem] ring-4 ring-white/50" />
             </div>
 
             <div className="rounded-2xl bg-white p-4 ring-1 ring-[#EFE4D6]">
@@ -274,62 +422,18 @@ function PhotoPicker({
             </div>
           </div>
         )}
-
-        <label className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-[#EFE4D6] bg-white px-4 py-2 text-sm font-bold text-[#746F64] shadow-sm transition hover:bg-[#FAF4EC]">
-          <Camera className="h-4 w-4" />
-          Importer une photo
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={onUpload}
-          />
-        </label>
       </div>
 
-      <div className="rounded-[1.5rem] bg-white/90 p-3 ring-1 ring-[#EFE4D6]">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-bold text-[#4F4A45]">
-            Images de présélection
-          </p>
-
-          <span className="rounded-full bg-[#FFF8EC] px-2.5 py-1 text-[11px] font-bold text-[#8B7D6B] ring-1 ring-[#EFE4D6]">
-            {presetPhotos.length}
-          </span>
-        </div>
-
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {presetPhotos.map((item) => {
-            const selected = photo === item.url;
-
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onChoosePreset(item.url)}
-                title={item.label}
-                aria-label={item.label}
-                className={`h-14 w-14 shrink-0 overflow-hidden rounded-full p-[2px] transition hover:scale-105 ${
-                  selected
-                    ? "bg-[#A8B193] shadow-sm ring-2 ring-[#A8B193]/30"
-                    : "bg-white ring-1 ring-[#EFE4D6] hover:bg-[#FAF4EC]"
-                }`}
-              >
-                <img
-                  src={item.url}
-                  alt={item.label}
-                  className="h-full w-full rounded-full bg-[#F4EFE7] object-cover"
-                  loading="lazy"
-                />
-              </button>
-            );
-          })}
-        </div>
-
-        <p className="mt-2 text-xs font-semibold text-[#9A8D7C]">
-          Fais glisser horizontalement pour voir les autres choix.
-        </p>
-      </div>
+      <PresetPhotoModal
+        open={showPresetModal}
+        selectedPhoto={photo}
+        onClose={() => setShowPresetModal(false)}
+        onChoose={(url) => {
+          onChoosePreset(url);
+          onPositionChange(defaultPhotoPosition);
+          onZoomChange(1);
+        }}
+      />
     </div>
   );
 }
