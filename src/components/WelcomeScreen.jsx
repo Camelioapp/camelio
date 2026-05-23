@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Baby, CalendarDays, FileText, ExternalLink, Copy, Check } from "lucide-react";
+import { Baby, CalendarDays, FileText, Check } from "lucide-react";
 import { AppFontStyle } from "./shared";
+
+const APP_URL = "https://camelio.app";
 
 function isInAppBrowser() {
   const ua = navigator.userAgent || navigator.vendor || window.opera || "";
@@ -8,11 +10,21 @@ function isInAppBrowser() {
   return /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line|TikTok|Snapchat/i.test(ua);
 }
 
+function isAndroidDevice() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+  return /Android/i.test(ua);
+}
+
+function isAppleDevice() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+  return /iPhone|iPad|iPod/i.test(ua);
+}
+
 export default function WelcomeScreen() {
   const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
   const [inAppBrowser, setInAppBrowser] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [browserNotice, setBrowserNotice] = useState("");
 
   useEffect(() => {
     setInAppBrowser(isInAppBrowser());
@@ -39,30 +51,65 @@ export default function WelcomeScreen() {
     },
   ];
 
+  const copyAppLink = async () => {
+    try {
+      await navigator.clipboard.writeText(APP_URL);
+      setBrowserNotice(
+        "Lien copié. Ouvrez Safari, Chrome ou Edge, puis collez camelio.app."
+      );
+    } catch (error) {
+      setBrowserNotice(
+        "Ouvrez Safari, Chrome ou Edge, puis allez sur camelio.app."
+      );
+    }
+
+    setTimeout(() => {
+      setBrowserNotice("");
+    }, 4500);
+  };
+
+  const openDefaultBrowser = async () => {
+    if (!inAppBrowser) {
+      window.location.href = APP_URL;
+      return;
+    }
+
+    if (isAndroidDevice()) {
+      window.location.href =
+        "intent://camelio.app#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fcamelio.app;end";
+      return;
+    }
+
+    if (isAppleDevice()) {
+      await copyAppLink();
+      return;
+    }
+
+    window.open(APP_URL, "_blank", "noopener,noreferrer");
+
+    setTimeout(() => {
+      setBrowserNotice(
+        "Si la page reste dans Messenger, ouvrez le menu ⋯ puis choisissez Ouvrir dans le navigateur."
+      );
+    }, 800);
+  };
+
   const handleSignup = () => {
+    if (inAppBrowser) {
+      openDefaultBrowser();
+      return;
+    }
+
     window.location.href = `${API_URL}/signup`;
   };
 
   const handleLogin = () => {
-    window.location.href = `${API_URL}/login`;
-  };
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText("https://camelio.app");
-      setLinkCopied(true);
-
-      setTimeout(() => {
-        setLinkCopied(false);
-      }, 2500);
-    } catch (error) {
-      setLinkCopied(false);
-      window.prompt("Copiez ce lien dans votre navigateur :", "https://camelio.app");
+    if (inAppBrowser) {
+      openDefaultBrowser();
+      return;
     }
-  };
 
-  const handleOpenMainBrowser = () => {
-    window.location.href = "https://camelio.app";
+    window.location.href = `${API_URL}/login`;
   };
 
   return (
@@ -82,53 +129,6 @@ export default function WelcomeScreen() {
             className="mx-auto h-auto w-[13rem] object-contain sm:w-[15rem]"
           />
         </div>
-
-        {inAppBrowser && (
-          <div className="mt-3 shrink-0 rounded-[1.5rem] border border-[#EEC988] bg-[#FFF8EA] p-3 text-left shadow-sm">
-            <p className="text-sm font-bold text-[#7A5A24]">
-              Connexion à partir de Messenger
-            </p>
-
-            <p className="mt-1 text-xs leading-relaxed text-[#7A5A24]">
-              Vous ouvrez Camelio dans un navigateur intégré. La connexion peut
-              être bloquée par Messenger, Facebook ou Instagram.
-            </p>
-
-            <p className="mt-1 text-xs leading-relaxed text-[#7A5A24]">
-              Pour vous connecter, ouvrez Camelio dans votre navigateur
-              principal, comme Safari, Chrome ou Edge.
-            </p>
-
-            <div className="mt-3 grid gap-2">
-              <button
-                type="button"
-                onClick={handleOpenMainBrowser}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#8FA173] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#7F9166]"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Ouvrir camelio.app
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-bold text-[#7A5A24] ring-1 ring-[#EEC988] transition hover:bg-[#FFF4DD]"
-              >
-                {linkCopied ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Lien copié
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" />
-                    Copier le lien
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="relative mx-auto mt-3 h-[9.5rem] w-full max-w-[260px] shrink-0 sm:mt-4 sm:h-[11rem] sm:max-w-[290px]">
           <div className="absolute inset-x-6 top-7 h-28 rounded-[42%] bg-[#F9EEDC] opacity-75 blur-[1px]" />
@@ -174,6 +174,15 @@ export default function WelcomeScreen() {
             );
           })}
         </div>
+
+        {browserNotice && (
+          <div className="mb-3 rounded-2xl border border-[#D8E6CA] bg-[#F7FBF3] px-4 py-3 text-center text-xs font-bold leading-relaxed text-[#6F785F]">
+            <div className="flex items-center justify-center gap-2">
+              <Check className="h-4 w-4" />
+              <span>{browserNotice}</span>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 flex shrink-0 flex-col gap-3 sm:mt-5">
           <button
