@@ -64,39 +64,49 @@ export default function LandingPage() {
   return (
     <div
       className="min-h-screen overflow-hidden text-slate-950"
-      style={{ backgroundColor: brand.cream }}
+      style={{
+        backgroundColor: brand.cream,
+        backgroundImage: "url('/fond.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
+      }}
     >
       <header className="relative z-20 mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8 lg:px-10">
         <a href="/" className="flex items-center">
           <img
             src="/Logo/Logo Camelio Hor.png"
             alt="Camelio"
-            className="h-11 w-auto object-contain sm:h-12"
+            className="h-20 w-auto object-contain sm:h-20"
           />
         </a>
 
-        <nav className="hidden items-center gap-8 text-sm font-bold text-slate-600 md:flex">
-          <a href="#fonctionnalites" className="transition hover:text-slate-950">
+        <nav className="hidden items-center gap-8 text-sm font-bold text-[#071126] md:flex">
+          <a href="#fonctionnalites" className="transition hover:text-slate-600">
             Fonctionnalités
           </a>
-          <a href="#securite" className="transition hover:text-slate-950">
+          <a href="#securite" className="transition hover:text-slate-600">
             Sécurité
           </a>
-          <a href="#commencer" className="transition hover:text-slate-950">
+          <a href="#commencer" className="transition hover:text-slate-600">
             Commencer
           </a>
         </nav>
 
         <a
-          href="#commencer"
-          className="hidden rounded-full px-5 py-3 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 md:inline-flex"
-          style={{
-            backgroundColor: brand.green,
-            boxShadow: "0 14px 26px rgba(168, 177, 147, 0.35)",
-          }}
-        >
-          Créer mon carnet
-        </a>
+  href="https://camelio.app/"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="hidden items-center gap-3 rounded-full px-6 py-4 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 md:inline-flex"
+  style={{
+    backgroundColor: brand.green,
+    boxShadow: "0 14px 26px rgba(168, 177, 147, 0.35)",
+  }}
+>
+  Créer mon carnet
+  <span className="text-xl leading-none">→</span>
+</a>
 
         <button
           className="flex h-10 w-10 items-center justify-center rounded-full bg-white/80 shadow-sm ring-1 ring-slate-100 md:hidden"
@@ -108,90 +118,108 @@ export default function LandingPage() {
 
       <main className="relative z-10">
         <section className="relative mx-auto grid max-w-6xl items-center gap-5 px-5 pb-14 pt-1 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:gap-8 lg:px-10 lg:pb-24 lg:pt-14">
-          <AnimatedMobileCircles />
+  <AnimatedMobileCircles />
+  <AnimatedDesktopBullets />
 
-          <motion.div
+  <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55 }}
             className="relative z-10 mx-auto max-w-xl text-center lg:mx-0 lg:text-left"
           >
             <div
-              className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black lg:mx-0"
+              className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-black lg:mx-0"
               style={{
-                backgroundColor: `${brand.purple}18`,
+                backgroundColor: `${brand.purple}21`,
                 color: brand.purple,
-                border: `1px solid ${brand.purple}33`,
+                border: `1px solid ${brand.purple}21`,
               }}
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              Carnet numérique familial
+              <Sparkles className="h-8.5 w-8.5" />
+              Le carnet numérique familial
             </div>
 
-            <h1 className="mx-auto max-w-[380px] text-[2.05rem] font-black leading-[1.12] tracking-[-0.045em] text-slate-950 sm:max-w-2xl sm:text-5xl lg:mx-0 lg:max-w-3xl lg:text-6xl">
-              Essayez gratuitement{" "}
+            <h1 className="mx-auto max-w-[430px] text-[3rem] font-black leading-[0.98] tracking-[-0.06em] text-[#071126] sm:max-w-2xl sm:text-6xl lg:mx-0 lg:max-w-3xl lg:text-[5.3rem]">
+              Essayez
+              <br />
+              gratuitement
+              <br />
               <span
                 className="bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: `linear-gradient(135deg, ${brand.pink}, ${brand.purple}, ${brand.blue})`,
+                  backgroundImage: `linear-gradient(135deg, ${brand.purple}, ${brand.pink})`,
                 }}
               >
                 Camelio
-              </span>{" "}
+              </span>
+              <br />
               dès aujourd’hui.
             </h1>
 
-            <p className="mx-auto mt-6 max-w-[350px] text-[1rem] font-semibold leading-8 text-slate-600 sm:max-w-md sm:text-lg lg:mx-0">
-              Le carnet numérique familial qui permet de conserver ce qui compte
-              pour votre enfant au même endroit.
+            <p className="mx-auto mt-6 max-w-[450px] text-[1.05rem] font-semibold leading-8 text-[#243852] sm:text-lg lg:mx-0">
+              Le carnet numérique familial qui permet de conserver
+              <br className="hidden sm:block" />
+              ce qui compte pour votre enfant{" "}
+              <span className="font-black text-[#071126]">au même endroit.</span>
             </p>
 
-            <div className="mt-8 hidden gap-3 sm:grid sm:grid-cols-3">
+            <div className="mt-8 hidden gap-4 sm:grid sm:grid-cols-3 lg:max-w-[760px]">
               {[
-                [Camera, "Souvenirs", brand.pink],
-                [Lock, "Privé", brand.green],
-                [Users, "Famille", brand.blue],
-              ].map(([Icon, label, color]) => (
+                [Camera, "Souvenirs", "Simples et accessibles.", brand.pink],
+                [Lock, "Privé", "Simples et sécurisés.", brand.green],
+                [Users, "Famille", "Simple et accessible.", brand.purple],
+              ].map(([Icon, label, description, color]) => (
                 <div
                   key={label}
-                  className="rounded-3xl bg-white/80 p-4 text-left shadow-sm ring-1 ring-slate-100 backdrop-blur"
+                  className="rounded-[1.6rem] bg-white/85 p-5 text-left shadow-xl shadow-slate-200/50 ring-1 ring-white/80 backdrop-blur"
                 >
-                  <Icon className="mb-3 h-5 w-5" style={{ color }} />
-                  <div className="text-sm font-black text-slate-900">
+                  <div
+                    className="mb-3 flex h-10 w-10 items-center justify-center rounded-full"
+                    style={{
+                      backgroundColor: `${color}22`,
+                      color,
+                      boxShadow: `0 10px 22px ${color}33`,
+                    }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <div className="text-base font-black text-[#071126]">
                     {label}
                   </div>
-                  <div className="mt-1 text-xs leading-5 text-slate-500">
-                    Simple et accessible.
+
+                  <div className="mt-2 text-sm font-medium leading-5 text-slate-500">
+                    {description}
                   </div>
                 </div>
               ))}
             </div>
           </motion.div>
 
-         <motion.div
-  initial={{ opacity: 0, scale: 0.96, y: 12 }}
-  animate={{ opacity: 1, scale: 1, y: 0 }}
-  transition={{ duration: 0.6, delay: 0.1 }}
-  className="relative z-10 mx-auto mt-3 flex w-full justify-center sm:mt-6 lg:mt-0"
->
-  <div className="relative flex w-full flex-col items-center justify-center">
-    <PhoneMockup />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="relative z-10 mx-auto mt-3 flex w-full justify-center sm:mt-6 lg:mt-0"
+          >
+            <div className="relative flex w-full flex-col items-center justify-center">
+              <PhoneMockup />
 
-    <div className="relative z-30 mt-8 flex w-full justify-center px-4 sm:mt-10 lg:mt-12">
-      <a
-        id="commencer"
-        href="https://camelio.app"
-        className="flex w-full max-w-[300px] items-center justify-center rounded-full px-6 py-4 text-center text-sm font-black text-white shadow-2xl transition hover:-translate-y-0.5 hover:shadow-xl sm:max-w-[350px] sm:text-base"
-        style={{
-          backgroundColor: brand.green,
-          boxShadow: "0 18px 38px rgba(168, 177, 147, 0.45)",
-        }}
-      >
-        Essayez Camelio gratuitement
-      </a>
-    </div>
-  </div>
-</motion.div>
+              <div className="relative z-30 mt-8 flex w-full justify-center px-4 sm:mt-10 lg:mt-12 lg:-ml-10">
+                <a
+                  id="commencer"
+                  href="https://camelio.app"
+                  className="flex w-full max-w-[330px] items-center justify-center rounded-full px-7 py-4 text-center text-sm font-black text-white shadow-2xl transition hover:-translate-y-0.5 hover:shadow-xl sm:max-w-[390px] sm:text-base"
+                  style={{
+                    backgroundColor: brand.green,
+                    boxShadow: "0 18px 38px rgba(168, 177, 147, 0.45)",
+                  }}
+                >
+                  ✨ Essayez Camelio gratuitement →
+                </a>
+              </div>
+            </div>
+          </motion.div>
         </section>
 
         <section
@@ -383,7 +411,7 @@ export default function LandingPage() {
                 boxShadow: "0 18px 35px rgba(168, 177, 147, 0.35)",
               }}
             >
-              Essayez Camelio gratuitement
+              ✨ Essayez Camelio gratuitement →
             </a>
           </div>
         </section>
@@ -469,6 +497,107 @@ function PhoneMockup() {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function AnimatedDesktopBullets() {
+  const bubbles = [
+    // Gauche de l'écran
+    { top: "12vh", left: "3vw", size: 18, color: brand.yellow, delay: 0.2 },
+    { top: "22vh", left: "10vw", size: 10, color: brand.pink, delay: 1.1 },
+    { top: "35vh", left: "5vw", size: 26, color: brand.blue, delay: 0.7 },
+    { top: "49vh", left: "14vw", size: 14, color: brand.purple, delay: 1.6 },
+    { top: "63vh", left: "7vw", size: 20, color: brand.green, delay: 2.2 },
+    { top: "78vh", left: "16vw", size: 12, color: brand.pink, delay: 1.4 },
+    { top: "88vh", left: "4vw", size: 24, color: brand.purple, delay: 2.7 },
+
+    // Centre
+    { top: "11vh", left: "41vw", size: 12, color: brand.purple, delay: 0 },
+    { top: "17vh", left: "53vw", size: 18, color: brand.pink, delay: 0.5 },
+    { top: "27vh", left: "47vw", size: 8, color: brand.blue, delay: 1.1 },
+    { top: "39vh", left: "57vw", size: 14, color: brand.green, delay: 0.8 },
+    { top: "53vh", left: "45vw", size: 20, color: brand.yellow, delay: 1.4 },
+    { top: "68vh", left: "55vw", size: 11, color: brand.pink, delay: 2.1 },
+    { top: "82vh", left: "46vw", size: 22, color: brand.green, delay: 1.2 },
+
+    // Droite
+    { top: "8vh", right: "18vw", size: 14, color: brand.blue, delay: 0.6 },
+    { top: "16vh", right: "6vw", size: 24, color: brand.purple, delay: 1.3 },
+    { top: "28vh", right: "20vw", size: 10, color: brand.pink, delay: 0.9 },
+    { top: "39vh", right: "4vw", size: 18, color: brand.yellow, delay: 1.8 },
+    { top: "54vh", right: "13vw", size: 12, color: brand.green, delay: 0.4 },
+    { top: "68vh", right: "5vw", size: 26, color: brand.pink, delay: 2.2 },
+    { top: "82vh", right: "18vw", size: 9, color: brand.blue, delay: 1.5 },
+  ];
+
+  const rings = [
+    { top: "18vh", left: "18vw", size: 38, color: brand.purple, delay: 0.2 },
+    { top: "42vh", left: "9vw", size: 44, color: brand.blue, delay: 1.1 },
+    { top: "72vh", left: "21vw", size: 34, color: brand.green, delay: 1.6 },
+    { top: "31vh", right: "15vw", size: 42, color: brand.pink, delay: 0.7 },
+    { top: "73vh", right: "20vw", size: 38, color: brand.green, delay: 2.1 },
+  ];
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[2] hidden overflow-hidden lg:block">
+      {bubbles.map((bubble, index) => (
+        <motion.span
+          key={`bubble-${index}`}
+          className="absolute rounded-full"
+          style={{
+            top: bubble.top,
+            left: bubble.left,
+            right: bubble.right,
+            width: bubble.size,
+            height: bubble.size,
+            backgroundColor: bubble.color,
+            opacity: 0.68,
+            boxShadow: `0 0 24px ${bubble.color}99`,
+          }}
+          animate={{
+            x: [0, 22 + (index % 4) * 4, -14, 0],
+            y: [0, -18 - (index % 3) * 4, 16, 0],
+            scale: [1, 1.28, 0.92, 1],
+            opacity: [0.42, 0.8, 0.5, 0.42],
+          }}
+          transition={{
+            duration: 9 + (index % 7),
+            delay: bubble.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+
+      {rings.map((ring, index) => (
+        <motion.span
+          key={`ring-${index}`}
+          className="absolute rounded-full border-4"
+          style={{
+            top: ring.top,
+            left: ring.left,
+            right: ring.right,
+            width: ring.size,
+            height: ring.size,
+            borderColor: ring.color,
+            opacity: 0.52,
+            boxShadow: `0 0 22px ${ring.color}77`,
+          }}
+          animate={{
+            x: [0, -18, 14, 0],
+            y: [0, 16, -12, 0],
+            scale: [1, 1.18, 0.95, 1],
+            opacity: [0.3, 0.68, 0.38, 0.3],
+          }}
+          transition={{
+            duration: 11 + index,
+            delay: ring.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
     </div>
   );
 }
