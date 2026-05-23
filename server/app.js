@@ -97,6 +97,7 @@ const allowedOrigins = [
   "https://camelio-frontend.onrender.com",
   "https://camelio.app",
   "https://www.camelio.app",
+  "https://api.camelio.app",
 ];
 
 app.use(
@@ -124,6 +125,9 @@ app.use(
       httpOnly: true,
       sameSite: "none",
       secure: true,
+      domain:
+        process.env.COOKIE_DOMAIN ||
+        (process.env.NODE_ENV === "production" ? ".camelio.app" : undefined),
       maxAge: 1000 * 60 * 60 * 8,
     },
   })
