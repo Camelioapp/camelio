@@ -978,24 +978,45 @@ export default function SettingsView({
         openSection={openMainSection}
         setOpenSection={setOpenMainSection}
       >
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F]"
-          >
-            <LogOut className="h-5 w-5" />
-            Se déconnecter
-          </button>
+        <div className="space-y-5">
+          <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#C96F6F] text-white shadow-sm">
+                <LogOut className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-[#55534C]">Déconnexion</p>
+
+                <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                  Fermez votre session actuelle et retournez à la page
+                  d’accueil de Camelio.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F]"
+            >
+              <LogOut className="h-5 w-5" />
+              Se déconnecter
+            </button>
+          </div>
 
           <div className="rounded-[1.5rem] border border-[#E8B8B8] bg-[#FFF8F8] p-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#A94444] text-white">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F8E1E1] text-[#A94444] ring-1 ring-[#E8B8B8]">
                 <Trash2 className="h-5 w-5" />
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="font-bold text-[#8F4F4F]">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A94444]">
+                  Zone sensible
+                </p>
+
+                <p className="mt-1 font-bold text-[#8F4F4F]">
                   Supprimer le compte
                 </p>
 
@@ -1014,8 +1035,9 @@ export default function SettingsView({
                 setDeleteAccountError("");
                 setShowDeleteAccountModal(true);
               }}
-              className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#A94444] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#923A3A]"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-[#A94444] bg-white px-4 py-3 text-sm font-bold text-[#A94444] transition hover:bg-[#A94444] hover:text-white"
             >
+              <Trash2 className="h-4 w-4" />
               Supprimer mon compte
             </button>
           </div>
