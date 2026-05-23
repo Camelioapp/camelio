@@ -227,6 +227,7 @@ export default function SettingsView({
     return {
       planName: "Camelio Famille",
       subscriptionId: "trial_local",
+      stripeSubscriptionId: "",
       status: "trialing",
       billingType: "free_trial",
       amountLabel: "Aucun paiement pendant l’essai gratuit",
@@ -238,6 +239,8 @@ export default function SettingsView({
   });
 
   const [subscriptionMessage, setSubscriptionMessage] = useState("");
+  const [subscriptionActionLoading, setSubscriptionActionLoading] =
+    useState(false);
 
   const [cookiePreferences, setCookiePreferences] = useState(() => {
     try {
@@ -345,6 +348,47 @@ export default function SettingsView({
     setSubscriptionMessage(
       "Votre abonnement est maintenant programmé pour prendre fin à la fin de la période gratuite."
     );
+  };
+
+  const startPaidSubscription = async () => {
+    try {
+      setSubscriptionActionLoading(true);
+      setSubscriptionMessage("");
+
+      const response = await fetch(`${API_BASE_URL}/create-checkout-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          lookup_key: "camelio_monthly_595",
+          trial: false,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            data.error ||
+            "Impossible de créer la session de paiement."
+        );
+      }
+
+      if (!data.url) {
+        throw new Error("Aucune URL Stripe reçue.");
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      setSubscriptionMessage(
+        error.message || "Une erreur est survenue lors du renouvellement."
+      );
+    } finally {
+      setSubscriptionActionLoading(false);
+    }
   };
 
   const moveSection = (sectionId, direction) => {
@@ -759,7 +803,11 @@ export default function SettingsView({
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               <InfoBox
                 label="ID de l’abonnement"
-                value={subscription.subscriptionId || "Non disponible"}
+                value={
+                  subscription.stripeSubscriptionId ||
+                  subscription.subscriptionId ||
+                  "Non disponible"
+                }
               />
 
               <InfoBox
@@ -809,17 +857,42 @@ export default function SettingsView({
                 <p className="font-bold text-[#7A5A24]">
                   Annulation programmée
                 </p>
+
                 <p className="mt-1 text-sm leading-relaxed text-[#7A5A24]">
                   Votre abonnement restera actif jusqu’au{" "}
                   {formatDate(subscription.cancelEffectiveDate)}. Aucun paiement
                   ne sera prélevé après cette date.
                 </p>
+
+                <div className="mt-4 rounded-[1.5rem] border border-[#D8E6CA] bg-white p-4">
+                  <p className="font-bold text-[#3F3D38]">
+                    Renouveler l’abonnement
+                  </p>
+
+                  <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                    Vous pouvez renouveler votre abonnement maintenant pour
+                    continuer à utiliser Camelio après la fin de votre période
+                    gratuite.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={startPaidSubscription}
+                    disabled={subscriptionActionLoading}
+                    className="mt-4 w-full rounded-2xl bg-[#8FA173] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#7F9166] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {subscriptionActionLoading
+                      ? "Redirection vers le paiement..."
+                      : "Payer et renouveler mon abonnement"}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="mt-5 rounded-[1.5rem] border border-[#E8D8BE] bg-white p-4">
                 <p className="font-bold text-[#3F3D38]">
                   Annuler l’abonnement
                 </p>
+
                 <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
                   Si vous annulez pendant l’essai gratuit, l’accès restera actif
                   jusqu’à la fin de la période gratuite. L’abonnement prendra
