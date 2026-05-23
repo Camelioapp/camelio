@@ -147,12 +147,30 @@ export default function Dashboard() {
   const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false);
 
   useEffect(() => {
-    const alreadySeen = localStorage.getItem("camelio_subscription_popup_seen");
+  const checkSubscription = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/subscription`, {
+        method: "GET",
+        credentials: "include",
+      });
 
-    if (!alreadySeen) {
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Erreur vérification abonnement:", data);
+        setShowSubscriptionPopup(true);
+        return;
+      }
+
+      setShowSubscriptionPopup(!data.hasAccess);
+    } catch (error) {
+      console.error("Erreur vérification abonnement:", error);
       setShowSubscriptionPopup(true);
     }
-  }, []);
+  };
+
+  checkSubscription();
+}, []);
 
   const defaultSectionOrder = useMemo(() => {
     return sections

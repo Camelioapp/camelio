@@ -173,17 +173,40 @@ export default function Billing() {
   const [sessionId, setSessionId] = useState("");
 
   useEffect(() => {
+  const syncSubscription = async () => {
     const query = new URLSearchParams(window.location.search);
 
     if (query.get("success") === "true") {
+      const sessionIdFromUrl = query.get("session_id") || "";
+
       setSuccess(true);
-      setSessionId(query.get("session_id") || "");
+      setSessionId(sessionIdFromUrl);
+
+      if (sessionIdFromUrl) {
+        try {
+          await fetch(`${API_URL}/api/subscription/sync-checkout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              session_id: sessionIdFromUrl,
+            }),
+          });
+        } catch (error) {
+          console.error("Erreur sync abonnement:", error);
+        }
+      }
     }
 
     if (query.get("canceled") === "true") {
       setCanceled(true);
     }
-  }, []);
+  };
+
+  syncSubscription();
+}, []);
 
   if (success && sessionId) {
     return <SuccessDisplay sessionId={sessionId} />;

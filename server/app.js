@@ -51,7 +51,7 @@ const S3_DOCUMENTS_BUCKET = process.env.S3_DOCUMENTS_BUCKET;
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PRICE_LOOKUP_KEY =
-  process.env.STRIPE_PRICE_LOOKUP_KEY || "camelio_monthly_499";
+  process.env.STRIPE_PRICE_LOOKUP_KEY || "camelio_monthly_595";
 const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
 
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
@@ -127,7 +127,10 @@ function validateAwsConfig(req, res, next) {
     missing.push("AWS_ACCESS_KEY_ID");
   }
 
-  if (!process.env.AWS_SECRET_ACCESS_KEY && process.env.NODE_ENV !== "production") {
+  if (
+    !process.env.AWS_SECRET_ACCESS_KEY &&
+    process.env.NODE_ENV !== "production"
+  ) {
     missing.push("AWS_SECRET_ACCESS_KEY");
   }
 
@@ -151,7 +154,10 @@ function validateS3Config(req, res, next) {
     missing.push("AWS_ACCESS_KEY_ID");
   }
 
-  if (!process.env.AWS_SECRET_ACCESS_KEY && process.env.NODE_ENV !== "production") {
+  if (
+    !process.env.AWS_SECRET_ACCESS_KEY &&
+    process.env.NODE_ENV !== "production"
+  ) {
     missing.push("AWS_SECRET_ACCESS_KEY");
   }
 
@@ -821,6 +827,125 @@ app.get("/api/my-data", requireAuth, validateAwsConfig, async (req, res, next) =
   }
 });
 
+/* =========================
+   Subscription / Abonnement
+   ========================= */
+
+app.get(
+  "/api/subscription",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: "SUBSCRIPTION",
+          },
+        })
+      );
+
+      const subscription = result.Item || null;
+      const activeStatuses = ["trialing", "active"];
+
+      const hasAccess =
+        subscription && activeStatuses.includes(subscription.status);
+
+      return res.json({
+        hasAccess: Boolean(hasAccess),
+        status: subscription?.status || "none",
+        subscription,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/subscription/sync-checkout",
+  requireAuth,
+  validateStripeConfig,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { session_id } = req.body;
+
+      if (!session_id) {
+        return res.status(400).json({
+          error: "missing_session_id",
+          message: "session_id est requis.",
+        });
+      }
+
+      const checkoutSession = await stripe.checkout.sessions.retrieve(
+        session_id,
+        {
+          expand: ["subscription"],
+        }
+      );
+
+      const stripeSubscription = checkoutSession.subscription;
+
+      if (!stripeSubscription) {
+        return res.status(400).json({
+          error: "missing_subscription",
+          message: "Aucun abonnement Stripe trouvé pour cette session.",
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      const subscriptionItem = {
+        PK: getUserPk(req),
+        SK: "SUBSCRIPTION",
+        type: "subscription",
+        userId: req.session.user.sub,
+        email: req.session.user.email || "",
+        status: stripeSubscription.status,
+        plan:
+          stripeSubscription.metadata?.plan ||
+          checkoutSession.metadata?.plan ||
+          STRIPE_PRICE_LOOKUP_KEY,
+        storageGb:
+          Number(stripeSubscription.metadata?.storageGb) ||
+          Number(checkoutSession.metadata?.storageGb) ||
+          Number(STRIPE_STORAGE_GB) ||
+          5,
+        stripeCustomerId: checkoutSession.customer || "",
+        stripeSubscriptionId: stripeSubscription.id,
+        stripeCheckoutSessionId: checkoutSession.id,
+        trialEndsAt: stripeSubscription.trial_end
+          ? new Date(stripeSubscription.trial_end * 1000).toISOString()
+          : null,
+        currentPeriodEnd: stripeSubscription.current_period_end
+          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+          : null,
+        updatedAt: now,
+        createdAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: subscriptionItem,
+        })
+      );
+
+      return res.json({
+        success: true,
+        hasAccess: ["trialing", "active"].includes(subscriptionItem.status),
+        status: subscriptionItem.status,
+        subscription: subscriptionItem,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 app.post(
   "/api/documents/presign",
   requireAuth,
@@ -1257,7 +1382,13 @@ app.post(
         cancel_url: `${APP_URL}/billing?canceled=true`,
         allow_promotion_codes: true,
         billing_address_collection: "auto",
-
+        metadata: {
+          userId: req.session.user.sub,
+          userEmail: req.session.user.email || "",
+          plan: lookupKey,
+          storageGb: STRIPE_STORAGE_GB,
+          trial: wantsTrial ? "true" : "false",
+        },
         subscription_data: {
           ...(wantsTrial ? { trial_period_days: 30 } : {}),
           metadata: {
@@ -1267,14 +1398,6 @@ app.post(
             storageGb: STRIPE_STORAGE_GB,
             trial: wantsTrial ? "true" : "false",
           },
-        },
-
-        metadata: {
-          userId: req.session.user.sub,
-          userEmail: req.session.user.email || "",
-          plan: lookupKey,
-          storageGb: STRIPE_STORAGE_GB,
-          trial: wantsTrial ? "true" : "false",
         },
       });
 
