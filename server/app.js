@@ -125,9 +125,6 @@ app.use(
       httpOnly: true,
       sameSite: "none",
       secure: true,
-      domain:
-        process.env.COOKIE_DOMAIN ||
-        (process.env.NODE_ENV === "production" ? ".camelio.app" : undefined),
       maxAge: 1000 * 60 * 60 * 8,
     },
   })
