@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 function BillingCard({ children }) {
   return (
@@ -27,6 +27,7 @@ function ProductDisplay() {
         credentials: "include",
         body: JSON.stringify({
           lookup_key: "camelio_monthly_595",
+          trial: false,
         }),
       });
 
@@ -84,65 +85,32 @@ function ProductDisplay() {
   );
 }
 
-function SuccessDisplay({ sessionId }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+function LoadingDisplay() {
+  return (
+    <BillingCard>
+      <div className="billing-logo">⏳</div>
 
-  const openCustomerPortal = async () => {
-    try {
-      setLoading(true);
-      setError("");
+      <div className="billing-description">
+        <h1>Activation en cours</h1>
+        <p>Nous synchronisons votre abonnement avec Camelio.</p>
+      </div>
+    </BillingCard>
+  );
+}
 
-      const response = await fetch(`${API_URL}/create-portal-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          session_id: sessionId,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || data.error || "Impossible d’ouvrir le portail Stripe."
-        );
-      }
-
-      if (!data.url) {
-        throw new Error("Aucune URL du portail Stripe reçue.");
-      }
-
-      window.location.href = data.url;
-    } catch (err) {
-      setError(err.message || "Une erreur est survenue.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+function SuccessDisplay({ message }) {
   return (
     <BillingCard>
       <div className="billing-logo">✅</div>
 
       <div className="billing-description">
         <h1>Abonnement activé</h1>
-        <p>Votre accès Camelio est maintenant actif.</p>
+        <p>{message}</p>
       </div>
 
-      {error && <p className="billing-error">{error}</p>}
-
-      <button
-        className="billing-button"
-        type="button"
-        onClick={openCustomerPortal}
-        disabled={loading}
-      >
-        {loading ? "Ouverture..." : "Gérer mon abonnement"}
-      </button>
+      <a className="billing-link-button" href="/">
+        Retourner à Camelio
+      </a>
     </BillingCard>
   );
 }
@@ -160,60 +128,120 @@ function CanceledDisplay() {
         </p>
       </div>
 
-      <a className="billing-link-button" href="/billing">
-        Retourner à l’abonnement
+      <a className="billing-link-button" href="/">
+        Retourner à Camelio
+      </a>
+    </BillingCard>
+  );
+}
+
+function ErrorDisplay({ error }) {
+  return (
+    <BillingCard>
+      <div className="billing-logo">⚠️</div>
+
+      <div className="billing-description">
+        <h1>Synchronisation incomplète</h1>
+        <p>{error}</p>
+      </div>
+
+      <a className="billing-link-button" href="/">
+        Retourner à Camelio
       </a>
     </BillingCard>
   );
 }
 
 export default function Billing() {
-  const [success, setSuccess] = useState(false);
-  const [canceled, setCanceled] = useState(false);
-  const [sessionId, setSessionId] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-  const syncSubscription = async () => {
-    const query = new URLSearchParams(window.location.search);
+    const syncSubscription = async () => {
+      const query = new URLSearchParams(window.location.search);
 
-    if (query.get("success") === "true") {
-      const sessionIdFromUrl = query.get("session_id") || "";
+      if (query.get("canceled") === "true") {
+        setStatus("canceled");
+        return;
+      }
 
-      setSuccess(true);
-      setSessionId(sessionIdFromUrl);
+      if (query.get("success") !== "true") {
+        setStatus("idle");
+        return;
+      }
 
-      if (sessionIdFromUrl) {
-        try {
-          await fetch(`${API_URL}/api/subscription/sync-checkout`, {
+      const sessionId = query.get("session_id");
+
+      if (!sessionId) {
+        setStatus("error");
+        setError("La session Stripe est manquante.");
+        return;
+      }
+
+      try {
+        setStatus("loading");
+
+        const response = await fetch(
+          `${API_URL}/api/subscription/sync-checkout`,
+          {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
             credentials: "include",
             body: JSON.stringify({
-              session_id: sessionIdFromUrl,
+              session_id: sessionId,
             }),
-          });
-        } catch (error) {
-          console.error("Erreur sync abonnement:", error);
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              data.error ||
+              "Impossible de synchroniser l’abonnement."
+          );
         }
+
+        if (data.status === "trialing") {
+          setMessage("Votre essai gratuit de 1 mois est maintenant actif.");
+        } else if (data.status === "active") {
+          setMessage("Votre abonnement Camelio est maintenant actif.");
+        } else {
+          setMessage("Votre abonnement a été enregistré dans Camelio.");
+        }
+
+        setStatus("success");
+      } catch (err) {
+        console.error("Erreur sync abonnement:", err);
+        setStatus("error");
+        setError(
+          err.message ||
+            "L’abonnement a été créé dans Stripe, mais n’a pas été synchronisé dans Camelio."
+        );
       }
-    }
+    };
 
-    if (query.get("canceled") === "true") {
-      setCanceled(true);
-    }
-  };
+    syncSubscription();
+  }, []);
 
-  syncSubscription();
-}, []);
-
-  if (success && sessionId) {
-    return <SuccessDisplay sessionId={sessionId} />;
+  if (status === "loading") {
+    return <LoadingDisplay />;
   }
 
-  if (canceled) {
+  if (status === "success") {
+    return <SuccessDisplay message={message} />;
+  }
+
+  if (status === "canceled") {
     return <CanceledDisplay />;
+  }
+
+  if (status === "error") {
+    return <ErrorDisplay error={error} />;
   }
 
   return <ProductDisplay />;
