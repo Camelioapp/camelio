@@ -8,7 +8,6 @@ import {
   Quote,
   Search,
   Share2,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -28,11 +27,26 @@ const brandColors = [
 ];
 
 const illustrationChoices = [
-  { id: "clouds", label: "Nuages", icon: "☁️" },
-  { id: "stars", label: "Étoiles", icon: "✨" },
-  { id: "heart", label: "Coeur", icon: "💛" },
-  { id: "sun", label: "Soleil", icon: "☀️" },
-  { id: "none", label: "Aucune", icon: "" },
+  { id: "mixed", label: "Bulles et lignes" },
+  { id: "soft-circles", label: "Ronds doux" },
+  { id: "playful-lines", label: "Lignes courbes" },
+  { id: "dots", label: "Petits points" },
+  { id: "none", label: "Aucun effet" },
+];
+
+const monthOptions = [
+  { value: "01", label: "Janvier" },
+  { value: "02", label: "Février" },
+  { value: "03", label: "Mars" },
+  { value: "04", label: "Avril" },
+  { value: "05", label: "Mai" },
+  { value: "06", label: "Juin" },
+  { value: "07", label: "Juillet" },
+  { value: "08", label: "Août" },
+  { value: "09", label: "Septembre" },
+  { value: "10", label: "Octobre" },
+  { value: "11", label: "Novembre" },
+  { value: "12", label: "Décembre" },
 ];
 
 function getTodayDate() {
@@ -70,24 +84,45 @@ function displayChildName(child) {
   return child.nickname || child.firstName || child.name || "Enfant";
 }
 
-function getChildPhoto(childOptions, childId) {
-  const child = childOptions.find(
-    (item) => String(item.id) === String(childId)
-  );
+function calculateAgeAtDate(birthDate, situationDate) {
+  if (!birthDate || !situationDate) return "";
 
-  return child?.photo || "";
-}
+  const birth = new Date(`${birthDate}T00:00:00`);
+  const situation = new Date(`${situationDate}T00:00:00`);
 
-function getChildName(childOptions, childId, fallback = "Non précisé") {
-  const child = childOptions.find(
-    (item) => String(item.id) === String(childId)
-  );
+  if (
+    Number.isNaN(birth.getTime()) ||
+    Number.isNaN(situation.getTime()) ||
+    situation < birth
+  ) {
+    return "";
+  }
 
-  return child?.name || fallback;
+  let years = situation.getFullYear() - birth.getFullYear();
+  let months = situation.getMonth() - birth.getMonth();
+
+  if (situation.getDate() < birth.getDate()) {
+    months -= 1;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  if (years <= 0) {
+    return `${months} mois`;
+  }
+
+  if (months <= 0) {
+    return `${years} an${years > 1 ? "s" : ""}`;
+  }
+
+  return `${years} an${years > 1 ? "s" : ""} et ${months} mois`;
 }
 
 function wrapText(ctx, text, maxWidth) {
-  const words = text.split(" ");
+  const words = String(text || "").split(" ");
   const lines = [];
   let line = "";
 
@@ -122,8 +157,122 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
+function drawBackgroundEffects(ctx, type, width, height) {
+  ctx.save();
+
+  if (type === "soft-circles") {
+    ctx.globalAlpha = 0.45;
+
+    const circles = [
+      [120, 160, 70],
+      [930, 210, 95],
+      [180, 1060, 90],
+      [870, 1030, 65],
+      [540, 1160, 45],
+    ];
+
+    circles.forEach(([x, y, radius]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fill();
+    });
+  }
+
+  if (type === "playful-lines") {
+    ctx.globalAlpha = 0.42;
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 12;
+    ctx.lineCap = "round";
+
+    const lines = [
+      [80, 220, 260, 120, 430, 220],
+      [700, 180, 850, 90, 1020, 170],
+      [90, 1030, 270, 1150, 440, 1040],
+      [660, 1120, 820, 1000, 990, 1110],
+    ];
+
+    lines.forEach(([x1, y1, x2, y2, x3, y3]) => {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(x2, y2, x3, y3);
+      ctx.stroke();
+    });
+  }
+
+  if (type === "dots") {
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "#FFFFFF";
+
+    const dots = [
+      [140, 230],
+      [210, 310],
+      [890, 170],
+      [960, 290],
+      [130, 1130],
+      [230, 1210],
+      [820, 1120],
+      [940, 1190],
+      [520, 130],
+      [600, 1220],
+    ];
+
+    dots.forEach(([x, y]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, 12, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  if (type === "mixed") {
+    ctx.globalAlpha = 0.45;
+
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 10;
+    ctx.lineCap = "round";
+
+    ctx.beginPath();
+    ctx.moveTo(80, 240);
+    ctx.quadraticCurveTo(230, 120, 400, 230);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(700, 1120);
+    ctx.quadraticCurveTo(850, 1000, 1010, 1120);
+    ctx.stroke();
+
+    const circles = [
+      [930, 220, 85],
+      [150, 1080, 75],
+      [520, 1180, 42],
+    ];
+
+    circles.forEach(([x, y, radius]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fill();
+    });
+
+    ctx.fillStyle = "#FFFFFF";
+
+    [
+      [160, 180],
+      [220, 280],
+      [860, 1020],
+      [950, 1200],
+    ].forEach(([x, y]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  ctx.restore();
+}
+
 function loadImage(src) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (!src) {
       resolve(null);
       return;
@@ -148,21 +297,16 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.68)";
+  drawBackgroundEffects(
+    ctx,
+    options.illustration || "mixed",
+    canvas.width,
+    canvas.height
+  );
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
   roundedRect(ctx, 70, 80, 940, 1190, 46);
   ctx.fill();
-
-  if (options.illustration !== "none") {
-    const selectedIllustration = illustrationChoices.find(
-      (item) => item.id === options.illustration
-    );
-
-    ctx.font = "96px Arial";
-    ctx.globalAlpha = 0.9;
-    ctx.fillText(selectedIllustration?.icon || "✨", 810, 210);
-    ctx.fillText(selectedIllustration?.icon || "✨", 100, 1160);
-    ctx.globalAlpha = 1;
-  }
 
   if (options.includeChildPhoto && phrase.childPhoto) {
     const childImage = await loadImage(phrase.childPhoto);
@@ -184,42 +328,53 @@ async function createShareImageBlob({ phrase, options }) {
     }
   }
 
+  let y = options.includeChildPhoto && phrase.childPhoto ? 430 : 330;
+
   ctx.fillStyle = "#D99AB9";
   ctx.font = "bold 82px Georgia";
-  ctx.fillText("“", 120, 310);
+  ctx.fillText("“", 120, y - 50);
 
   ctx.fillStyle = "#3F3D38";
   ctx.font = "bold italic 48px Georgia";
 
   const phraseLines = wrapText(ctx, phrase.phrase, 760);
-  let y = options.includeChildPhoto && phrase.childPhoto ? 440 : 360;
 
   phraseLines.slice(0, 7).forEach((line) => {
     ctx.fillText(line, 150, y);
     y += 70;
   });
 
+  y += 35;
+
   ctx.fillStyle = "#8FA173";
-  roundedRect(ctx, 150, y + 35, 260, 58, 29);
+  roundedRect(ctx, 150, y, 290, 62, 31);
   ctx.fill();
 
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "bold 28px Arial";
-  ctx.fillText(phrase.childName || "Non précisé", 185, y + 73);
+  ctx.fillText(phrase.childName || "Non précisé", 185, y + 40);
 
   ctx.fillStyle = "#746F64";
   ctx.font = "bold 28px Arial";
-  ctx.fillText(formatDate(phrase.date), 690, y + 73);
+  ctx.fillText(formatDate(phrase.date), 690, y + 40);
+
+  y += 95;
+
+  if (phrase.childAgeAtSituation) {
+    ctx.fillStyle = "#746F64";
+    ctx.font = "bold 28px Arial";
+    ctx.fillText(`Âge au moment : ${phrase.childAgeAtSituation}`, 150, y);
+    y += 50;
+  }
 
   if (phrase.context) {
     ctx.fillStyle = "#746F64";
     ctx.font = "28px Arial";
     const contextLines = wrapText(ctx, phrase.context, 760);
-    let contextY = y + 150;
 
     contextLines.slice(0, 3).forEach((line) => {
-      ctx.fillText(line, 150, contextY);
-      contextY += 44;
+      ctx.fillText(line, 150, y);
+      y += 44;
     });
   }
 
@@ -234,7 +389,7 @@ async function createShareImageBlob({ phrase, options }) {
   const logo = await loadImage("/Logo/Camelio.png");
 
   if (logo) {
-    ctx.drawImage(logo, 760, 1150, 150, 150);
+    ctx.drawImage(logo, 770, 1145, 145, 145);
   } else {
     ctx.fillStyle = "#8FA173";
     ctx.font = "bold 40px Arial";
@@ -462,9 +617,13 @@ function AddPhrasePopup({
 function ShareImagePopup({ phrase, onClose, onShare }) {
   const [options, setOptions] = useState({
     backgroundColor: "#FCEEF3",
-    illustration: "clouds",
+    illustration: "mixed",
     includeChildPhoto: true,
   });
+
+  const selectedEffectLabel =
+    illustrationChoices.find((item) => item.id === options.illustration)
+      ?.label || "Bulles et lignes";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
@@ -491,22 +650,47 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
         </div>
 
         <div
-          className="rounded-[2rem] p-5 ring-1 ring-[#EFE4D6]"
+          className="relative overflow-hidden rounded-[2rem] p-5 ring-1 ring-[#EFE4D6]"
           style={{ backgroundColor: options.backgroundColor }}
         >
-          <div className="rounded-[1.5rem] bg-white/70 p-5">
+          {options.illustration !== "none" && (
+            <>
+              {(options.illustration === "mixed" ||
+                options.illustration === "soft-circles") && (
+                <>
+                  <div className="absolute -right-8 top-8 h-28 w-28 rounded-full bg-white/50" />
+                  <div className="absolute -left-6 bottom-10 h-24 w-24 rounded-full bg-white/45" />
+                  <div className="absolute bottom-20 right-16 h-12 w-12 rounded-full bg-white/40" />
+                </>
+              )}
+
+              {(options.illustration === "mixed" ||
+                options.illustration === "playful-lines") && (
+                <>
+                  <div className="absolute left-8 top-12 h-24 w-40 rounded-[50%] border-t-4 border-white/60" />
+                  <div className="absolute bottom-16 right-8 h-24 w-40 rounded-[50%] border-b-4 border-white/60" />
+                </>
+              )}
+
+              {(options.illustration === "mixed" ||
+                options.illustration === "dots") && (
+                <>
+                  <div className="absolute left-10 bottom-36 h-3 w-3 rounded-full bg-white/80" />
+                  <div className="absolute left-20 bottom-28 h-2 w-2 rounded-full bg-white/70" />
+                  <div className="absolute right-24 top-24 h-3 w-3 rounded-full bg-white/80" />
+                  <div className="absolute right-14 top-36 h-2 w-2 rounded-full bg-white/70" />
+                </>
+              )}
+            </>
+          )}
+
+          <div className="relative rounded-[1.5rem] bg-white/75 p-5">
             <div className="flex items-center justify-between gap-3">
               <Quote className="h-7 w-7 text-[#D99AB9]" />
 
-              {options.illustration !== "none" ? (
-                <span className="text-3xl">
-                  {
-                    illustrationChoices.find(
-                      (item) => item.id === options.illustration
-                    )?.icon
-                  }
-                </span>
-              ) : null}
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-[#B8819C]">
+                Effet : {selectedEffectLabel}
+              </span>
             </div>
 
             {options.includeChildPhoto && phrase.childPhoto ? (
@@ -530,6 +714,12 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
                 {formatDate(phrase.date)}
               </span>
             </div>
+
+            {phrase.childAgeAtSituation ? (
+              <p className="mt-3 text-center text-xs font-bold text-[#746F64]">
+                Âge au moment : {phrase.childAgeAtSituation}
+              </p>
+            ) : null}
 
             <div className="mt-6 border-t border-white/70 pt-4">
               <p className="text-xs font-black text-[#8FA173]">
@@ -577,7 +767,9 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
           </div>
 
           <div>
-            <p className="text-sm font-black text-[#55534C]">Illustration</p>
+            <p className="text-sm font-black text-[#55534C]">
+              Effets arrière-plan
+            </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
               {illustrationChoices.map((illustration) => (
@@ -596,7 +788,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
                       : "bg-white text-[#746F64] ring-[#EFE4D6]"
                   }`}
                 >
-                  {illustration.icon} {illustration.label}
+                  {illustration.label}
                 </button>
               ))}
             </div>
@@ -641,16 +833,22 @@ export default function MemorablePhrases({ children = [], onBack }) {
       id: String(child.id || child.name),
       name: displayChildName(child),
       photo: child.photo || "",
+      birthDate: child.birthDate || "",
     }));
   }, [children]);
 
-  const [phrases, setPhrases] = useState([
+  const [phrases, setPhrases] = useState(() => [
     {
       id: "phrase-1",
       phrase: "Papa, les nuages c’est du coton pour les anges!",
-      childId: childOptions?.[0]?.id || "leo",
+      childId: childOptions?.[0]?.id || "loan",
       childName: childOptions?.[0]?.name || "Loan",
       childPhoto: childOptions?.[0]?.photo || "",
+      childBirthDate: childOptions?.[0]?.birthDate || "",
+      childAgeAtSituation: calculateAgeAtDate(
+        childOptions?.[0]?.birthDate,
+        "2025-12-04"
+      ),
       date: "2025-12-04",
       context: "",
       favorite: false,
@@ -663,6 +861,11 @@ export default function MemorablePhrases({ children = [], onBack }) {
       childId: childOptions?.[1]?.id || "nora",
       childName: childOptions?.[1]?.name || "Nora",
       childPhoto: childOptions?.[1]?.photo || "",
+      childBirthDate: childOptions?.[1]?.birthDate || "",
+      childAgeAtSituation: calculateAgeAtDate(
+        childOptions?.[1]?.birthDate,
+        "2025-08-03"
+      ),
       date: "2025-08-03",
       context: "",
       favorite: false,
@@ -751,13 +954,20 @@ export default function MemorablePhrases({ children = [], onBack }) {
       (child) => String(child.id) === String(formData.childId)
     );
 
+    const situationDate = formData.date || getTodayDate();
+
     const newPhrase = {
       id: `phrase-${Date.now()}`,
       phrase: cleanedPhrase,
       childId: formData.childId,
       childName: selectedChild?.name || "Non précisé",
       childPhoto: selectedChild?.photo || "",
-      date: formData.date || getTodayDate(),
+      childBirthDate: selectedChild?.birthDate || "",
+      childAgeAtSituation: calculateAgeAtDate(
+        selectedChild?.birthDate,
+        situationDate
+      ),
+      date: situationDate,
       context: formData.context.trim(),
       favorite: false,
       photoUrl: formData.photoUrl,
@@ -799,7 +1009,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
         type: "image/png",
       });
 
-      const text = `Phrase mémorable créée avec Camelio · camelio.app`;
+      const text = "Phrase mémorable créée avec Camelio · camelio.app";
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
@@ -814,9 +1024,11 @@ export default function MemorablePhrases({ children = [], onBack }) {
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
+
       link.href = url;
       link.download = "phrase-camelio.png";
       link.click();
+
       URL.revokeObjectURL(url);
 
       setShareMessage(
@@ -925,18 +1137,12 @@ export default function MemorablePhrases({ children = [], onBack }) {
               onChange={(event) => setSelectedMonthFilter(event.target.value)}
             >
               <option value="all">Tous les mois</option>
-              <option value="01">Janvier</option>
-              <option value="02">Février</option>
-              <option value="03">Mars</option>
-              <option value="04">Avril</option>
-              <option value="05">Mai</option>
-              <option value="06">Juin</option>
-              <option value="07">Juillet</option>
-              <option value="08">Août</option>
-              <option value="09">Septembre</option>
-              <option value="10">Octobre</option>
-              <option value="11">Novembre</option>
-              <option value="12">Décembre</option>
+
+              {monthOptions.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
             </select>
 
             <select
@@ -1022,6 +1228,12 @@ export default function MemorablePhrases({ children = [], onBack }) {
                         {formatDate(item.date)}
                       </span>
                     </div>
+
+                    {item.childAgeAtSituation ? (
+                      <p className="mt-3 text-xs font-bold text-[#8A8378]">
+                        Âge au moment : {item.childAgeAtSituation}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex shrink-0 flex-col gap-2">
