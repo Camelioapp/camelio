@@ -1174,6 +1174,61 @@ app.get(
   }
 );
 
+app.get(
+  "/api/subscription/invoices",
+  requireAuth,
+  validateStripeConfig,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const subscriptionResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: "SUBSCRIPTION",
+          },
+        })
+      );
+
+      const subscription = subscriptionResult.Item || null;
+
+      if (!subscription?.stripeCustomerId) {
+        return res.json({
+          invoices: [],
+          message: "Aucun client Stripe trouvé pour ce compte.",
+        });
+      }
+
+      const stripeInvoices = await stripe.invoices.list({
+        customer: subscription.stripeCustomerId,
+        limit: 20,
+      });
+
+      const invoices = (stripeInvoices.data || []).map((invoice) => ({
+        id: invoice.id,
+        number: invoice.number || invoice.id,
+        status: invoice.status || "unknown",
+        amountPaid: invoice.amount_paid || 0,
+        amountDue: invoice.amount_due || 0,
+        amountRemaining: invoice.amount_remaining || 0,
+        currency: invoice.currency || "cad",
+        createdAt: invoice.created
+          ? new Date(invoice.created * 1000).toISOString()
+          : null,
+        hostedInvoiceUrl: invoice.hosted_invoice_url || "",
+        invoicePdf: invoice.invoice_pdf || "",
+      }));
+
+      return res.json({
+        invoices,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 app.post(
   "/api/subscription/sync-checkout",
   requireAuth,

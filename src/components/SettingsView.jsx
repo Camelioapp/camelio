@@ -198,6 +198,12 @@ export default function SettingsView({
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState("");
 
+  const [subscriptionInvoices, setSubscriptionInvoices] = useState([]);
+  const [subscriptionInvoicesLoading, setSubscriptionInvoicesLoading] =
+    useState(false);
+  const [subscriptionInvoicesError, setSubscriptionInvoicesError] =
+    useState("");
+
   const displayedUserId = useMemo(() => {
     const cleanUserId = String(parentProfile.userId || "")
       .replace(/\D/g, "")
@@ -403,6 +409,34 @@ export default function SettingsView({
       );
     } finally {
       setSubscriptionActionLoading(false);
+    }
+  };
+
+  const loadSubscriptionInvoices = async () => {
+    try {
+      setSubscriptionInvoicesLoading(true);
+      setSubscriptionInvoicesError("");
+
+      const response = await fetch(`${API_BASE_URL}/api/subscription/invoices`, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || data.error || "Impossible de charger les factures."
+        );
+      }
+
+      setSubscriptionInvoices(data.invoices || []);
+    } catch (error) {
+      setSubscriptionInvoicesError(
+        error.message || "Une erreur est survenue lors du chargement."
+      );
+    } finally {
+      setSubscriptionInvoicesLoading(false);
     }
   };
 
@@ -970,6 +1004,140 @@ export default function SettingsView({
       </DropdownSection>
 
       <DropdownSection
+        id="subscription-invoices"
+        title="Factures d’abonnement"
+        description="Consulter les factures générées pour votre abonnement."
+        icon={FileText}
+        iconColor="#D8B77F"
+        openSection={openMainSection}
+        setOpenSection={(sectionId) => {
+          setOpenMainSection(sectionId);
+
+          if (sectionId === "subscription-invoices") {
+            loadSubscriptionInvoices();
+          }
+        }}
+      >
+        <div className="space-y-4">
+          <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#D8B77F] text-white shadow-sm">
+                <FileText className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-[#55534C]">
+                  Factures d’abonnement
+                </p>
+
+                <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                  Retrouvez ici les factures générées pour votre abonnement
+                  Camelio. Les factures sont disponibles lorsqu’un paiement ou
+                  une période d’abonnement a été créé.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadSubscriptionInvoices}
+              disabled={subscriptionInvoicesLoading}
+              className="mt-4 w-full rounded-2xl bg-[#D8B77F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#C9A86F] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {subscriptionInvoicesLoading
+                ? "Chargement des factures..."
+                : "Actualiser les factures"}
+            </button>
+          </div>
+
+          {subscriptionInvoicesError && (
+            <div className="rounded-2xl bg-[#F8E1E1] px-4 py-3 text-sm font-bold text-[#9A4F4F] ring-1 ring-[#E8B8B8]">
+              {subscriptionInvoicesError}
+            </div>
+          )}
+
+          {!subscriptionInvoicesLoading && subscriptionInvoices.length === 0 && (
+            <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-white p-4">
+              <p className="font-bold text-[#55534C]">
+                Aucune facture disponible
+              </p>
+
+              <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                Aucune facture n’est disponible pour le moment. Les factures
+                apparaîtront ici lorsqu’elles seront générées par l’abonnement.
+              </p>
+            </div>
+          )}
+
+          {subscriptionInvoices.length > 0 && (
+            <div className="space-y-3">
+              {subscriptionInvoices.map((invoice) => {
+                const amount = new Intl.NumberFormat("fr-CA", {
+                  style: "currency",
+                  currency: String(invoice.currency || "cad").toUpperCase(),
+                }).format((invoice.amountPaid || invoice.amountDue || 0) / 100);
+
+                const createdDate = invoice.createdAt
+                  ? new Intl.DateTimeFormat("fr-CA", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    }).format(new Date(invoice.createdAt))
+                  : "Date non disponible";
+
+                return (
+                  <div
+                    key={invoice.id}
+                    className="rounded-[1.5rem] border border-[#EFE4D6] bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-bold text-[#55534C]">
+                          Facture {invoice.number}
+                        </p>
+
+                        <p className="mt-1 text-sm text-[#746F64]">
+                          {createdDate} · {amount}
+                        </p>
+
+                        <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#A8A096]">
+                          Statut : {invoice.status || "non disponible"}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        {invoice.hostedInvoiceUrl && (
+                          <a
+                            href={invoice.hostedInvoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-2xl bg-[#55534C] px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-[#3F3D38]"
+                          >
+                            Voir la facture
+                          </a>
+                        )}
+
+                        {invoice.invoicePdf && (
+                          <a
+                            href={invoice.invoicePdf}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-2xl bg-[#FFF8EC] px-4 py-3 text-center text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6] transition hover:bg-[#F8EBD8]"
+                          >
+                            Télécharger PDF
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </DropdownSection>
+
+      <DropdownSection
         id="account"
         title="Compte"
         description="Options du compte, déconnexion et suppression."
@@ -1021,9 +1189,10 @@ export default function SettingsView({
                 </p>
 
                 <p className="mt-1 text-sm leading-relaxed text-[#8F4F4F]">
-                  Cette action supprimera définitivement les données associées à votre compte, 
-                  les fichiers enregistrés et l’accès à votre compte de connexion. 
-                  Une fois la suppression confirmée, il ne sera plus possible de récupérer ces informations.
+                  Cette action supprimera définitivement les données associées à
+                  votre compte, les fichiers enregistrés et l’accès à votre
+                  compte de connexion. Une fois la suppression confirmée, il ne
+                  sera plus possible de récupérer ces informations.
                 </p>
               </div>
             </div>
@@ -1262,9 +1431,10 @@ export default function SettingsView({
                 </h3>
 
                 <p className="mt-2 text-sm leading-relaxed text-[#5F5A50]">
-                  Cette action est permanente. Elle supprimera les informations
-                  du compte dans DynamoDB, les fichiers liés dans S3 et le compte
-                  Cognito utilisé pour la connexion.
+                  Cette action est permanente. Elle supprimera définitivement
+                  les données associées à votre compte, les fichiers enregistrés
+                  et l’accès à votre compte de connexion. Une fois confirmée,
+                  cette suppression n’est pas réversible.
                 </p>
               </div>
 
