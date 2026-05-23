@@ -141,36 +141,68 @@ function getInitials(child) {
   return initials || "";
 }
 
-export default function Dashboard() {
+export default function Dashboard({
+  parentProfile: parentProfileFromApp = {
+    name: "",
+    email: "",
+    phone: "",
+    userId: "",
+  },
+  setParentProfile: setParentProfileFromApp = () => {},
+}) {
   const [activeSection, setActiveSection] = useState("home");
   const [viewMode, setViewMode] = useState("grid");
   const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false);
 
-  useEffect(() => {
-  const checkSubscription = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/subscription`, {
-        method: "GET",
-        credentials: "include",
+  const parentProfile = parentProfileFromApp;
+
+  const setParentProfile = (updatedProfile) => {
+    if (typeof updatedProfile === "function") {
+      setParentProfileFromApp((current) => {
+        const nextProfile = updatedProfile(current);
+
+        return {
+          ...current,
+          ...nextProfile,
+          userId: current.userId || nextProfile.userId || "",
+        };
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error("Erreur vérification abonnement:", data);
-        setShowSubscriptionPopup(true);
-        return;
-      }
-
-      setShowSubscriptionPopup(!data.hasAccess);
-    } catch (error) {
-      console.error("Erreur vérification abonnement:", error);
-      setShowSubscriptionPopup(true);
+      return;
     }
+
+    setParentProfileFromApp((current) => ({
+      ...current,
+      ...updatedProfile,
+      userId: current.userId || updatedProfile.userId || "",
+    }));
   };
 
-  checkSubscription();
-}, []);
+  useEffect(() => {
+    const checkSubscription = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/subscription`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error("Erreur vérification abonnement:", data);
+          setShowSubscriptionPopup(true);
+          return;
+        }
+
+        setShowSubscriptionPopup(!data.hasAccess);
+      } catch (error) {
+        console.error("Erreur vérification abonnement:", error);
+        setShowSubscriptionPopup(true);
+      }
+    };
+
+    checkSubscription();
+  }, []);
 
   const defaultSectionOrder = useMemo(() => {
     return sections
@@ -261,12 +293,6 @@ export default function Dashboard() {
       fileUrl: "",
     },
   ]);
-
-  const [parentProfile, setParentProfile] = useState({
-    name: "",
-    email: "",
-    phone: "",
-  });
 
   useEffect(() => {
     const loadChildren = async () => {
