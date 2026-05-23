@@ -329,6 +329,7 @@ function cleanChildPayload(body = {}) {
     avatar: body.avatar || "",
     photo: body.photo || body.avatar || "",
     image: body.image || body.avatar || body.photo || "",
+    avatarS3Key: body.avatarS3Key || "",
     photoPosition: body.photoPosition || {
       x: 50,
       y: 50,
@@ -938,7 +939,7 @@ app.put(
             SK: `CHILD#${childId}`,
           },
           UpdateExpression:
-            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, updatedAt = :updatedAt",
+            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, avatarS3Key = :avatarS3Key, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, updatedAt = :updatedAt",
           ExpressionAttributeNames: {
             "#image": "image",
           },
@@ -952,6 +953,7 @@ app.put(
             ":avatar": payload.avatar,
             ":photo": payload.photo,
             ":image": payload.image,
+            ":avatarS3Key": payload.avatarS3Key,
             ":photoPosition": payload.photoPosition,
             ":photoZoom": payload.photoZoom,
             ":notes": payload.notes,
@@ -1528,8 +1530,9 @@ app.delete(
 );
 
 /* =========================
-   Photos
+   Avatars
    ========================= */
+
 app.post(
   "/api/uploads/avatar",
   requireAuth,
@@ -1562,35 +1565,30 @@ app.post(
 
       const s3Key = `users/${ownerId}/children/${safeChildId}/avatars/${avatarId}-${cleanFileName}`;
 
-      const command = new PutObjectCommand({
+      const uploadCommand = new PutObjectCommand({
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
         ContentType: fileType,
       });
 
-      const downloadUrl = await getSignedUrl(
-  s3,
-  new GetObjectCommand({
-    Bucket: S3_DOCUMENTS_BUCKET,
-    Key: s3Key,
-  }),
-  {
-    expiresIn: 3600,
-  }
-);
+      const uploadUrl = await getSignedUrl(s3, uploadCommand, {
+        expiresIn: 300,
+      });
 
-res.json({
-  success: true,
-  avatarId,
-  uploadUrl,
-  downloadUrl,
-  s3Key,
-});
+      const downloadCommand = new GetObjectCommand({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Key: s3Key,
+      });
 
-      res.json({
+      const downloadUrl = await getSignedUrl(s3, downloadCommand, {
+        expiresIn: 3600,
+      });
+
+      return res.json({
         success: true,
         avatarId,
         uploadUrl,
+        downloadUrl,
         s3Key,
       });
     } catch (error) {
@@ -1598,6 +1596,10 @@ res.json({
     }
   }
 );
+
+/* =========================
+   Photos
+   ========================= */
 
 app.post(
   "/api/photos/presign",

@@ -1,6 +1,3 @@
-// À utiliser avec une route backend POST /api/uploads/avatar
-// qui retourne { url: "https://..." }
-
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Baby,
@@ -452,6 +449,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     sex: "Garçon",
     color: "sage",
     photo: "",
+    avatar: "",
+    avatarS3Key: "",
     photoPosition: defaultPhotoPosition,
     photoZoom: 1,
   });
@@ -477,42 +476,42 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   };
 
   const uploadAvatarToS3 = async (file, childId = "general") => {
-  const presignResponse = await fetch(`${API_BASE_URL}/api/uploads/avatar`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      fileName: file.name,
-      fileType: file.type,
-      childId,
-    }),
-  });
+    const presignResponse = await fetch(`${API_BASE_URL}/api/uploads/avatar`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type,
+        childId,
+      }),
+    });
 
-  const presignData = await presignResponse.json();
+    const presignData = await presignResponse.json();
 
-  if (!presignResponse.ok) {
-    throw new Error(presignData.message || "Erreur préparation upload S3");
-  }
+    if (!presignResponse.ok) {
+      throw new Error(presignData.message || "Erreur préparation upload S3");
+    }
 
-  const uploadResponse = await fetch(presignData.uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type,
-    },
-    body: file,
-  });
+    const uploadResponse = await fetch(presignData.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type,
+      },
+      body: file,
+    });
 
-  if (!uploadResponse.ok) {
-    throw new Error("Erreur upload fichier vers S3");
-  }
+    if (!uploadResponse.ok) {
+      throw new Error("Erreur upload fichier vers S3");
+    }
 
-  return {
-    s3Key: presignData.s3Key,
-    avatarUrl: presignData.downloadUrl || presignData.url || "",
+    return {
+      s3Key: presignData.s3Key,
+      avatarUrl: presignData.downloadUrl || presignData.url || "",
+    };
   };
-};
 
   const getAgeFromBirthDate = (birthDate) => {
     if (!birthDate || birthDate === "À compléter") return "À compléter";
@@ -536,6 +535,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   const formatChildFromServer = (child) => {
     const firstName = child.firstName || "";
     const nickname = child.nickname || firstName || "Enfant";
+    const photo = child.avatar || child.photo || child.image || "";
 
     return {
       ...child,
@@ -549,9 +549,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       gender: child.gender || child.sex || "",
       color: child.color || "sage",
       age: getAgeFromBirthDate(child.birthDate),
-      photo: child.avatar || child.photo || child.image || "",
-      image: child.avatar || child.photo || child.image || "",
-      avatar: child.avatar || child.photo || child.image || "",
+      photo,
+      image: photo,
+      avatar: photo,
+      avatarS3Key: child.avatarS3Key || "",
       photoPosition: normalizePhotoPosition(child.photoPosition),
       photoZoom: child.photoZoom || 1,
       profileNote: child.notes || child.profileNote || "",
@@ -622,14 +623,22 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     try {
       const uploadedAvatar = await uploadAvatarToS3(file, "new");
 
-setNewChild((current) => ({
-  ...current,
-  photo: uploadedAvatar.avatarUrl,
-  avatar: uploadedAvatar.avatarUrl,
-  avatarS3Key: uploadedAvatar.s3Key,
-  photoPosition: defaultPhotoPosition,
-  photoZoom: 1,
-}));
+      setPreviewPhoto(uploadedAvatar.avatarUrl);
+
+      setNewChild((current) => ({
+        ...current,
+        photo: uploadedAvatar.avatarUrl,
+        avatar: uploadedAvatar.avatarUrl,
+        avatarS3Key: uploadedAvatar.s3Key,
+        photoPosition: defaultPhotoPosition,
+        photoZoom: 1,
+      }));
+    } catch (error) {
+      console.error("Upload S3 impossible, conservation locale:", error);
+    } finally {
+      event.target.value = "";
+    }
+  };
 
   const handlePhotoChange = async (childId, event) => {
     const file = event.target.files?.[0];
@@ -661,14 +670,14 @@ setNewChild((current) => ({
     try {
       const uploadedAvatar = await uploadAvatarToS3(file, childId);
 
-const s3Update = {
-  photo: uploadedAvatar.avatarUrl,
-  image: uploadedAvatar.avatarUrl,
-  avatar: uploadedAvatar.avatarUrl,
-  avatarS3Key: uploadedAvatar.s3Key,
-  photoPosition: defaultPhotoPosition,
-  photoZoom: 1,
-};
+      const s3Update = {
+        photo: uploadedAvatar.avatarUrl,
+        image: uploadedAvatar.avatarUrl,
+        avatar: uploadedAvatar.avatarUrl,
+        avatarS3Key: uploadedAvatar.s3Key,
+        photoPosition: defaultPhotoPosition,
+        photoZoom: 1,
+      };
 
       setChildren((current) =>
         current.map((child) =>
@@ -684,6 +693,8 @@ const s3Update = {
       }
     } catch (error) {
       console.error("Upload S3 impossible, conservation locale:", error);
+    } finally {
+      event.target.value = "";
     }
   };
 
@@ -696,6 +707,8 @@ const s3Update = {
       sex: "Garçon",
       color: "sage",
       photo: "",
+      avatar: "",
+      avatarS3Key: "",
       photoPosition: defaultPhotoPosition,
       photoZoom: 1,
     });
@@ -734,6 +747,9 @@ const s3Update = {
           gender: newChild.sex || "",
           color: selectedColor.id,
           avatar: newChild.photo || "",
+          photo: newChild.photo || "",
+          image: newChild.photo || "",
+          avatarS3Key: newChild.avatarS3Key || "",
           photoPosition: newChild.photoPosition || defaultPhotoPosition,
           photoZoom: newChild.photoZoom || 1,
           notes: "",
@@ -754,6 +770,9 @@ const s3Update = {
           ...data.child,
           nickname,
           avatar: newChild.photo || "",
+          photo: newChild.photo || "",
+          image: newChild.photo || "",
+          avatarS3Key: newChild.avatarS3Key || "",
           photoPosition: newChild.photoPosition || defaultPhotoPosition,
           photoZoom: newChild.photoZoom || 1,
         }),
@@ -785,6 +804,9 @@ const s3Update = {
     const nickname =
       selectedChild.nickname?.trim() || firstName || selectedChild.name || "";
 
+    const photo =
+      selectedChild.avatar || selectedChild.photo || selectedChild.image || "";
+
     const payload = {
       firstName,
       lastName: selectedChild.lastName || "",
@@ -795,8 +817,10 @@ const s3Update = {
           : "",
       gender: selectedChild.sex || selectedChild.gender || "",
       color: selectedChild.color || "sage",
-      avatar:
-        selectedChild.avatar || selectedChild.photo || selectedChild.image || "",
+      avatar: photo,
+      photo,
+      image: photo,
+      avatarS3Key: selectedChild.avatarS3Key || "",
       photoPosition: selectedChild.photoPosition || defaultPhotoPosition,
       photoZoom: selectedChild.photoZoom || 1,
       notes: selectedChild.profileNote || selectedChild.notes || "",
@@ -832,6 +856,9 @@ const s3Update = {
                 ...data.child,
                 nickname,
                 avatar: payload.avatar,
+                photo: payload.photo,
+                image: payload.image,
+                avatarS3Key: payload.avatarS3Key,
                 photoPosition: payload.photoPosition,
                 photoZoom: payload.photoZoom,
               })
@@ -949,6 +976,7 @@ const s3Update = {
                   ...current,
                   photo: url,
                   avatar: url,
+                  avatarS3Key: "",
                   photoPosition: defaultPhotoPosition,
                   photoZoom: 1,
                 }));
@@ -1083,7 +1111,7 @@ const s3Update = {
       {children.length > 0 && (
         <div className="grid gap-5 md:grid-cols-2">
           {children.map((child) => {
-            const photo = child.photo || child.image || "";
+            const photo = child.photo || child.image || child.avatar || "";
 
             return (
               <article
@@ -1189,6 +1217,7 @@ const s3Update = {
                   photo: url,
                   image: url,
                   avatar: url,
+                  avatarS3Key: "",
                   photoPosition: defaultPhotoPosition,
                   photoZoom: 1,
                 }))
