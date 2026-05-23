@@ -561,13 +561,13 @@ export default function Dashboard({
                                 key={child.id || child.name}
                                 type="button"
                                 onClick={() => openSection("children")}
-                                className={`group relative flex w-[104px] shrink-0 snap-center flex-col items-center sm:w-[132px] md:w-auto ${
+                                className={`group relative isolate flex w-[104px] shrink-0 snap-center flex-col items-center sm:w-[132px] md:w-auto ${
                                   index === 0 ? "" : "md:-ml-7"
                                 }`}
                                 style={{ zIndex: children.length + index }}
                               >
                                 <div
-                                  className="flex h-[108px] w-[108px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_12px_24px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+                                  className="relative z-10 flex h-[108px] w-[108px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_12px_24px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
                                   style={{
                                     backgroundColor: childTheme.soft,
                                     color: childTheme.text,
@@ -589,12 +589,12 @@ export default function Dashboard({
                                 </div>
 
                                 <div
-                                  className="-mt-4 max-w-[108px] rounded-[16px] px-4 py-2 text-center text-sm font-semibold text-white shadow-sm transition group-hover:brightness-95 sm:max-w-[132px] sm:text-base md:-mt-5 md:min-w-[120px] md:text-xl"
+                                  className="relative z-30 -mt-4 max-w-[108px] rounded-[16px] px-4 py-2 text-center text-sm font-semibold text-white shadow-sm transition group-hover:brightness-95 sm:max-w-[132px] sm:text-base md:-mt-5 md:min-w-[120px] md:text-xl"
                                   style={{
                                     backgroundColor: childTheme.dot,
                                   }}
                                 >
-                                  <span className="block truncate">
+                                  <span className="relative z-40 block truncate">
                                     {child.name}
                                   </span>
                                 </div>
