@@ -545,19 +545,19 @@ export default function SettingsView({
             />
           </Field>
 
-          <Field label="Courriel">
+                    <Field label="Courriel">
             <input
               type="email"
-              className={inputClass}
-              value={parentProfile.email}
-              onChange={(event) =>
-                setParentProfile({
-                  ...parentProfile,
-                  email: event.target.value,
-                })
-              }
-              placeholder="Ex. nom@email.com"
+              className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
+              value={parentProfile.email || "Non disponible"}
+              readOnly
+              placeholder="Non disponible"
             />
+
+            <p className="mt-2 text-xs leading-relaxed text-[#8A8378]">
+              Ce courriel est lié au compte de connexion et ne peut pas être
+              modifié ici.
+            </p>
           </Field>
 
           <Field label="Téléphone">
