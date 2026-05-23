@@ -322,11 +322,19 @@ function cleanChildPayload(body = {}) {
   return {
     firstName: body.firstName || "",
     lastName: body.lastName || "",
+    nickname: body.nickname || "",
     birthDate: body.birthDate || "",
-    gender: body.gender || "",
-    color: body.color || "#8B5CF6",
+    gender: body.gender || body.sex || "",
+    color: body.color || "sage",
     avatar: body.avatar || "",
-    notes: body.notes || "",
+    photo: body.photo || body.avatar || "",
+    image: body.image || body.avatar || body.photo || "",
+    photoPosition: body.photoPosition || {
+      x: 50,
+      y: 50,
+    },
+    photoZoom: Number(body.photoZoom) || 1,
+    notes: body.notes || body.profileNote || "",
   };
 }
 
@@ -930,14 +938,22 @@ app.put(
             SK: `CHILD#${childId}`,
           },
           UpdateExpression:
-            "SET firstName = :firstName, lastName = :lastName, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, notes = :notes, updatedAt = :updatedAt",
+            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#image": "image",
+          },
           ExpressionAttributeValues: {
             ":firstName": payload.firstName,
             ":lastName": payload.lastName,
+            ":nickname": payload.nickname,
             ":birthDate": payload.birthDate,
             ":gender": payload.gender,
             ":color": payload.color,
             ":avatar": payload.avatar,
+            ":photo": payload.photo,
+            ":image": payload.image,
+            ":photoPosition": payload.photoPosition,
+            ":photoZoom": payload.photoZoom,
             ":notes": payload.notes,
             ":updatedAt": now,
           },
@@ -1514,6 +1530,59 @@ app.delete(
 /* =========================
    Photos
    ========================= */
+app.post(
+  "/api/uploads/avatar",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const { fileName, fileType, childId } = req.body;
+
+      if (!fileName || !fileType) {
+        return res.status(400).json({
+          error: "missing_fields",
+          message: "fileName et fileType sont requis.",
+        });
+      }
+
+      const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+
+      if (!allowedTypes.includes(fileType)) {
+        return res.status(400).json({
+          error: "invalid_file_type",
+          message: "Ce type d’image n’est pas autorisé.",
+        });
+      }
+
+      const ownerId = getOwnerId(req);
+      const avatarId = randomUUID();
+      const cleanFileName = sanitizeFileName(fileName);
+      const safeChildId = childId || "general";
+
+      const s3Key = `users/${ownerId}/children/${safeChildId}/avatars/${avatarId}-${cleanFileName}`;
+
+      const command = new PutObjectCommand({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Key: s3Key,
+        ContentType: fileType,
+      });
+
+      const uploadUrl = await getSignedUrl(s3, command, {
+        expiresIn: 300,
+      });
+
+      res.json({
+        success: true,
+        avatarId,
+        uploadUrl,
+        s3Key,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 app.post(
   "/api/photos/presign",

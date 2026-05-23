@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Camera,
   CalendarDays,
@@ -52,6 +52,12 @@ const features = [
     bgColor: `${brand.blue}24`,
     iconColor: brand.blue,
   },
+];
+
+const phoneImages = [
+  "/cellulaire_camelio.png",
+  "/cellulaire_camelio2.png",
+  "/cellulaire_camelio3.png",
 ];
 
 export default function LandingPage() {
@@ -162,30 +168,30 @@ export default function LandingPage() {
             </div>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="relative z-10 mx-auto mt-3 w-full max-w-[360px] sm:mt-6 sm:max-w-[390px] lg:mt-0 lg:max-w-[460px]"
-          >
-            <div className="relative flex w-full flex-col items-center justify-center">
-              <PhoneMockup />
+         <motion.div
+  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+  animate={{ opacity: 1, scale: 1, y: 0 }}
+  transition={{ duration: 0.6, delay: 0.1 }}
+  className="relative z-10 mx-auto mt-3 flex w-full justify-center sm:mt-6 lg:mt-0"
+>
+  <div className="relative flex w-full flex-col items-center justify-center">
+    <PhoneMockup />
 
-              <div className="relative z-30 mt-8 flex w-full justify-center px-4 sm:mt-10 lg:mt-12">
-                <a
-                  id="commencer"
-                  href="https://camelio.app"
-                  className="flex w-full max-w-[300px] items-center justify-center rounded-full px-6 py-4 text-center text-sm font-black text-white shadow-2xl transition hover:-translate-y-0.5 hover:shadow-xl sm:max-w-[350px] sm:text-base"
-                  style={{
-                    backgroundColor: brand.green,
-                    boxShadow: "0 18px 38px rgba(168, 177, 147, 0.45)",
-                  }}
-                >
-                  Essayez Camelio gratuitement
-                </a>
-              </div>
-            </div>
-          </motion.div>
+    <div className="relative z-30 mt-8 flex w-full justify-center px-4 sm:mt-10 lg:mt-12">
+      <a
+        id="commencer"
+        href="https://camelio.app"
+        className="flex w-full max-w-[300px] items-center justify-center rounded-full px-6 py-4 text-center text-sm font-black text-white shadow-2xl transition hover:-translate-y-0.5 hover:shadow-xl sm:max-w-[350px] sm:text-base"
+        style={{
+          backgroundColor: brand.green,
+          boxShadow: "0 18px 38px rgba(168, 177, 147, 0.45)",
+        }}
+      >
+        Essayez Camelio gratuitement
+      </a>
+    </div>
+  </div>
+</motion.div>
         </section>
 
         <section
@@ -387,32 +393,61 @@ export default function LandingPage() {
 }
 
 function PhoneMockup() {
-  const phoneImages = [
-    "/cellulaire_camelio.png",
-    "/cellulaire_camelio2.png",
-    "/cellulaire_camelio3.png",
-  ];
-
   const [activeIndex, setActiveIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
 
   useEffect(() => {
     const interval = setInterval(() => {
+      setDirection(1);
       setActiveIndex((currentIndex) =>
         currentIndex === phoneImages.length - 1 ? 0 : currentIndex + 1
       );
-    }, 3500);
+    }, 4200);
 
     return () => clearInterval(interval);
-  }, [phoneImages.length]);
+  }, []);
+
+  const goToImage = (index) => {
+    if (index === activeIndex) return;
+
+    setDirection(index > activeIndex ? 1 : -1);
+    setActiveIndex(index);
+  };
 
   return (
-    <div className="relative z-10 mx-auto w-[285px] bg-transparent p-0 sm:w-[350px] lg:w-[380px]">
-      <div className="relative overflow-hidden">
-        <img
-          src={phoneImages[activeIndex]}
-          alt={`Aperçu ${activeIndex + 1} de l'application Camelio`}
-          className="h-auto w-full object-contain transition-all duration-500 ease-in-out"
-        />
+    <div className="relative z-10 mx-auto w-[430px] bg-transparent p-0 sm:w-[530px] lg:w-[520px]">
+      <div className="relative min-h-[430px] overflow-hidden sm:min-h-[530px] lg:min-h-[620px]">
+        <AnimatePresence mode="wait" custom={direction}>
+          <motion.img
+            key={phoneImages[activeIndex]}
+            src={phoneImages[activeIndex]}
+            alt={`Aperçu ${activeIndex + 1} de l'application Camelio`}
+            custom={direction}
+            initial={{
+              opacity: 0,
+              x: direction > 0 ? 34 : -34,
+              scale: 0.97,
+              filter: "blur(6px)",
+            }}
+            animate={{
+              opacity: 1,
+              x: 0,
+              scale: 1,
+              filter: "blur(0px)",
+            }}
+            exit={{
+              opacity: 0,
+              x: direction > 0 ? -34 : 34,
+              scale: 0.97,
+              filter: "blur(6px)",
+            }}
+            transition={{
+              duration: 0.65,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="absolute inset-0 h-auto w-full object-contain"
+          />
+        </AnimatePresence>
       </div>
 
       <div className="mt-4 flex items-center justify-center gap-2">
@@ -420,15 +455,16 @@ function PhoneMockup() {
           <button
             key={image}
             type="button"
-            onClick={() => setActiveIndex(index)}
+            onClick={() => goToImage(index)}
             aria-label={`Afficher l'image ${index + 1}`}
             className="h-2.5 rounded-full transition-all duration-300"
             style={{
-              width: activeIndex === index ? "28px" : "10px",
+              width: activeIndex === index ? "30px" : "10px",
               backgroundColor:
                 activeIndex === index
                   ? brand.green
                   : "rgba(168, 177, 147, 0.35)",
+              opacity: activeIndex === index ? 1 : 0.75,
             }}
           />
         ))}
