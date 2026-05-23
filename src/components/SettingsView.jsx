@@ -800,16 +800,7 @@ export default function SettingsView({
               </span>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              <InfoBox
-                label="ID de l’abonnement"
-                value={
-                  subscription.stripeSubscriptionId ||
-                  subscription.subscriptionId ||
-                  "Non disponible"
-                }
-              />
-
+                        <div className="mt-5 grid gap-3 md:grid-cols-2">
               <InfoBox
                 label="Type d’abonnement"
                 value={
@@ -826,11 +817,6 @@ export default function SettingsView({
                     ? formatDate(subscription.trialEndDate)
                     : "Non applicable"
                 }
-              />
-
-              <InfoBox
-                label="Paiement"
-                value={subscription.amountLabel || "Non disponible"}
               />
 
               <InfoBox
