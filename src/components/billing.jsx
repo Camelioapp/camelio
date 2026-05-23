@@ -31,11 +31,13 @@ function ProductDisplay() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
-          data.message || data.error || "Impossible de créer la session Stripe."
+          data.message ||
+            data.error ||
+            `Impossible de créer la session Stripe. Code : ${response.status}`
         );
       }
 
@@ -99,6 +101,10 @@ function LoadingDisplay() {
 }
 
 function SuccessDisplay({ message }) {
+  const goToApp = () => {
+    window.location.href = "/";
+  };
+
   return (
     <BillingCard>
       <div className="billing-logo">✅</div>
@@ -108,9 +114,9 @@ function SuccessDisplay({ message }) {
         <p>{message}</p>
       </div>
 
-      <a className="billing-link-button" href="/">
+      <button className="billing-button" type="button" onClick={goToApp}>
         Retourner à Camelio
-      </a>
+      </button>
     </BillingCard>
   );
 }
@@ -135,7 +141,7 @@ function CanceledDisplay() {
   );
 }
 
-function ErrorDisplay({ error }) {
+function ErrorDisplay({ error, details, onRetry }) {
   return (
     <BillingCard>
       <div className="billing-logo">⚠️</div>
@@ -143,7 +149,28 @@ function ErrorDisplay({ error }) {
       <div className="billing-description">
         <h1>Synchronisation incomplète</h1>
         <p>{error}</p>
+
+        {details && (
+          <pre
+            style={{
+              marginTop: "16px",
+              padding: "12px",
+              borderRadius: "12px",
+              background: "#FFF4E8",
+              color: "#6B4E2E",
+              fontSize: "12px",
+              whiteSpace: "pre-wrap",
+              textAlign: "left",
+            }}
+          >
+            {details}
+          </pre>
+        )}
       </div>
+
+      <button className="billing-button" type="button" onClick={onRetry}>
+        Réessayer la synchronisation
+      </button>
 
       <a className="billing-link-button" href="/">
         Retourner à Camelio
@@ -156,76 +183,128 @@ export default function Billing() {
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [details, setDetails] = useState("");
+  const [sessionId, setSessionId] = useState("");
 
-  useEffect(() => {
-    const syncSubscription = async () => {
-      const query = new URLSearchParams(window.location.search);
+  const syncSubscription = async (checkoutSessionId) => {
+    if (!checkoutSessionId) {
+      setStatus("error");
+      setError("La session Stripe est manquante.");
+      setDetails("");
+      return;
+    }
 
-      if (query.get("canceled") === "true") {
-        setStatus("canceled");
-        return;
-      }
+    try {
+      setStatus("loading");
+      setError("");
+      setDetails("");
 
-      if (query.get("success") !== "true") {
-        setStatus("idle");
-        return;
-      }
+      const response = await fetch(
+        `${API_URL}/api/subscription/sync-checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            session_id: checkoutSessionId,
+          }),
+        }
+      );
 
-      const sessionId = query.get("session_id");
+      const responseText = await response.text();
 
-      if (!sessionId) {
-        setStatus("error");
-        setError("La session Stripe est manquante.");
-        return;
-      }
-
+      let data = {};
       try {
-        setStatus("loading");
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = {
+          rawResponse: responseText,
+        };
+      }
 
-        const response = await fetch(
-          `${API_URL}/api/subscription/sync-checkout`,
+      if (!response.ok) {
+        const readableDetails = JSON.stringify(
           {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              session_id: sessionId,
-            }),
-          }
+            status: response.status,
+            statusText: response.statusText,
+            response: data,
+          },
+          null,
+          2
         );
 
-        const data = await response.json();
-
-        if (!response.ok) {
+        if (response.status === 401) {
           throw new Error(
-            data.message ||
-              data.error ||
-              "Impossible de synchroniser l’abonnement."
+            `Utilisateur non connecté au backend. Code : ${response.status}\n\n${readableDetails}`
           );
         }
 
-        if (data.status === "trialing") {
-          setMessage("Votre essai gratuit de 1 mois est maintenant actif.");
-        } else if (data.status === "active") {
-          setMessage("Votre abonnement Camelio est maintenant actif.");
-        } else {
-          setMessage("Votre abonnement a été enregistré dans Camelio.");
+        if (response.status === 404) {
+          throw new Error(
+            `La route /api/subscription/sync-checkout est introuvable sur le backend. Code : ${response.status}\n\n${readableDetails}`
+          );
         }
 
-        setStatus("success");
-      } catch (err) {
-        console.error("Erreur sync abonnement:", err);
-        setStatus("error");
-        setError(
-          err.message ||
-            "L’abonnement a été créé dans Stripe, mais n’a pas été synchronisé dans Camelio."
+        throw new Error(
+          `${
+            data.message ||
+            data.error ||
+            "Impossible de synchroniser l’abonnement."
+          }\n\n${readableDetails}`
         );
       }
-    };
 
-    syncSubscription();
+      if (!data.subscription) {
+        throw new Error(
+          "Le backend a répondu avec succès, mais aucun abonnement n’a été retourné."
+        );
+      }
+
+      if (data.status === "trialing") {
+        setMessage("Votre essai gratuit de 1 mois est maintenant actif.");
+      } else if (data.status === "active") {
+        setMessage("Votre abonnement Camelio est maintenant actif.");
+      } else {
+        setMessage(
+          `Votre abonnement a été enregistré dans Camelio. Statut : ${data.status}`
+        );
+      }
+
+      setStatus("success");
+    } catch (err) {
+      console.error("Erreur sync abonnement:", err);
+
+      const fullMessage =
+        err.message ||
+        "L’abonnement a été créé dans Stripe, mais n’a pas été synchronisé dans Camelio.";
+
+      const [mainError, technicalDetails] = fullMessage.split("\n\n");
+
+      setStatus("error");
+      setError(mainError);
+      setDetails(technicalDetails || "");
+    }
+  };
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+
+    if (query.get("canceled") === "true") {
+      setStatus("canceled");
+      return;
+    }
+
+    if (query.get("success") !== "true") {
+      setStatus("idle");
+      return;
+    }
+
+    const checkoutSessionId = query.get("session_id") || "";
+    setSessionId(checkoutSessionId);
+
+    syncSubscription(checkoutSessionId);
   }, []);
 
   if (status === "loading") {
@@ -241,7 +320,13 @@ export default function Billing() {
   }
 
   if (status === "error") {
-    return <ErrorDisplay error={error} />;
+    return (
+      <ErrorDisplay
+        error={error}
+        details={details}
+        onRetry={() => syncSubscription(sessionId)}
+      />
+    );
   }
 
   return <ProductDisplay />;
