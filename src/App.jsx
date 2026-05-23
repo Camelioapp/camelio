@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import WelcomeScreen from "./components/WelcomeScreen.jsx";
 import Dashboard from "./components/Dashboard.jsx";
-import Billing from "./components/Billing.jsx";
+import Billing from "./components/billing.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
