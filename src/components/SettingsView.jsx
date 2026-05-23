@@ -191,6 +191,54 @@ export default function SettingsView({
   const [pdfModal, setPdfModal] = useState(null);
   const [showCookieModal, setShowCookieModal] = useState(false);
 
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "Non applicable";
+
+    try {
+      return new Intl.DateTimeFormat("fr-CA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }).format(new Date(dateValue));
+    } catch (error) {
+      return "Date invalide";
+    }
+  };
+
+  const getDefaultTrialEndDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date.toISOString();
+  };
+
+  const [subscription, setSubscription] = useState(() => {
+    try {
+      const savedSubscription = localStorage.getItem(
+        "camelio_subscription_status"
+      );
+
+      if (savedSubscription) return JSON.parse(savedSubscription);
+    } catch (error) {
+      console.error("Erreur lecture abonnement:", error);
+    }
+
+    const trialEndDate = getDefaultTrialEndDate();
+
+    return {
+      planName: "Camelio Famille",
+      subscriptionId: "trial_local",
+      status: "trialing",
+      billingType: "free_trial",
+      amountLabel: "Aucun paiement pendant l’essai gratuit",
+      trialEndDate,
+      nextPaymentDate: trialEndDate,
+      cancelAtPeriodEnd: false,
+      cancelEffectiveDate: null,
+    };
+  });
+
+  const [subscriptionMessage, setSubscriptionMessage] = useState("");
+
   const [cookiePreferences, setCookiePreferences] = useState(() => {
     try {
       const saved = localStorage.getItem("camelio_cookie_preferences");
@@ -235,6 +283,69 @@ export default function SettingsView({
 
     return [...visible, ...hidden];
   }, [visibleSectionIds, manageableSections]);
+
+  const saveSubscription = (updatedSubscription) => {
+    setSubscription(updatedSubscription);
+    localStorage.setItem(
+      "camelio_subscription_status",
+      JSON.stringify(updatedSubscription)
+    );
+  };
+
+  const getSubscriptionStatusLabel = () => {
+    if (subscription.cancelAtPeriodEnd) {
+      return "Annulation programmée";
+    }
+
+    if (subscription.status === "trialing") {
+      return "Essai gratuit actif";
+    }
+
+    if (subscription.status === "active") {
+      return "Abonnement payant actif";
+    }
+
+    if (subscription.status === "canceled") {
+      return "Abonnement annulé";
+    }
+
+    return "Statut inconnu";
+  };
+
+  const getSubscriptionStatusClass = () => {
+    if (subscription.cancelAtPeriodEnd) {
+      return "bg-[#FFF1D8] text-[#9A6A1F] ring-[#E8C98F]";
+    }
+
+    if (subscription.status === "active") {
+      return "bg-[#E8F3E3] text-[#4F6B42] ring-[#C9DFC0]";
+    }
+
+    if (subscription.status === "trialing") {
+      return "bg-[#EEF3FF] text-[#536B9C] ring-[#CAD8F4]";
+    }
+
+    return "bg-[#F8E1E1] text-[#9A4F4F] ring-[#E8B8B8]";
+  };
+
+  const handleCancelSubscription = () => {
+    if (subscription.cancelAtPeriodEnd) return;
+
+    const effectiveDate =
+      subscription.trialEndDate || subscription.nextPaymentDate || null;
+
+    const updatedSubscription = {
+      ...subscription,
+      cancelAtPeriodEnd: true,
+      cancelEffectiveDate: effectiveDate,
+    };
+
+    saveSubscription(updatedSubscription);
+
+    setSubscriptionMessage(
+      "Votre abonnement est maintenant programmé pour prendre fin à la fin de la période gratuite."
+    );
+  };
 
   const moveSection = (sectionId, direction) => {
     if (!setSectionOrderIds) return;
@@ -614,13 +725,124 @@ export default function SettingsView({
       <DropdownSection
         id="subscription"
         title="Abonnement"
-        description="Plan actuel et informations de facturation."
+        description="Plan actuel, période gratuite, paiement et annulation."
         icon={CreditCard}
         iconColor="#EEC988"
         openSection={openMainSection}
         setOpenSection={setOpenMainSection}
       >
-        <InfoBox label="Plan actuel" value="Gratuit" />
+        <div className="space-y-4">
+          <div className="rounded-[1.75rem] border border-[#EFE4D6] bg-[#FFFDF8] p-5 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#A8A096]">
+                  Abonnement actuel
+                </p>
+
+                <h3 className="mt-2 text-xl font-bold text-[#3F3D38]">
+                  {subscription.planName || "Camelio Famille"}
+                </h3>
+
+                <p className="mt-2 text-sm leading-relaxed text-[#746F64]">
+                  Consultez les informations de votre abonnement, la date de fin
+                  de l’essai gratuit et le prochain paiement prévu.
+                </p>
+              </div>
+
+              <span
+                className={`w-fit rounded-full px-4 py-2 text-xs font-bold ring-1 ${getSubscriptionStatusClass()}`}
+              >
+                {getSubscriptionStatusLabel()}
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <InfoBox
+                label="ID de l’abonnement"
+                value={subscription.subscriptionId || "Non disponible"}
+              />
+
+              <InfoBox
+                label="Type d’abonnement"
+                value={
+                  subscription.billingType === "free_trial"
+                    ? "Essai gratuit"
+                    : "Abonnement payant"
+                }
+              />
+
+              <InfoBox
+                label="Date de fin de l’essai gratuit"
+                value={
+                  subscription.billingType === "free_trial"
+                    ? formatDate(subscription.trialEndDate)
+                    : "Non applicable"
+                }
+              />
+
+              <InfoBox
+                label="Paiement"
+                value={subscription.amountLabel || "Non disponible"}
+              />
+
+              <InfoBox
+                label="Date du prochain paiement"
+                value={
+                  subscription.cancelAtPeriodEnd
+                    ? "Aucun paiement prévu après l’annulation"
+                    : formatDate(subscription.nextPaymentDate)
+                }
+              />
+
+              <InfoBox
+                label="Fin prévue de l’abonnement"
+                value={
+                  subscription.cancelAtPeriodEnd
+                    ? formatDate(subscription.cancelEffectiveDate)
+                    : "Non programmée"
+                }
+              />
+            </div>
+
+            {subscription.cancelAtPeriodEnd ? (
+              <div className="mt-5 rounded-[1.5rem] border border-[#E8C98F] bg-[#FFF8EA] p-4">
+                <p className="font-bold text-[#7A5A24]">
+                  Annulation programmée
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[#7A5A24]">
+                  Votre abonnement restera actif jusqu’au{" "}
+                  {formatDate(subscription.cancelEffectiveDate)}. Aucun paiement
+                  ne sera prélevé après cette date.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-5 rounded-[1.5rem] border border-[#E8D8BE] bg-white p-4">
+                <p className="font-bold text-[#3F3D38]">
+                  Annuler l’abonnement
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                  Si vous annulez pendant l’essai gratuit, l’accès restera actif
+                  jusqu’à la fin de la période gratuite. L’abonnement prendra
+                  ensuite fin automatiquement.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleCancelSubscription}
+                  className="mt-4 w-full rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F]"
+                >
+                  Annuler mon abonnement
+                </button>
+              </div>
+            )}
+
+            {subscriptionMessage && (
+              <div className="mt-4 rounded-2xl bg-[#E8F3E3] px-4 py-3 text-sm font-bold text-[#4F6B42] ring-1 ring-[#C9DFC0]">
+                {subscriptionMessage}
+              </div>
+            )}
+          </div>
+        </div>
       </DropdownSection>
 
       <DropdownSection
