@@ -1021,9 +1021,9 @@ export default function SettingsView({
                 </p>
 
                 <p className="mt-1 text-sm leading-relaxed text-[#8F4F4F]">
-                  Cette action supprimera les données associées au compte dans
-                  DynamoDB, les fichiers dans S3 et le compte de connexion
-                  Cognito. Cette action est définitive.
+                  Cette action supprimera définitivement les données associées à votre compte, 
+                  les fichiers enregistrés et l’accès à votre compte de connexion. 
+                  Une fois la suppression confirmée, il ne sera plus possible de récupérer ces informations.
                 </p>
               </div>
             </div>
