@@ -54,7 +54,11 @@ const STRIPE_PRICE_LOOKUP_KEY =
   process.env.STRIPE_PRICE_LOOKUP_KEY || "camelio_monthly_595";
 const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
 
-const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+const stripe = STRIPE_SECRET_KEY
+  ? new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: "2025-03-31.basil",
+    })
+  : null;
 
 const s3 = new S3Client({
   region: S3_REGION,
