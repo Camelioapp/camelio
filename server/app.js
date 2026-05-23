@@ -13,6 +13,7 @@ const {
   GetCommand,
   UpdateCommand,
   DeleteCommand,
+  BatchWriteCommand,
 } = require("@aws-sdk/lib-dynamodb");
 
 const {
@@ -20,7 +21,14 @@ const {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } = require("@aws-sdk/client-s3");
+
+const {
+  CognitoIdentityProviderClient,
+  AdminDeleteUserCommand,
+} = require("@aws-sdk/client-cognito-identity-provider");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { dynamo } = require("./dynamo");
@@ -42,8 +50,11 @@ const COGNITO_CLIENT_ID = process.env.COGNITO_CLIENT_ID;
 const COGNITO_CLIENT_SECRET = process.env.COGNITO_CLIENT_SECRET || undefined;
 const COGNITO_REDIRECT_URI =
   process.env.COGNITO_REDIRECT_URI || `http://localhost:${PORT}/callback`;
-const COGNITO_LOGOUT_URI = process.env.COGNITO_LOGOUT_URI || APP_URL;
+const COGNITO_LOGOUT_URI =
+  process.env.COGNITO_LOGOUT_URI || "https://camelio.app";
 const COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
+const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
+const ACCOUNT_DELETE_CONFIRMATION = "supprimer";
 
 const AWS_REGION = process.env.AWS_REGION || "us-east-2";
 const S3_REGION = process.env.S3_REGION || "ca-central-1";
@@ -62,6 +73,10 @@ const stripe = STRIPE_SECRET_KEY
 
 const s3 = new S3Client({
   region: S3_REGION,
+});
+
+const cognitoIdentityProvider = new CognitoIdentityProviderClient({
+  region: AWS_REGION,
 });
 
 let oidcClientPromise = null;
@@ -228,6 +243,24 @@ function validateStripeConfig(req, res, next) {
   return next();
 }
 
+function validateCognitoAdminConfig(req, res, next) {
+  const missing = [];
+
+  if (!process.env.COGNITO_USER_POOL_ID) {
+    missing.push("COGNITO_USER_POOL_ID");
+  }
+
+  if (missing.length > 0) {
+    return res.status(500).json({
+      error: "cognito_admin_config_missing",
+      message: "Configuration Cognito incomplète pour supprimer le compte.",
+      missing,
+    });
+  }
+
+  return next();
+}
+
 async function getClient() {
   if (!COGNITO_ISSUER || !COGNITO_CLIENT_ID) {
     throw new Error("Variables manquantes: COGNITO_ISSUER et COGNITO_CLIENT_ID.");
@@ -333,6 +366,129 @@ function sanitizeFileName(fileName = "") {
   return String(fileName)
     .replace(/\s+/g, "-")
     .replace(/[^a-zA-Z0-9._-]/g, "");
+}
+
+async function deleteAllUserDynamoItems(userPk) {
+  const allItems = [];
+  let lastEvaluatedKey;
+
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: DYNAMODB_TABLE,
+        KeyConditionExpression: "PK = :pk",
+        ExpressionAttributeValues: {
+          ":pk": userPk,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+
+    allItems.push(...(result.Items || []));
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  for (let i = 0; i < allItems.length; i += 25) {
+    const batch = allItems.slice(i, i + 25);
+
+    if (batch.length === 0) continue;
+
+    await dynamo.send(
+      new BatchWriteCommand({
+        RequestItems: {
+          [DYNAMODB_TABLE]: batch.map((item) => ({
+            DeleteRequest: {
+              Key: {
+                PK: item.PK,
+                SK: item.SK,
+              },
+            },
+          })),
+        },
+      })
+    );
+  }
+
+  return allItems;
+}
+
+async function deleteUserIdLookup(userId) {
+  const cleanUserId = String(userId || "").replace(/\D/g, "").slice(0, 7);
+
+  if (!cleanUserId) return;
+
+  await dynamo.send(
+    new DeleteCommand({
+      TableName: DYNAMODB_TABLE,
+      Key: {
+        PK: `USERID#${cleanUserId}`,
+        SK: "LOOKUP",
+      },
+    })
+  );
+}
+
+async function deleteAllUserS3Objects(ownerId) {
+  if (!S3_DOCUMENTS_BUCKET || !ownerId) return;
+
+  const prefix = `users/${ownerId}/`;
+  let continuationToken;
+
+  do {
+    const listResult = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    const objects = listResult.Contents || [];
+
+    if (objects.length > 0) {
+      await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: S3_DOCUMENTS_BUCKET,
+          Delete: {
+            Objects: objects.map((object) => ({
+              Key: object.Key,
+            })),
+            Quiet: true,
+          },
+        })
+      );
+    }
+
+    continuationToken = listResult.IsTruncated
+      ? listResult.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+}
+
+async function deleteCognitoUser(req) {
+  const possibleUsernames = [
+    req.session.user?.sub,
+    req.session.user?.email,
+  ].filter(Boolean);
+
+  let lastError = null;
+
+  for (const username of possibleUsernames) {
+    try {
+      await cognitoIdentityProvider.send(
+        new AdminDeleteUserCommand({
+          UserPoolId: COGNITO_USER_POOL_ID,
+          Username: username,
+        })
+      );
+
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Impossible de supprimer l’utilisateur Cognito.");
 }
 
 app.get("/", (req, res) => {
@@ -501,12 +657,13 @@ app.get("/me", (req, res) => {
 
 app.get("/logout", (req, res) => {
   const idToken = req.session.tokens?.id_token;
+  const logoutRedirectUrl = COGNITO_LOGOUT_URI || "https://camelio.app";
 
   req.session.destroy(() => {
     if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
       const logoutUrl = new URL(`${COGNITO_DOMAIN.replace(/\/$/, "")}/logout`);
       logoutUrl.searchParams.set("client_id", COGNITO_CLIENT_ID);
-      logoutUrl.searchParams.set("logout_uri", COGNITO_LOGOUT_URI);
+      logoutUrl.searchParams.set("logout_uri", logoutRedirectUrl);
 
       if (idToken) {
         logoutUrl.searchParams.set("id_token_hint", idToken);
@@ -515,7 +672,7 @@ app.get("/logout", (req, res) => {
       return res.redirect(logoutUrl.toString());
     }
 
-    return res.redirect(APP_URL);
+    return res.redirect(logoutRedirectUrl);
   });
 });
 
@@ -544,19 +701,32 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       })
     );
 
-    if (result.Item?.userId) {
-      return res.json({
-        profile: {
-          ...result.Item,
-          name: result.Item.name || result.Item.displayName || "",
-          email: result.Item.email || req.session.user.email || "",
-          phone: result.Item.phone || "",
-          userId: String(result.Item.userId).replace(/\D/g, "").slice(0, 7),
-        },
-      });
-    }
+    const existingUserId = result.Item?.userId
+      ? String(result.Item.userId).replace(/\D/g, "").slice(0, 7)
+      : "";
 
-    const userId = await generateUniqueSevenDigitUserId();
+    const hasValidSevenDigitUserId = /^\d{7}$/.test(existingUserId);
+
+    let userId = existingUserId;
+
+    if (!hasValidSevenDigitUserId) {
+      userId = await generateUniqueSevenDigitUserId();
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: {
+            PK: `USERID#${userId}`,
+            SK: "LOOKUP",
+            type: "userIdLookup",
+            userPk,
+            cognitoSub: req.session.user.sub,
+            email: req.session.user.email || "",
+            createdAt: now,
+          },
+        })
+      );
+    }
 
     const profile = {
       ...(result.Item || {}),
@@ -591,21 +761,6 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       })
     );
 
-    await dynamo.send(
-      new PutCommand({
-        TableName: DYNAMODB_TABLE,
-        Item: {
-          PK: `USERID#${userId}`,
-          SK: "LOOKUP",
-          type: "userIdLookup",
-          userPk,
-          cognitoSub: req.session.user.sub,
-          email: req.session.user.email || "",
-          createdAt: now,
-        },
-      })
-    );
-
     return res.json({
       profile,
     });
@@ -629,9 +784,15 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       })
     );
 
-    let userId = existingResult.Item?.userId;
+    const existingUserId = existingResult.Item?.userId
+      ? String(existingResult.Item.userId).replace(/\D/g, "").slice(0, 7)
+      : "";
 
-    if (!userId) {
+    const hasValidSevenDigitUserId = /^\d{7}$/.test(existingUserId);
+
+    let userId = existingUserId;
+
+    if (!hasValidSevenDigitUserId) {
       userId = await generateUniqueSevenDigitUserId();
 
       await dynamo.send(
@@ -657,7 +818,7 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       PK: userPk,
       SK: "PROFILE",
       type: "profile",
-      userId: String(userId).replace(/\D/g, "").slice(0, 7),
+      userId,
       cognitoSub: req.session.user.sub,
       email: req.session.user.email || existingResult.Item?.email || "",
       name:
@@ -1600,6 +1761,62 @@ app.post(
       return res.json({
         success: true,
         url: portalSession.url,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/* =========================
+   Suppression de compte
+   ========================= */
+
+app.delete(
+  "/api/account",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  validateCognitoAdminConfig,
+  async (req, res, next) => {
+    try {
+      const confirmation = String(req.body?.confirmation || "")
+        .trim()
+        .toLowerCase();
+
+      if (confirmation !== ACCOUNT_DELETE_CONFIRMATION) {
+        return res.status(400).json({
+          error: "invalid_confirmation",
+          message: 'Pour confirmer, inscrivez exactement "supprimer".',
+        });
+      }
+
+      const userPk = getUserPk(req);
+      const ownerId = getOwnerId(req);
+
+      const profileResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: userPk,
+            SK: "PROFILE",
+          },
+        })
+      );
+
+      const profileUserId = profileResult.Item?.userId;
+
+      await deleteAllUserS3Objects(ownerId);
+      await deleteAllUserDynamoItems(userPk);
+      await deleteUserIdLookup(profileUserId);
+      await deleteCognitoUser(req);
+
+      req.session.destroy(() => {
+        return res.json({
+          success: true,
+          redirectUrl: "https://camelio.app",
+          message: "Compte supprimé avec succès.",
+        });
       });
     } catch (error) {
       next(error);

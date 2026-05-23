@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UserRound,
   X,
 } from "lucide-react";
@@ -190,6 +191,12 @@ export default function SettingsView({
   const [openMainSection, setOpenMainSection] = useState("profile");
   const [pdfModal, setPdfModal] = useState(null);
   const [showCookieModal, setShowCookieModal] = useState(false);
+
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteAccountConfirmation, setDeleteAccountConfirmation] =
+    useState("");
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState("");
 
   const displayedUserId = useMemo(() => {
     const cleanUserId = String(parentProfile.userId || "")
@@ -399,6 +406,43 @@ export default function SettingsView({
     }
   };
 
+  const handleDeleteAccount = async () => {
+    try {
+      setDeleteAccountLoading(true);
+      setDeleteAccountError("");
+
+      const response = await fetch(`${API_BASE_URL}/api/account`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          confirmation: deleteAccountConfirmation,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || data.error || "Impossible de supprimer le compte."
+        );
+      }
+
+      localStorage.removeItem("camelio_subscription_status");
+      localStorage.removeItem("camelio_cookie_preferences");
+
+      window.location.href = data.redirectUrl || "https://camelio.app";
+    } catch (error) {
+      setDeleteAccountError(
+        error.message || "Une erreur est survenue lors de la suppression."
+      );
+    } finally {
+      setDeleteAccountLoading(false);
+    }
+  };
+
   const moveSection = (sectionId, direction) => {
     if (!setSectionOrderIds) return;
 
@@ -545,7 +589,7 @@ export default function SettingsView({
             />
           </Field>
 
-                    <Field label="Courriel">
+          <Field label="Courriel">
             <input
               type="email"
               className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
@@ -928,20 +972,54 @@ export default function SettingsView({
       <DropdownSection
         id="account"
         title="Compte"
-        description="Options du compte et déconnexion."
+        description="Options du compte, déconnexion et suppression."
         icon={LogOut}
         iconColor="#C96F6F"
         openSection={openMainSection}
         setOpenSection={setOpenMainSection}
       >
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F]"
-        >
-          <LogOut className="h-5 w-5" />
-          Se déconnecter
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F]"
+          >
+            <LogOut className="h-5 w-5" />
+            Se déconnecter
+          </button>
+
+          <div className="rounded-[1.5rem] border border-[#E8B8B8] bg-[#FFF8F8] p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#A94444] text-white">
+                <Trash2 className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-[#8F4F4F]">
+                  Supprimer le compte
+                </p>
+
+                <p className="mt-1 text-sm leading-relaxed text-[#8F4F4F]">
+                  Cette action supprimera les données associées au compte dans
+                  DynamoDB, les fichiers dans S3 et le compte de connexion
+                  Cognito. Cette action est définitive.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteAccountConfirmation("");
+                setDeleteAccountError("");
+                setShowDeleteAccountModal(true);
+              }}
+              className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#A94444] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#923A3A]"
+            >
+              Supprimer mon compte
+            </button>
+          </div>
+        </div>
       </DropdownSection>
 
       <div className="pb-5 text-center">
@@ -1147,6 +1225,88 @@ export default function SettingsView({
               >
                 Refuser les cookies optionnels
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-xl rounded-[2rem] bg-white p-5 shadow-2xl ring-1 ring-[#EFE4D6]">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-[#8F4F4F]">
+                  Supprimer le compte
+                </h3>
+
+                <p className="mt-2 text-sm leading-relaxed text-[#5F5A50]">
+                  Cette action est permanente. Elle supprimera les informations
+                  du compte dans DynamoDB, les fichiers liés dans S3 et le compte
+                  Cognito utilisé pour la connexion.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowDeleteAccountModal(false)}
+                disabled={deleteAccountLoading}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FFF4E4] text-[#3F3D38] ring-1 ring-[#E8D8BE] transition hover:bg-[#F4DFC0] disabled:opacity-50"
+                aria-label="Fermer la suppression du compte"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-[#E8B8B8] bg-[#FFF8F8] p-4">
+              <p className="text-sm font-bold text-[#8F4F4F]">
+                Pour confirmer, inscrivez exactement :
+              </p>
+
+              <p className="mt-2 rounded-xl bg-white px-3 py-2 text-sm font-black text-[#8F4F4F] ring-1 ring-[#E8B8B8]">
+                supprimer
+              </p>
+
+              <input
+                className={inputClass}
+                value={deleteAccountConfirmation}
+                onChange={(event) =>
+                  setDeleteAccountConfirmation(event.target.value)
+                }
+                placeholder="Inscrire supprimer"
+                disabled={deleteAccountLoading}
+              />
+
+              {deleteAccountError && (
+                <p className="mt-3 rounded-2xl bg-[#F8E1E1] px-4 py-3 text-sm font-bold text-[#9A4F4F] ring-1 ring-[#E8B8B8]">
+                  {deleteAccountError}
+                </p>
+              )}
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  disabled={deleteAccountLoading}
+                  className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#3F3D38] ring-1 ring-[#D8C8AF] transition hover:bg-[#FFF4E4] disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={
+                    deleteAccountLoading ||
+                    deleteAccountConfirmation.trim().toLowerCase() !==
+                      "supprimer"
+                  }
+                  className="rounded-2xl bg-[#A94444] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#923A3A] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {deleteAccountLoading
+                    ? "Suppression en cours..."
+                    : "Supprimer définitivement"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
