@@ -18,6 +18,14 @@ const inputClass =
 const textareaClass =
   "mt-2 min-h-[110px] w-full resize-none rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#D99AB9] focus:ring-2 focus:ring-[#F3D8E6]";
 
+const logoPaths = [
+  "/Logo/Camelio.png",
+  "/Logo/Logo Camelio Hor.png",
+  "/Logo/Logo Camelio.png",
+  "/Logo/Camelio Hor.png",
+  "/Logo/Camelio-flaticon.ico",
+];
+
 const brandColors = [
   { id: "rose", label: "Rose", value: "#FCEEF3" },
   { id: "sauge", label: "Sauge", value: "#EEF4E8" },
@@ -157,7 +165,7 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
-function drawBackgroundEffects(ctx, type, width, height) {
+function drawBackgroundEffects(ctx, type) {
   ctx.save();
 
   if (type === "soft-circles") {
@@ -286,6 +294,18 @@ function loadImage(src) {
   });
 }
 
+async function loadFirstAvailableImage(paths = []) {
+  for (const path of paths) {
+    const image = await loadImage(path);
+
+    if (image) {
+      return image;
+    }
+  }
+
+  return null;
+}
+
 async function createShareImageBlob({ phrase, options }) {
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
@@ -297,14 +317,9 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  drawBackgroundEffects(
-    ctx,
-    options.illustration || "mixed",
-    canvas.width,
-    canvas.height
-  );
+  drawBackgroundEffects(ctx, options.illustration || "mixed");
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.74)";
   roundedRect(ctx, 70, 80, 940, 1190, 46);
   ctx.fill();
 
@@ -380,20 +395,36 @@ async function createShareImageBlob({ phrase, options }) {
 
   ctx.fillStyle = "#A8B193";
   ctx.font = "bold 30px Arial";
-  ctx.fillText("Propulsé par Camelio", 150, 1190);
+  ctx.fillText("Propulsé par Camelio", 150, 1155);
 
   ctx.fillStyle = "#746F64";
   ctx.font = "26px Arial";
-  ctx.fillText("camelio.app", 150, 1230);
+  ctx.fillText("Carnet numérique de vos enfants", 150, 1197);
 
-  const logo = await loadImage("/Logo/Camelio.png");
+  ctx.fillStyle = "#746F64";
+  ctx.font = "24px Arial";
+  ctx.fillText("camelio.app", 150, 1237);
+
+  const logo = await loadFirstAvailableImage(logoPaths);
 
   if (logo) {
-    ctx.drawImage(logo, 770, 1145, 145, 145);
+    const maxLogoWidth = 180;
+    const maxLogoHeight = 90;
+    const ratio = Math.min(maxLogoWidth / logo.width, maxLogoHeight / logo.height);
+    const logoWidth = logo.width * ratio;
+    const logoHeight = logo.height * ratio;
+
+    ctx.drawImage(
+      logo,
+      850 - logoWidth / 2,
+      1175 - logoHeight / 2,
+      logoWidth,
+      logoHeight
+    );
   } else {
     ctx.fillStyle = "#8FA173";
-    ctx.font = "bold 40px Arial";
-    ctx.fillText("Camelio", 750, 1210);
+    ctx.font = "bold 36px Arial";
+    ctx.fillText("Camelio", 760, 1195);
   }
 
   return new Promise((resolve) => {
@@ -722,10 +753,30 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
             ) : null}
 
             <div className="mt-6 border-t border-white/70 pt-4">
-              <p className="text-xs font-black text-[#8FA173]">
-                Propulsé par Camelio
-              </p>
-              <p className="text-xs font-bold text-[#746F64]">camelio.app</p>
+              <div className="flex items-center gap-3">
+                <img
+                  src="/Logo/Camelio.png"
+                  alt="Camelio"
+                  className="h-9 w-auto object-contain"
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                  }}
+                />
+
+                <div>
+                  <p className="text-xs font-black text-[#8FA173]">
+                    Propulsé par Camelio
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-bold text-[#746F64]">
+                    Carnet numérique de vos enfants
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-bold text-[#746F64]">
+                    camelio.app
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1009,7 +1060,8 @@ export default function MemorablePhrases({ children = [], onBack }) {
         type: "image/png",
       });
 
-      const text = "Phrase mémorable créée avec Camelio · camelio.app";
+      const text =
+        "Phrase mémorable créée avec Camelio. Carnet numérique de vos enfants · camelio.app";
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
