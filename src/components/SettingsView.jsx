@@ -126,18 +126,6 @@ function getBaseTheme(section) {
   };
 }
 
-function generateSevenDigitUserId(value = "") {
-  const source = String(value || "camelio-user");
-
-  let hash = 0;
-
-  for (let i = 0; i < source.length; i += 1) {
-    hash = (hash * 31 + source.charCodeAt(i)) % 9000000;
-  }
-
-  return String(hash + 1000000).slice(0, 7);
-}
-
 function DropdownSection({
   id,
   title,
@@ -204,19 +192,12 @@ export default function SettingsView({
   const [showCookieModal, setShowCookieModal] = useState(false);
 
   const displayedUserId = useMemo(() => {
-    if (parentProfile.userId) {
-      return String(parentProfile.userId).replace(/\D/g, "").slice(0, 7);
-    }
+    const cleanUserId = String(parentProfile.userId || "")
+      .replace(/\D/g, "")
+      .slice(0, 7);
 
-    return generateSevenDigitUserId(
-      parentProfile.email || parentProfile.name || parentProfile.phone
-    );
-  }, [
-    parentProfile.userId,
-    parentProfile.email,
-    parentProfile.name,
-    parentProfile.phone,
-  ]);
+    return cleanUserId || "Non disponible";
+  }, [parentProfile.userId]);
 
   const formatDate = (dateValue) => {
     if (!dateValue) return "Non applicable";
@@ -542,9 +523,12 @@ export default function SettingsView({
               className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
               value={displayedUserId}
               readOnly
-              maxLength={7}
-              placeholder="Ex. 1234567"
+              placeholder="Non disponible"
             />
+
+            <p className="mt-2 text-xs leading-relaxed text-[#8A8378]">
+              Ce numéro provient du profil enregistré dans DynamoDB.
+            </p>
           </Field>
 
           <Field label="Nom complet">
