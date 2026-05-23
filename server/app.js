@@ -1568,9 +1568,24 @@ app.post(
         ContentType: fileType,
       });
 
-      const uploadUrl = await getSignedUrl(s3, command, {
-        expiresIn: 300,
-      });
+      const downloadUrl = await getSignedUrl(
+  s3,
+  new GetObjectCommand({
+    Bucket: S3_DOCUMENTS_BUCKET,
+    Key: s3Key,
+  }),
+  {
+    expiresIn: 3600,
+  }
+);
+
+res.json({
+  success: true,
+  avatarId,
+  uploadUrl,
+  downloadUrl,
+  s3Key,
+});
 
       res.json({
         success: true,

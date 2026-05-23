@@ -476,24 +476,43 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     });
   };
 
-  const uploadAvatarToS3 = async (file) => {
-    const formData = new FormData();
-    formData.append("file", file);
+  const uploadAvatarToS3 = async (file, childId = "general") => {
+  const presignResponse = await fetch(`${API_BASE_URL}/api/uploads/avatar`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileType: file.type,
+      childId,
+    }),
+  });
 
-    const response = await fetch(`${API_BASE_URL}/api/uploads/avatar`, {
-      method: "POST",
-      credentials: "include",
-      body: formData,
-    });
+  const presignData = await presignResponse.json();
 
-    const data = await response.json();
+  if (!presignResponse.ok) {
+    throw new Error(presignData.message || "Erreur préparation upload S3");
+  }
 
-    if (!response.ok) {
-      throw new Error(data.message || "Erreur upload S3");
-    }
+  const uploadResponse = await fetch(presignData.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type,
+    },
+    body: file,
+  });
 
-    return data.url;
+  if (!uploadResponse.ok) {
+    throw new Error("Erreur upload fichier vers S3");
+  }
+
+  return {
+    s3Key: presignData.s3Key,
+    avatarUrl: presignData.downloadUrl || presignData.url || "",
   };
+};
 
   const getAgeFromBirthDate = (birthDate) => {
     if (!birthDate || birthDate === "À compléter") return "À compléter";
@@ -601,19 +620,16 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     }));
 
     try {
-      const s3Url = await uploadAvatarToS3(file);
+      const uploadedAvatar = await uploadAvatarToS3(file, "new");
 
-      setNewChild((current) => ({
-        ...current,
-        photo: s3Url,
-        avatar: s3Url,
-        photoPosition: defaultPhotoPosition,
-        photoZoom: 1,
-      }));
-    } catch (error) {
-      console.error("Upload S3 impossible, conservation locale:", error);
-    }
-  };
+setNewChild((current) => ({
+  ...current,
+  photo: uploadedAvatar.avatarUrl,
+  avatar: uploadedAvatar.avatarUrl,
+  avatarS3Key: uploadedAvatar.s3Key,
+  photoPosition: defaultPhotoPosition,
+  photoZoom: 1,
+}));
 
   const handlePhotoChange = async (childId, event) => {
     const file = event.target.files?.[0];
@@ -643,15 +659,16 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     }
 
     try {
-      const s3Url = await uploadAvatarToS3(file);
+      const uploadedAvatar = await uploadAvatarToS3(file, childId);
 
-      const s3Update = {
-        photo: s3Url,
-        image: s3Url,
-        avatar: s3Url,
-        photoPosition: defaultPhotoPosition,
-        photoZoom: 1,
-      };
+const s3Update = {
+  photo: uploadedAvatar.avatarUrl,
+  image: uploadedAvatar.avatarUrl,
+  avatar: uploadedAvatar.avatarUrl,
+  avatarS3Key: uploadedAvatar.s3Key,
+  photoPosition: defaultPhotoPosition,
+  photoZoom: 1,
+};
 
       setChildren((current) =>
         current.map((child) =>
