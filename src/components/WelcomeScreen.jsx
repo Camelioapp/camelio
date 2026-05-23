@@ -3,21 +3,24 @@ import { Baby, CalendarDays, FileText, Check } from "lucide-react";
 import { AppFontStyle } from "./shared";
 
 const APP_URL = "https://camelio.app";
+const APP_HOST = "camelio.app";
+
+function getUserAgent() {
+  return navigator.userAgent || navigator.vendor || window.opera || "";
+}
 
 function isInAppBrowser() {
-  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+  const ua = getUserAgent();
 
   return /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line|TikTok|Snapchat/i.test(ua);
 }
 
 function isAndroidDevice() {
-  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
-  return /Android/i.test(ua);
+  return /Android/i.test(getUserAgent());
 }
 
 function isAppleDevice() {
-  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
-  return /iPhone|iPad|iPod/i.test(ua);
+  return /iPhone|iPad|iPod/i.test(getUserAgent());
 }
 
 export default function WelcomeScreen() {
@@ -51,52 +54,69 @@ export default function WelcomeScreen() {
     },
   ];
 
-  const copyAppLink = async () => {
-    try {
-      await navigator.clipboard.writeText(APP_URL);
-      setBrowserNotice(
-        "Lien copié. Ouvrez Safari, Chrome ou Edge, puis collez camelio.app."
-      );
-    } catch (error) {
-      setBrowserNotice(
-        "Ouvrez Safari, Chrome ou Edge, puis allez sur camelio.app."
-      );
-    }
+  const showTemporaryNotice = (message) => {
+    setBrowserNotice(message);
 
     setTimeout(() => {
       setBrowserNotice("");
-    }, 4500);
+    }, 6500);
   };
 
-  const openDefaultBrowser = async () => {
+  const copyAppLink = async () => {
+    try {
+      await navigator.clipboard.writeText(APP_URL);
+    } catch (error) {
+      // Certains navigateurs intégrés bloquent le presse-papier.
+    }
+  };
+
+  const openExternalBrowser = async () => {
     if (!inAppBrowser) {
       window.location.href = APP_URL;
       return;
     }
 
     if (isAndroidDevice()) {
-      window.location.href =
-        "intent://camelio.app#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fcamelio.app;end";
+      window.location.href = `intent://${APP_HOST}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(
+        APP_URL
+      )};end`;
+
       return;
     }
 
     if (isAppleDevice()) {
       await copyAppLink();
+
+      const chromeUrl = `googlechrome://${APP_HOST}`;
+      const safariFallbackUrl = APP_URL;
+
+      window.location.href = chromeUrl;
+
+      setTimeout(() => {
+        window.location.href = safariFallbackUrl;
+      }, 700);
+
+      setTimeout(() => {
+        showTemporaryNotice(
+          "Si la page reste dans Messenger, appuyez sur les trois points, puis choisissez Ouvrir dans le navigateur."
+        );
+      }, 1400);
+
       return;
     }
 
     window.open(APP_URL, "_blank", "noopener,noreferrer");
 
     setTimeout(() => {
-      setBrowserNotice(
-        "Si la page reste dans Messenger, ouvrez le menu ⋯ puis choisissez Ouvrir dans le navigateur."
+      showTemporaryNotice(
+        "Si la page reste dans Messenger, appuyez sur les trois points, puis choisissez Ouvrir dans le navigateur."
       );
-    }, 800);
+    }, 900);
   };
 
   const handleSignup = () => {
     if (inAppBrowser) {
-      openDefaultBrowser();
+      openExternalBrowser();
       return;
     }
 
@@ -105,7 +125,7 @@ export default function WelcomeScreen() {
 
   const handleLogin = () => {
     if (inAppBrowser) {
-      openDefaultBrowser();
+      openExternalBrowser();
       return;
     }
 
@@ -142,9 +162,11 @@ export default function WelcomeScreen() {
           <div className="absolute left-2 top-20 text-2xl text-[#9B89BD] opacity-80">
             ♥
           </div>
+
           <div className="absolute right-4 top-8 text-2xl text-[#D99B99] opacity-70">
             ✦
           </div>
+
           <div className="absolute right-1 top-20 text-xl text-[#F2C45B] opacity-80">
             ✦
           </div>
@@ -166,6 +188,7 @@ export default function WelcomeScreen() {
                   <p className="text-[0.95rem] font-bold leading-5 text-[#55534C] sm:text-[1.05rem]">
                     {item.title}
                   </p>
+
                   <p className="mt-0.5 text-[0.8rem] leading-5 text-[#67655F] sm:text-[0.92rem] sm:leading-6">
                     {item.text}
                   </p>
@@ -178,7 +201,7 @@ export default function WelcomeScreen() {
         {browserNotice && (
           <div className="mb-3 rounded-2xl border border-[#D8E6CA] bg-[#F7FBF3] px-4 py-3 text-center text-xs font-bold leading-relaxed text-[#6F785F]">
             <div className="flex items-center justify-center gap-2">
-              <Check className="h-4 w-4" />
+              <Check className="h-4 w-4 shrink-0" />
               <span>{browserNotice}</span>
             </div>
           </div>
