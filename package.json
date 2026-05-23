@@ -20,4 +20,4 @@
     "vite": "latest",
     "@aws-sdk/client-cognito-identity-provider": "^3.0.0"
   }
-}
+} 
