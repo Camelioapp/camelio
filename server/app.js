@@ -865,80 +865,67 @@ app.get(
 );
 
 app.post(
-  "/api/subscription/sync-checkout",
+  "/create-checkout-session",
   requireAuth,
   validateStripeConfig,
-  validateAwsConfig,
   async (req, res, next) => {
     try {
-      const { session_id } = req.body;
+      const lookupKey = req.body.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
+      const wantsTrial = req.body.trial === true;
 
-      if (!session_id) {
-        return res.status(400).json({
-          error: "missing_session_id",
-          message: "session_id est requis.",
+      const prices = await stripe.prices.list({
+        lookup_keys: [lookupKey],
+        active: true,
+        expand: ["data.product"],
+      });
+
+      if (!prices.data.length) {
+        return res.status(404).json({
+          error: "stripe_price_not_found",
+          message: `Aucun prix Stripe actif trouvé pour le lookup_key : ${lookupKey}`,
         });
       }
 
-      const checkoutSession = await stripe.checkout.sessions.retrieve(
-        session_id,
-        {
-          expand: ["subscription"],
-        }
-      );
+      const price = prices.data[0];
 
-      const stripeSubscription = checkoutSession.subscription;
-
-      if (!stripeSubscription) {
-        return res.status(400).json({
-          error: "missing_subscription",
-          message: "Aucun abonnement Stripe trouvé pour cette session.",
-        });
-      }
-
-      const now = new Date().toISOString();
-
-      const subscriptionItem = {
-        PK: getUserPk(req),
-        SK: "SUBSCRIPTION",
-        type: "subscription",
-        userId: req.session.user.sub,
-        email: req.session.user.email || "",
-        status: stripeSubscription.status,
-        plan:
-          stripeSubscription.metadata?.plan ||
-          checkoutSession.metadata?.plan ||
-          STRIPE_PRICE_LOOKUP_KEY,
-        storageGb:
-          Number(stripeSubscription.metadata?.storageGb) ||
-          Number(checkoutSession.metadata?.storageGb) ||
-          Number(STRIPE_STORAGE_GB) ||
-          5,
-        stripeCustomerId: checkoutSession.customer || "",
-        stripeSubscriptionId: stripeSubscription.id,
-        stripeCheckoutSessionId: checkoutSession.id,
-        trialEndsAt: stripeSubscription.trial_end
-          ? new Date(stripeSubscription.trial_end * 1000).toISOString()
-          : null,
-        currentPeriodEnd: stripeSubscription.current_period_end
-          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
-          : null,
-        updatedAt: now,
-        createdAt: now,
-      };
-
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: subscriptionItem,
-        })
-      );
+      const checkoutSession = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        customer_email: req.session.user.email || undefined,
+        line_items: [
+          {
+            price: price.id,
+            quantity: 1,
+          },
+        ],
+        success_url: `${APP_URL}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${APP_URL}/billing?canceled=true`,
+        allow_promotion_codes: true,
+        billing_address_collection: "auto",
+        managed_payments: {
+          enabled: true,
+        },
+        metadata: {
+          userId: req.session.user.sub,
+          userEmail: req.session.user.email || "",
+          plan: lookupKey,
+          storageGb: STRIPE_STORAGE_GB,
+          trial: wantsTrial ? "true" : "false",
+        },
+        subscription_data: {
+          ...(wantsTrial ? { trial_period_days: 30 } : {}),
+          metadata: {
+            userId: req.session.user.sub,
+            userEmail: req.session.user.email || "",
+            plan: lookupKey,
+            storageGb: STRIPE_STORAGE_GB,
+            trial: wantsTrial ? "true" : "false",
+          },
+        },
+      });
 
       return res.json({
         success: true,
-        hasAccess: ["trialing", "active"].includes(subscriptionItem.status),
-        status: subscriptionItem.status,
-        subscription: subscriptionItem,
+        url: checkoutSession.url,
       });
     } catch (error) {
       next(error);
