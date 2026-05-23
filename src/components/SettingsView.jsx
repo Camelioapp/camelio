@@ -126,6 +126,18 @@ function getBaseTheme(section) {
   };
 }
 
+function generateSevenDigitUserId(value = "") {
+  const source = String(value || "camelio-user");
+
+  let hash = 0;
+
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) % 9000000;
+  }
+
+  return String(hash + 1000000).slice(0, 7);
+}
+
 function DropdownSection({
   id,
   title,
@@ -178,7 +190,7 @@ function DropdownSection({
 }
 
 export default function SettingsView({
-  parentProfile = { name: "", email: "", phone: "" },
+  parentProfile = { name: "", email: "", phone: "", userId: "" },
   setParentProfile = () => {},
   sectionOrderIds,
   setSectionOrderIds,
@@ -190,6 +202,21 @@ export default function SettingsView({
   const [openMainSection, setOpenMainSection] = useState("profile");
   const [pdfModal, setPdfModal] = useState(null);
   const [showCookieModal, setShowCookieModal] = useState(false);
+
+  const displayedUserId = useMemo(() => {
+    if (parentProfile.userId) {
+      return String(parentProfile.userId).replace(/\D/g, "").slice(0, 7);
+    }
+
+    return generateSevenDigitUserId(
+      parentProfile.email || parentProfile.name || parentProfile.phone
+    );
+  }, [
+    parentProfile.userId,
+    parentProfile.email,
+    parentProfile.name,
+    parentProfile.phone,
+  ]);
 
   const formatDate = (dateValue) => {
     if (!dateValue) return "Non applicable";
@@ -510,6 +537,16 @@ export default function SettingsView({
         setOpenSection={setOpenMainSection}
       >
         <div className="space-y-5">
+          <Field label="User ID">
+            <input
+              className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
+              value={displayedUserId}
+              readOnly
+              maxLength={7}
+              placeholder="Ex. 1234567"
+            />
+          </Field>
+
           <Field label="Nom complet">
             <input
               className={inputClass}
@@ -800,7 +837,7 @@ export default function SettingsView({
               </span>
             </div>
 
-                        <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
               <InfoBox
                 label="Type d’abonnement"
                 value={
