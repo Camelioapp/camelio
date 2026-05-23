@@ -1,9 +1,22 @@
-import React from "react";
-import { Baby, CalendarDays, FileText } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Baby, CalendarDays, FileText, ExternalLink, Copy, Check } from "lucide-react";
 import { AppFontStyle } from "./shared";
+
+function isInAppBrowser() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+
+  return /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line|TikTok|Snapchat/i.test(ua);
+}
 
 export default function WelcomeScreen() {
   const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+
+  const [inAppBrowser, setInAppBrowser] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  useEffect(() => {
+    setInAppBrowser(isInAppBrowser());
+  }, []);
 
   const highlights = [
     {
@@ -34,6 +47,24 @@ export default function WelcomeScreen() {
     window.location.href = `${API_URL}/login`;
   };
 
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText("https://camelio.app");
+      setLinkCopied(true);
+
+      setTimeout(() => {
+        setLinkCopied(false);
+      }, 2500);
+    } catch (error) {
+      setLinkCopied(false);
+      window.prompt("Copiez ce lien dans votre navigateur :", "https://camelio.app");
+    }
+  };
+
+  const handleOpenMainBrowser = () => {
+    window.location.href = "https://camelio.app";
+  };
+
   return (
     <div
       className="h-[100svh] overflow-hidden bg-[#F8F3EA] px-3 py-3 text-[#55534C] sm:px-4 sm:py-4 md:px-8"
@@ -51,6 +82,53 @@ export default function WelcomeScreen() {
             className="mx-auto h-auto w-[13rem] object-contain sm:w-[15rem]"
           />
         </div>
+
+        {inAppBrowser && (
+          <div className="mt-3 shrink-0 rounded-[1.5rem] border border-[#EEC988] bg-[#FFF8EA] p-3 text-left shadow-sm">
+            <p className="text-sm font-bold text-[#7A5A24]">
+              Connexion à partir de Messenger
+            </p>
+
+            <p className="mt-1 text-xs leading-relaxed text-[#7A5A24]">
+              Vous ouvrez Camelio dans un navigateur intégré. La connexion peut
+              être bloquée par Messenger, Facebook ou Instagram.
+            </p>
+
+            <p className="mt-1 text-xs leading-relaxed text-[#7A5A24]">
+              Pour vous connecter, ouvrez Camelio dans votre navigateur
+              principal, comme Safari, Chrome ou Edge.
+            </p>
+
+            <div className="mt-3 grid gap-2">
+              <button
+                type="button"
+                onClick={handleOpenMainBrowser}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#8FA173] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#7F9166]"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Ouvrir camelio.app
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-bold text-[#7A5A24] ring-1 ring-[#EEC988] transition hover:bg-[#FFF4DD]"
+              >
+                {linkCopied ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Lien copié
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Copier le lien
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="relative mx-auto mt-3 h-[9.5rem] w-full max-w-[260px] shrink-0 sm:mt-4 sm:h-[11rem] sm:max-w-[290px]">
           <div className="absolute inset-x-6 top-7 h-28 rounded-[42%] bg-[#F9EEDC] opacity-75 blur-[1px]" />
@@ -99,12 +177,12 @@ export default function WelcomeScreen() {
 
         <div className="mt-4 flex shrink-0 flex-col gap-3 sm:mt-5">
           <button
-  type="button"
-  onClick={handleSignup}
-  className="w-full rounded-2xl bg-[#8FA173] px-5 py-3.5 text-[1rem] font-bold tracking-wide text-white shadow-sm transition hover:brightness-95 sm:rounded-3xl sm:py-4 sm:text-[1.12rem]"
->
-  Inscription
-</button>
+            type="button"
+            onClick={handleSignup}
+            className="w-full rounded-2xl bg-[#8FA173] px-5 py-3.5 text-[1rem] font-bold tracking-wide text-white shadow-sm transition hover:brightness-95 sm:rounded-3xl sm:py-4 sm:text-[1.12rem]"
+          >
+            Inscription
+          </button>
 
           <button
             type="button"
