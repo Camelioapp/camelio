@@ -122,6 +122,10 @@ function SuccessDisplay({ message }) {
 }
 
 function CanceledDisplay() {
+  const goToApp = () => {
+    window.location.href = "/";
+  };
+
   return (
     <BillingCard>
       <div className="billing-logo">ℹ️</div>
@@ -134,14 +138,18 @@ function CanceledDisplay() {
         </p>
       </div>
 
-      <a className="billing-link-button" href="/">
+      <button className="billing-button" type="button" onClick={goToApp}>
         Retourner à Camelio
-      </a>
+      </button>
     </BillingCard>
   );
 }
 
 function ErrorDisplay({ error, details, onRetry }) {
+  const goToApp = () => {
+    window.location.href = "/";
+  };
+
   return (
     <BillingCard>
       <div className="billing-logo">⚠️</div>
@@ -161,6 +169,7 @@ function ErrorDisplay({ error, details, onRetry }) {
               fontSize: "12px",
               whiteSpace: "pre-wrap",
               textAlign: "left",
+              overflowX: "auto",
             }}
           >
             {details}
@@ -172,15 +181,15 @@ function ErrorDisplay({ error, details, onRetry }) {
         Réessayer la synchronisation
       </button>
 
-      <a className="billing-link-button" href="/">
+      <button className="billing-link-button" type="button" onClick={goToApp}>
         Retourner à Camelio
-      </a>
+      </button>
     </BillingCard>
   );
 }
 
 export default function Billing() {
-  const [status, setStatus] = useState("idle");
+  const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [details, setDetails] = useState("");
@@ -237,13 +246,13 @@ export default function Billing() {
 
         if (response.status === 401) {
           throw new Error(
-            `Utilisateur non connecté au backend. Code : ${response.status}\n\n${readableDetails}`
+            `Utilisateur non connecté au backend.\n\n${readableDetails}`
           );
         }
 
         if (response.status === 404) {
           throw new Error(
-            `La route /api/subscription/sync-checkout est introuvable sur le backend. Code : ${response.status}\n\n${readableDetails}`
+            `La route /api/subscription/sync-checkout est introuvable sur le backend.\n\n${readableDetails}`
           );
         }
 
