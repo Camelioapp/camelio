@@ -121,6 +121,36 @@ const checkAuth = (req, res, next) => {
 
 app.use(checkAuth);
 
+function generateSevenDigitUserId() {
+  return String(Math.floor(1000000 + Math.random() * 9000000));
+}
+
+async function generateUniqueSevenDigitUserId() {
+  let attempts = 0;
+
+  while (attempts < 10) {
+    const candidate = generateSevenDigitUserId();
+
+    const existing = await dynamo.send(
+      new GetCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: `USERID#${candidate}`,
+          SK: "LOOKUP",
+        },
+      })
+    );
+
+    if (!existing.Item) {
+      return candidate;
+    }
+
+    attempts += 1;
+  }
+
+  throw new Error("Impossible de générer un User ID unique.");
+}
+
 function validateAwsConfig(req, res, next) {
   const missing = [];
 
@@ -501,18 +531,83 @@ app.post("/api/referral-code", requireAuth, (req, res) => {
 
 app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const now = new Date().toISOString();
+    const userPk = getUserPk(req);
+
     const result = await dynamo.send(
       new GetCommand({
         TableName: DYNAMODB_TABLE,
         Key: {
-          PK: getUserPk(req),
+          PK: userPk,
           SK: "PROFILE",
         },
       })
     );
 
-    res.json({
-      profile: result.Item || null,
+    if (result.Item?.userId) {
+      return res.json({
+        profile: {
+          ...result.Item,
+          name: result.Item.name || result.Item.displayName || "",
+          email: result.Item.email || req.session.user.email || "",
+          phone: result.Item.phone || "",
+          userId: String(result.Item.userId).replace(/\D/g, "").slice(0, 7),
+        },
+      });
+    }
+
+    const userId = await generateUniqueSevenDigitUserId();
+
+    const profile = {
+      ...(result.Item || {}),
+      PK: userPk,
+      SK: "PROFILE",
+      type: "profile",
+      userId,
+      cognitoSub: req.session.user.sub,
+      email: result.Item?.email || req.session.user.email || "",
+      name:
+        result.Item?.name ||
+        result.Item?.displayName ||
+        req.session.user.name ||
+        req.session.user.given_name ||
+        "",
+      displayName:
+        result.Item?.displayName ||
+        result.Item?.name ||
+        req.session.user.name ||
+        req.session.user.given_name ||
+        "",
+      phone: result.Item?.phone || "",
+      preferredLanguage: result.Item?.preferredLanguage || "fr",
+      createdAt: result.Item?.createdAt || now,
+      updatedAt: now,
+    };
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: profile,
+      })
+    );
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: {
+          PK: `USERID#${userId}`,
+          SK: "LOOKUP",
+          type: "userIdLookup",
+          userPk,
+          cognitoSub: req.session.user.sub,
+          email: req.session.user.email || "",
+          createdAt: now,
+        },
+      })
+    );
+
+    return res.json({
+      profile,
     });
   } catch (error) {
     next(error);
@@ -522,14 +617,64 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
 app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
     const now = new Date().toISOString();
+    const userPk = getUserPk(req);
+
+    const existingResult = await dynamo.send(
+      new GetCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: userPk,
+          SK: "PROFILE",
+        },
+      })
+    );
+
+    let userId = existingResult.Item?.userId;
+
+    if (!userId) {
+      userId = await generateUniqueSevenDigitUserId();
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: {
+            PK: `USERID#${userId}`,
+            SK: "LOOKUP",
+            type: "userIdLookup",
+            userPk,
+            cognitoSub: req.session.user.sub,
+            email: req.session.user.email || "",
+            createdAt: now,
+          },
+        })
+      );
+    }
+
+    const cleanedProfile = cleanProfilePayload(req.body);
 
     const profile = {
-      PK: getUserPk(req),
+      ...(existingResult.Item || {}),
+      PK: userPk,
       SK: "PROFILE",
       type: "profile",
-      userId: req.session.user.sub,
-      email: req.session.user.email || "",
-      ...cleanProfilePayload(req.body),
+      userId: String(userId).replace(/\D/g, "").slice(0, 7),
+      cognitoSub: req.session.user.sub,
+      email: req.session.user.email || existingResult.Item?.email || "",
+      name:
+        req.body.name ||
+        cleanedProfile.displayName ||
+        existingResult.Item?.name ||
+        existingResult.Item?.displayName ||
+        "",
+      displayName:
+        cleanedProfile.displayName ||
+        req.body.name ||
+        existingResult.Item?.displayName ||
+        existingResult.Item?.name ||
+        "",
+      phone: cleanedProfile.phone || "",
+      preferredLanguage: cleanedProfile.preferredLanguage || "fr",
+      createdAt: existingResult.Item?.createdAt || now,
       updatedAt: now,
     };
 
