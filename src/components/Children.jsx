@@ -1242,36 +1242,61 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
         >
           <div className="w-full min-w-0 space-y-5">
             <PhotoPicker
-              photo={selectedChild.photo || selectedChild.image}
-              position={selectedChild.photoPosition || defaultPhotoPosition}
-              zoom={selectedChild.photoZoom || 1}
-              fallback={getInitials(selectedChild)}
-              onChoosePreset={(url) =>
-                setSelectedChild((current) => ({
-                  ...current,
-                  photo: url,
-                  image: url,
-                  avatar: url,
-                  avatarS3Key: "",
-                  photoPosition: defaultPhotoPosition,
-                  photoZoom: 1,
-                }))
-              }
-              onUpload={(event) => handlePhotoChange(selectedChild.id, event)}
-              onPositionChange={(position) =>
-                setSelectedChild((current) => ({
-                  ...current,
-                  photoPosition: position,
-                }))
-              }
-              onZoomChange={(zoom) =>
-                setSelectedChild((current) => ({
-                  ...current,
-                  photoZoom: zoom,
-                }))
-              }
-            />
+  photo={selectedChild.photo || selectedChild.image}
+  position={selectedChild.photoPosition || defaultPhotoPosition}
+  zoom={selectedChild.photoZoom || 1}
+  fallback={getInitials(selectedChild)}
+  onChoosePreset={(url) =>
+    setSelectedChild((current) => ({
+      ...current,
+      photo: url,
+      image: url,
+      avatar: url,
+      avatarS3Key: "",
+      photoPosition: defaultPhotoPosition,
+      photoZoom: 1,
+    }))
+  }
+  onUpload={(event) => handlePhotoChange(selectedChild.id, event)}
+  onPositionChange={(position) =>
+    setSelectedChild((current) => ({
+      ...current,
+      photoPosition: position,
+    }))
+  }
+  onZoomChange={(zoom) =>
+    setSelectedChild((current) => ({
+      ...current,
+      photoZoom: zoom,
+    }))
+  }
+/>
+<div className="rounded-2xl bg-[#FFF8EC] p-4 ring-1 ring-[#EFE4D6]">
+  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+    Identifiant enfant
+  </p>
 
+  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <code className="break-all rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
+      {selectedChild.id || "ID non disponible"}
+    </code>
+
+    {selectedChild.id && (
+      <button
+        type="button"
+        onClick={() => navigator.clipboard?.writeText(selectedChild.id)}
+        className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#6F785F] ring-1 ring-[#D8DDCB]"
+      >
+        Copier
+      </button>
+    )}
+  </div>
+
+  <p className="mt-2 text-xs leading-5 text-[#8B7D6B]">
+    Cet identifiant sert à rattacher les photos, documents, rendez-vous et
+    autres informations au bon enfant, même si son nom change.
+  </p>
+</div>
             <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
               <FormField label="Prénom">
                 <input
