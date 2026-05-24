@@ -14,6 +14,7 @@ import Notes from "./Notes.jsx";
 import SettingsView from "./SettingsView.jsx";
 import MemorablePhrases from "./MemorablePhrases.jsx";
 import { sections, getSectionTheme } from "./sectionsData.js";
+import { motion } from "framer-motion";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
@@ -139,6 +140,133 @@ function getInitials(child) {
   const initials = `${first}${last}`.toUpperCase();
 
   return initials || "";
+}
+
+function FamilyFloatingBubbles() {
+  const bubbles = [
+    {
+      top: "14%",
+      left: "7%",
+      size: 18,
+      color: "#eec988",
+      delay: 0.1,
+    },
+    {
+      top: "28%",
+      left: "23%",
+      size: 10,
+      color: "#eaa5af",
+      delay: 0.8,
+    },
+    {
+      top: "62%",
+      left: "10%",
+      size: 22,
+      color: "#b5a7c8",
+      delay: 1.3,
+    },
+    {
+      top: "78%",
+      left: "30%",
+      size: 12,
+      color: "#a2badf",
+      delay: 1.7,
+    },
+    {
+      top: "18%",
+      right: "16%",
+      size: 14,
+      color: "#a8b193",
+      delay: 0.5,
+    },
+    {
+      top: "50%",
+      right: "9%",
+      size: 20,
+      color: "#eec988",
+      delay: 1.1,
+    },
+    {
+      bottom: "15%",
+      right: "24%",
+      size: 11,
+      color: "#eaa5af",
+      delay: 1.9,
+    },
+  ];
+
+  const softCircles = [
+    {
+      className:
+        "absolute -left-16 bottom-[-70px] h-44 w-44 sm:h-56 sm:w-56 lg:h-64 lg:w-64",
+      color: "rgba(168, 177, 147, 0.22)",
+      duration: 12,
+    },
+    {
+      className:
+        "absolute -right-14 -top-16 h-36 w-36 sm:h-44 sm:w-44 lg:h-52 lg:w-52",
+      color: "rgba(234, 165, 175, 0.28)",
+      duration: 14,
+    },
+    {
+      className:
+        "absolute left-[48%] top-[36%] h-20 w-20 sm:h-24 sm:w-24 lg:h-28 lg:w-28",
+      color: "rgba(181, 167, 200, 0.16)",
+      duration: 10,
+    },
+  ];
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      {softCircles.map((circle, index) => (
+        <motion.div
+          key={`family-soft-circle-${index}`}
+          className={`${circle.className} rounded-full blur-sm`}
+          style={{ backgroundColor: circle.color }}
+          animate={{
+            x: [0, 18, -14, 0],
+            y: [0, -14, 16, 0],
+            scale: [1, 1.06, 0.97, 1],
+          }}
+          transition={{
+            duration: circle.duration,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+
+      {bubbles.map((bubble, index) => (
+        <motion.span
+          key={`family-bubble-${index}`}
+          className="absolute rounded-full"
+          style={{
+            top: bubble.top,
+            left: bubble.left,
+            right: bubble.right,
+            bottom: bubble.bottom,
+            width: bubble.size,
+            height: bubble.size,
+            backgroundColor: bubble.color,
+            opacity: 0.7,
+            boxShadow: `0 0 18px ${bubble.color}80`,
+          }}
+          animate={{
+            x: [0, 12 + index * 2, -8, 0],
+            y: [0, -12, 10, 0],
+            scale: [1, 1.22, 0.92, 1],
+            opacity: [0.45, 0.8, 0.5, 0.45],
+          }}
+          transition={{
+            duration: 7 + index,
+            delay: bubble.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 export default function Dashboard({
