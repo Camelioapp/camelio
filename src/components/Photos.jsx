@@ -154,20 +154,20 @@ function PhotoCard({ photo, children, onOpen, onDelete }) {
 
         <div className="mt-3 flex flex-wrap gap-2">
           {photo.children?.length ? (
-            photo.children.map((childName) => {
-              const child = children.find((item) => item.name === childName);
-              const color = getColor(child?.color);
+  photo.children.map((childId) => {
+    const child = children.find((item) => item.id === childId);
+    const color = getColor(child?.color);
 
-              return (
-                <span
-                  key={childName}
-                  className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${color.soft}`}
-                >
-                  {displayName(child || { name: childName })}
-                </span>
-              );
-            })
-          ) : (
+    return (
+      <span
+        key={childId}
+        className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${color.soft}`}
+      >
+        {child ? displayName(child) : "Enfant supprimé"}
+      </span>
+    );
+  })
+) : (
             <span className="rounded-full bg-[#FFFDF8] px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
               Personne identifié
             </span>
@@ -584,14 +584,14 @@ function PhotoPopup({
 
               <div className="mt-3 space-y-2">
                 {children.map((child) => {
-                  const selected = photoForm.children.includes(child.name);
+                  const selected = photoForm.children.includes(child.id);
                   const color = getColor(child.color);
 
                   return (
                     <button
                       key={child.name}
                       type="button"
-                      onClick={() => toggleChild(child.name)}
+                      onClick={() => toggleChild(child.id)}
                       className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-1 ${
                         selected
                           ? `${color.soft} ring-2`
@@ -813,14 +813,14 @@ export default function Photos({ children = [] }) {
     loadPhotos();
   }, []);
 
-  const toggleChild = (childName) => {
-    setPhotoForm((current) => ({
-      ...current,
-      children: current.children.includes(childName)
-        ? current.children.filter((name) => name !== childName)
-        : [...current.children, childName],
-    }));
-  };
+  const toggleChild = (childId) => {
+  setPhotoForm((current) => ({
+    ...current,
+    children: current.children.includes(childId)
+      ? current.children.filter((id) => id !== childId)
+      : [...current.children, childId],
+  }));
+};
 
   const uploadPhotos = async (event) => {
     const selectedFiles = Array.from(event.target.files || []);
@@ -1050,10 +1050,10 @@ export default function Photos({ children = [] }) {
   };
 
   const galleryPhotos = selectedGalleryChild
-    ? photos.filter((photo) =>
-        photo.children?.includes(selectedGalleryChild.name)
-      )
-    : [];
+  ? photos.filter((photo) =>
+      photo.children?.includes(selectedGalleryChild.id)
+    )
+  : [];
 
   const albumPhotos = selectedAlbum
     ? photos.filter((photo) => photo.album === selectedAlbum.title)
@@ -1138,8 +1138,8 @@ export default function Photos({ children = [] }) {
           {children.map((child) => {
             const color = getColor(child.color);
             const count = photos.filter((photo) =>
-              photo.children?.includes(child.name)
-            ).length;
+  photo.children?.includes(child.id)
+).length;
 
             return (
               <button
