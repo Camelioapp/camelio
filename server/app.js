@@ -35,14 +35,16 @@ const { dynamo } = require("./dynamo");
 
 const app = express();
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
 const PORT = process.env.PORT || 3001;
+
 const APP_URL =
   process.env.APP_URL ||
   process.env.APP_BASE_URL ||
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
 
-const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production";
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 
 const COGNITO_ISSUER = process.env.COGNITO_ISSUER;
@@ -56,6 +58,25 @@ const COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
 const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
 const ACCOUNT_DELETE_CONFIRMATION = "supprimer";
 
+/*
+  Sécurité :
+  - La clé de session doit être obligatoire en production.
+  - En local seulement, on garde une clé temporaire pour faciliter le développement.
+*/
+const SESSION_SECRET = process.env.SESSION_SECRET;
+
+if (!SESSION_SECRET && IS_PRODUCTION) {
+  throw new Error("SESSION_SECRET est requis en production.");
+}
+
+const SESSION_SECRET_VALUE =
+  SESSION_SECRET || "dev-session-secret-only-for-local-development";
+
+/*
+  Région AWS :
+  - Camelio utilise AWS Canada Centre.
+  - On garde ca-central-1 comme valeur par défaut cohérente.
+*/
 const AWS_REGION = process.env.AWS_REGION || "us-east-2";
 const S3_REGION = process.env.S3_REGION || "ca-central-1";
 const S3_DOCUMENTS_BUCKET = process.env.S3_DOCUMENTS_BUCKET;
@@ -84,21 +105,54 @@ let oidcClientPromise = null;
 app.set("view engine", "ejs");
 app.set("views", `${__dirname}/views`);
 
+/*
+  Payload limit :
+  - 10mb est conservé parce que ton app utilise des images/base64 dans certains cas.
+  - À long terme, l’idéal est de passer seulement par S3 presigned upload pour les fichiers.
+*/
 app.use(express.json({ limit: "10mb" }));
 
+/*
+  Headers de sécurité de base, sans ajouter helmet.
+*/
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   next();
 });
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:3001",
+/*
+  CORS :
+  - Les origines de production sont conservées.
+  - Tu peux ajouter d'autres URLs avec CORS_ALLOWED_ORIGINS dans Render.
+  - Exemple Render :
+    CORS_ALLOWED_ORIGINS=https://camelio.app,https://www.camelio.app,https://camelio-frontend.onrender.com
+*/
+const defaultAllowedOrigins = [
   "https://camelio-frontend.onrender.com",
   "https://camelio.app",
   "https://www.camelio.app",
   "https://api.camelio.app",
 ];
+
+const envAllowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : [];
+
+const allowedOrigins = Array.from(
+  new Set([...defaultAllowedOrigins, ...envAllowedOrigins])
+);
+
+if (!IS_PRODUCTION) {
+  allowedOrigins.push("http://localhost:5173");
+  allowedOrigins.push("http://localhost:3000");
+  allowedOrigins.push("http://localhost:3001");
+}
 
 app.use(
   cors({
@@ -118,13 +172,14 @@ app.set("trust proxy", 1);
 app.use(
   session({
     name: "camelio.sid",
-    secret: SESSION_SECRET,
+    secret: SESSION_SECRET_VALUE,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
       httpOnly: true,
-      sameSite: "none",
-      secure: true,
+      sameSite: IS_PRODUCTION ? "none" : "lax",
+      secure: IS_PRODUCTION,
       maxAge: 1000 * 60 * 60 * 8,
     },
   })
@@ -170,17 +225,14 @@ async function generateUniqueSevenDigitUserId() {
 function validateAwsConfig(req, res, next) {
   const missing = [];
 
-  if (!process.env.AWS_REGION) missing.push("AWS_REGION");
-  if (!process.env.DYNAMODB_TABLE) missing.push("DYNAMODB_TABLE");
+  if (!process.env.AWS_REGION && IS_PRODUCTION) missing.push("AWS_REGION");
+  if (!process.env.DYNAMODB_TABLE && IS_PRODUCTION) missing.push("DYNAMODB_TABLE");
 
-  if (!process.env.AWS_ACCESS_KEY_ID && process.env.NODE_ENV !== "production") {
+  if (!process.env.AWS_ACCESS_KEY_ID && !IS_PRODUCTION) {
     missing.push("AWS_ACCESS_KEY_ID");
   }
 
-  if (
-    !process.env.AWS_SECRET_ACCESS_KEY &&
-    process.env.NODE_ENV !== "production"
-  ) {
+  if (!process.env.AWS_SECRET_ACCESS_KEY && !IS_PRODUCTION) {
     missing.push("AWS_SECRET_ACCESS_KEY");
   }
 
@@ -198,16 +250,13 @@ function validateAwsConfig(req, res, next) {
 function validateS3Config(req, res, next) {
   const missing = [];
 
-  if (!process.env.S3_REGION) missing.push("S3_REGION");
+  if (!process.env.S3_REGION && IS_PRODUCTION) missing.push("S3_REGION");
 
-  if (!process.env.AWS_ACCESS_KEY_ID && process.env.NODE_ENV !== "production") {
+  if (!process.env.AWS_ACCESS_KEY_ID && !IS_PRODUCTION) {
     missing.push("AWS_ACCESS_KEY_ID");
   }
 
-  if (
-    !process.env.AWS_SECRET_ACCESS_KEY &&
-    process.env.NODE_ENV !== "production"
-  ) {
+  if (!process.env.AWS_SECRET_ACCESS_KEY && !IS_PRODUCTION) {
     missing.push("AWS_SECRET_ACCESS_KEY");
   }
 
@@ -375,7 +424,16 @@ function cleanDocumentPayload(body = {}) {
 function sanitizeFileName(fileName = "") {
   return String(fileName)
     .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9._-]/g, "");
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .slice(0, 180);
+}
+
+function isAllowedImageType(fileType) {
+  return ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(fileType);
+}
+
+function isSafeS3KeyForOwner(s3Key = "", ownerId = "") {
+  return String(s3Key).startsWith(`users/${ownerId}/`);
 }
 
 async function deleteAllUserDynamoItems(userPk) {
@@ -518,6 +576,13 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/aws-check", (req, res) => {
+  if (IS_PRODUCTION) {
+    return res.status(403).json({
+      error: "forbidden",
+      message: "Cette route est désactivée en production.",
+    });
+  }
+
   res.json({
     awsRegion: process.env.AWS_REGION || null,
     dynamodbTable: process.env.DYNAMODB_TABLE || null,
@@ -670,6 +735,12 @@ app.get("/logout", (req, res) => {
   const logoutRedirectUrl = COGNITO_LOGOUT_URI || "https://camelio.app";
 
   req.session.destroy(() => {
+    res.clearCookie("camelio.sid", {
+      httpOnly: true,
+      sameSite: IS_PRODUCTION ? "none" : "lax",
+      secure: IS_PRODUCTION,
+    });
+
     if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
       const logoutUrl = new URL(`${COGNITO_DOMAIN.replace(/\/$/, "")}/logout`);
       logoutUrl.searchParams.set("client_id", COGNITO_CLIENT_ID);
@@ -1356,6 +1427,13 @@ app.post(
       const cleanFileName = sanitizeFileName(payload.fileName);
       const s3Key = `users/${ownerId}/children/${payload.childId}/documents/${documentId}-${cleanFileName}`;
 
+      if (!isSafeS3KeyForOwner(s3Key, ownerId)) {
+        return res.status(400).json({
+          error: "invalid_s3_key",
+          message: "Clé S3 invalide.",
+        });
+      }
+
       const command = new PutObjectCommand({
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
@@ -1454,6 +1532,15 @@ app.get(
         });
       }
 
+      const ownerId = getOwnerId(req);
+
+      if (!isSafeS3KeyForOwner(document.s3Key, ownerId)) {
+        return res.status(403).json({
+          error: "forbidden_s3_key",
+          message: "Accès refusé à ce document.",
+        });
+      }
+
       const command = new GetObjectCommand({
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: document.s3Key,
@@ -1499,6 +1586,15 @@ app.delete(
         return res.status(404).json({
           error: "not_found",
           message: "Document introuvable.",
+        });
+      }
+
+      const ownerId = getOwnerId(req);
+
+      if (!isSafeS3KeyForOwner(document.s3Key, ownerId)) {
+        return res.status(403).json({
+          error: "forbidden_s3_key",
+          message: "Accès refusé à ce document.",
         });
       }
 
@@ -1549,9 +1645,7 @@ app.post(
         });
       }
 
-      const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
-
-      if (!allowedTypes.includes(fileType)) {
+      if (!isAllowedImageType(fileType)) {
         return res.status(400).json({
           error: "invalid_file_type",
           message: "Ce type d’image n’est pas autorisé.",
@@ -1564,6 +1658,13 @@ app.post(
       const safeChildId = childId || "general";
 
       const s3Key = `users/${ownerId}/children/${safeChildId}/avatars/${avatarId}-${cleanFileName}`;
+
+      if (!isSafeS3KeyForOwner(s3Key, ownerId)) {
+        return res.status(400).json({
+          error: "invalid_s3_key",
+          message: "Clé S3 invalide.",
+        });
+      }
 
       const uploadCommand = new PutObjectCommand({
         Bucket: S3_DOCUMENTS_BUCKET,
@@ -1617,9 +1718,7 @@ app.post(
         });
       }
 
-      const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
-
-      if (!allowedTypes.includes(fileType)) {
+      if (!isAllowedImageType(fileType)) {
         return res.status(400).json({
           error: "invalid_file_type",
           message: "Ce type de photo n’est pas autorisé.",
@@ -1630,6 +1729,13 @@ app.post(
       const photoId = randomUUID();
       const cleanFileName = sanitizeFileName(fileName);
       const s3Key = `users/${ownerId}/photos/${photoId}-${cleanFileName}`;
+
+      if (!isSafeS3KeyForOwner(s3Key, ownerId)) {
+        return res.status(400).json({
+          error: "invalid_s3_key",
+          message: "Clé S3 invalide.",
+        });
+      }
 
       const command = new PutObjectCommand({
         Bucket: S3_DOCUMENTS_BUCKET,
@@ -1664,6 +1770,15 @@ app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) =
       });
     }
 
+    const ownerId = getOwnerId(req);
+
+    if (!isSafeS3KeyForOwner(s3Key, ownerId)) {
+      return res.status(403).json({
+        error: "forbidden_s3_key",
+        message: "Clé S3 non autorisée pour cet utilisateur.",
+      });
+    }
+
     const now = new Date().toISOString();
 
     const photo = {
@@ -1673,7 +1788,7 @@ app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) =
       type: "photo",
       title,
       album,
-      children,
+      children: Array.isArray(children) ? children : [],
       s3Key,
       fileName,
       date: now.slice(0, 10),
@@ -1715,8 +1830,18 @@ app.get(
         })
       );
 
+      const ownerId = getOwnerId(req);
+
       const photos = await Promise.all(
         (result.Items || []).map(async (photo) => {
+          if (!isSafeS3KeyForOwner(photo.s3Key, ownerId)) {
+            return {
+              ...photo,
+              url: "",
+              blocked: true,
+            };
+          }
+
           const downloadUrl = await getSignedUrl(
             s3,
             new GetObjectCommand({
@@ -1771,6 +1896,15 @@ app.delete(
         return res.status(404).json({
           error: "not_found",
           message: "Photo introuvable.",
+        });
+      }
+
+      const ownerId = getOwnerId(req);
+
+      if (!isSafeS3KeyForOwner(photo.s3Key, ownerId)) {
+        return res.status(403).json({
+          error: "forbidden_s3_key",
+          message: "Accès refusé à cette photo.",
         });
       }
 
@@ -1954,6 +2088,12 @@ app.delete(
       await deleteCognitoUser(req);
 
       req.session.destroy(() => {
+        res.clearCookie("camelio.sid", {
+          httpOnly: true,
+          sameSite: IS_PRODUCTION ? "none" : "lax",
+          secure: IS_PRODUCTION,
+        });
+
         return res.json({
           success: true,
           redirectUrl: "https://camelio.app",
@@ -1968,6 +2108,13 @@ app.delete(
 
 app.use((error, req, res, next) => {
   console.error(error);
+
+  if (error.message && error.message.includes("CORS blocked for origin")) {
+    return res.status(403).json({
+      error: "cors_blocked",
+      message: "Origine non autorisée.",
+    });
+  }
 
   if (error.message && error.message.includes("Could not load credentials")) {
     return res.status(500).json({
@@ -1989,7 +2136,7 @@ app.use((error, req, res, next) => {
       error: "aws_access_denied",
       message:
         "Les clés AWS sont présentes, mais elles n'ont pas les permissions nécessaires.",
-      details: error.message,
+      details: IS_PRODUCTION ? undefined : error.message,
     });
   }
 
@@ -1997,7 +2144,7 @@ app.use((error, req, res, next) => {
     return res.status(404).json({
       error: "s3_bucket_not_found",
       message: "Le bucket S3 est introuvable.",
-      details: error.message,
+      details: IS_PRODUCTION ? undefined : error.message,
     });
   }
 
@@ -2010,7 +2157,9 @@ app.use((error, req, res, next) => {
 
   res.status(500).json({
     error: "server_error",
-    message: error.message || "Erreur serveur.",
+    message: IS_PRODUCTION
+      ? "Erreur serveur."
+      : error.message || "Erreur serveur.",
   });
 });
 
