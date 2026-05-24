@@ -1,6 +1,6 @@
 {
-  "name": "camelio-welcome-section",
-  "version": "0.1.0",
+  "name": "camelio",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.0.0",
     "@tailwindcss/vite": "latest",
     "@vitejs/plugin-react": "latest",
     "aws-amplify": "^6.17.0",
@@ -17,7 +18,10 @@
     "react": "latest",
     "react-dom": "latest",
     "tailwindcss": "latest",
-    "vite": "latest",
-    "@aws-sdk/client-cognito-identity-provider": "^3.0.0"
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15"
   }
-} 
+}

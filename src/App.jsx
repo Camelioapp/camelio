@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import WelcomeScreen from "./components/WelcomeScreen.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import Billing from "./components/billing.jsx";
+import LandingPage from "./LandingPage.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
@@ -92,6 +93,18 @@ export default function App() {
     };
   }, []);
 
+  /*
+    Route publique de la landing page.
+    Accessible ici :
+    https://camelio.app/accueil
+  */
+  if (currentPath === "/accueil") {
+  return <LandingPage />;
+}
+
+  /*
+    Route billing existante.
+  */
   if (currentPath === "/billing") {
     return <Billing />;
   }
