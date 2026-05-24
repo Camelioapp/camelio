@@ -14,11 +14,13 @@
     "@aws-sdk/client-s3": "^3.1049.0",
     "@aws-sdk/lib-dynamodb": "^3.1049.0",
     "@aws-sdk/s3-request-presigner": "^3.1049.0",
+    "connect-dynamodb": "^3.0.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "ejs": "^3.1.10",
     "express": "^4.21.1",
     "express-session": "^1.18.1",
+    "helmet": "^8.2.0",
     "openid-client": "^5.7.0",
     "stripe": "^17.7.0",
     "uuid": "^14.0.0"

@@ -2,6 +2,8 @@ require("dotenv").config();
 
 const express = require("express");
 const session = require("express-session");
+const DynamoDBStore = require("connect-dynamodb")({ session });
+const helmet = require("helmet");
 const cors = require("cors");
 const { Issuer, generators } = require("openid-client");
 const { randomUUID } = require("crypto");
@@ -46,7 +48,7 @@ const APP_URL =
   "http://localhost:5173";
 
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
-
+const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
 const COGNITO_ISSUER = process.env.COGNITO_ISSUER;
 const COGNITO_CLIENT_ID = process.env.COGNITO_CLIENT_ID;
 const COGNITO_CLIENT_SECRET = process.env.COGNITO_CLIENT_SECRET || undefined;
@@ -58,11 +60,6 @@ const COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
 const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
 const ACCOUNT_DELETE_CONFIRMATION = "supprimer";
 
-/*
-  Sécurité :
-  - La clé de session doit être obligatoire en production.
-  - En local seulement, on garde une clé temporaire pour faciliter le développement.
-*/
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
 if (!SESSION_SECRET && IS_PRODUCTION) {
@@ -72,12 +69,7 @@ if (!SESSION_SECRET && IS_PRODUCTION) {
 const SESSION_SECRET_VALUE =
   SESSION_SECRET || "dev-session-secret-only-for-local-development";
 
-/*
-  Région AWS :
-  - Camelio utilise AWS Canada Centre.
-  - On garde ca-central-1 comme valeur par défaut cohérente.
-*/
-const AWS_REGION = process.env.AWS_REGION || "us-east-2";
+const AWS_REGION = process.env.AWS_REGION || "ca-central-1";
 const S3_REGION = process.env.S3_REGION || "ca-central-1";
 const S3_DOCUMENTS_BUCKET = process.env.S3_DOCUMENTS_BUCKET;
 
@@ -85,6 +77,19 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PRICE_LOOKUP_KEY =
   process.env.STRIPE_PRICE_LOOKUP_KEY || "camelio_monthly_595";
 const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
+
+const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+const ALLOWED_DOCUMENT_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+];
+
+const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
 
 const stripe = STRIPE_SECRET_KEY
   ? new Stripe(STRIPE_SECRET_KEY, {
@@ -105,32 +110,26 @@ let oidcClientPromise = null;
 app.set("view engine", "ejs");
 app.set("views", `${__dirname}/views`);
 
-/*
-  Payload limit :
-  - 10mb est conservé parce que ton app utilise des images/base64 dans certains cas.
-  - À long terme, l’idéal est de passer seulement par S3 presigned upload pour les fichiers.
-*/
 app.use(express.json({ limit: "10mb" }));
 
-/*
-  Headers de sécurité de base, sans ajouter helmet.
-*/
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+  if (IS_PRODUCTION) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+
   next();
 });
 
-/*
-  CORS :
-  - Les origines de production sont conservées.
-  - Tu peux ajouter d'autres URLs avec CORS_ALLOWED_ORIGINS dans Render.
-  - Exemple Render :
-    CORS_ALLOWED_ORIGINS=https://camelio.app,https://www.camelio.app,https://camelio-frontend.onrender.com
-*/
 const defaultAllowedOrigins = [
   "https://camelio-frontend.onrender.com",
   "https://camelio.app",
@@ -167,12 +166,46 @@ app.use(
   })
 );
 
+function validateTrustedOrigin(req, res, next) {
+  const safeMethods = ["GET", "HEAD", "OPTIONS"];
+
+  if (safeMethods.includes(req.method)) {
+    return next();
+  }
+
+  const origin = req.get("origin");
+
+  if (!origin) {
+    return next();
+  }
+
+  if (!allowedOrigins.includes(origin)) {
+    return res.status(403).json({
+      error: "invalid_origin",
+      message: "Origine non autorisée.",
+    });
+  }
+
+  return next();
+}
+
+app.use(validateTrustedOrigin);
+
 app.set("trust proxy", 1);
+
+const sessionStore = new DynamoDBStore({
+  table: AWS_SESSION_SECRET,
+  AWSConfigJSON: {
+    region: AWS_REGION,
+  },
+  reapInterval: 60 * 60 * 1000,
+});
 
 app.use(
   session({
     name: "camelio.sid",
     secret: SESSION_SECRET_VALUE,
+    store: sessionStore,
     resave: false,
     saveUninitialized: false,
     rolling: true,
@@ -414,7 +447,7 @@ function cleanDocumentPayload(body = {}) {
   return {
     fileName: body.fileName || "",
     fileType: body.fileType || "",
-    fileSize: body.fileSize || null,
+    fileSize: Number(body.fileSize) || 0,
     childId: body.childId || "",
     childName: body.childName || "",
     category: body.category || "Général",
@@ -429,7 +462,16 @@ function sanitizeFileName(fileName = "") {
 }
 
 function isAllowedImageType(fileType) {
-  return ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(fileType);
+  return ALLOWED_IMAGE_TYPES.includes(fileType);
+}
+
+function isAllowedDocumentType(fileType) {
+  return ALLOWED_DOCUMENT_TYPES.includes(fileType);
+}
+
+function isValidFileSize(fileSize, maxSizeBytes) {
+  const size = Number(fileSize);
+  return Number.isFinite(size) && size > 0 && size <= maxSizeBytes;
 }
 
 function isSafeS3KeyForOwner(s3Key = "", ownerId = "") {
@@ -1256,7 +1298,10 @@ app.get(
       return res.json({
         hasAccess: Boolean(hasAccess),
         status: subscription?.status || "none",
-        subscription,
+        plan: subscription?.plan || null,
+        currentPeriodEnd: subscription?.currentPeriodEnd || null,
+        trialEnd: subscription?.trialEnd || null,
+        cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
       });
     } catch (error) {
       next(error);
@@ -1342,12 +1387,26 @@ app.post(
         }
       );
 
+      if (checkoutSession.metadata?.userId !== req.session.user.sub) {
+        return res.status(403).json({
+          error: "forbidden_checkout_session",
+          message: "Cette session Stripe n’appartient pas à cet utilisateur.",
+        });
+      }
+
       const stripeSubscription = checkoutSession.subscription;
 
       if (!stripeSubscription) {
         return res.status(400).json({
           error: "missing_subscription",
           message: "Aucun abonnement Stripe trouvé pour cette session.",
+        });
+      }
+
+      if (stripeSubscription.metadata?.userId !== req.session.user.sub) {
+        return res.status(403).json({
+          error: "forbidden_subscription",
+          message: "Cet abonnement Stripe n’appartient pas à cet utilisateur.",
         });
       }
 
@@ -1378,6 +1437,7 @@ app.post(
         currentPeriodEnd: stripeSubscription.current_period_end
           ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
           : null,
+        cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
         updatedAt: now,
         createdAt: now,
       };
@@ -1393,7 +1453,11 @@ app.post(
         success: true,
         hasAccess: ["trialing", "active"].includes(subscriptionItem.status),
         status: subscriptionItem.status,
-        subscription: subscriptionItem,
+        plan: subscriptionItem.plan,
+        storageGb: subscriptionItem.storageGb,
+        trialEndsAt: subscriptionItem.trialEndsAt,
+        currentPeriodEnd: subscriptionItem.currentPeriodEnd,
+        cancelAtPeriodEnd: subscriptionItem.cancelAtPeriodEnd,
       });
     } catch (error) {
       next(error);
@@ -1418,6 +1482,20 @@ app.post(
         return res.status(400).json({
           error: "missing_fields",
           message: "fileName, fileType et childId sont requis.",
+        });
+      }
+
+      if (!isAllowedDocumentType(payload.fileType)) {
+        return res.status(400).json({
+          error: "invalid_file_type",
+          message: "Ce type de document n’est pas autorisé.",
+        });
+      }
+
+      if (!isValidFileSize(payload.fileSize, MAX_DOCUMENT_SIZE_BYTES)) {
+        return res.status(400).json({
+          error: "invalid_file_size",
+          message: "Le document doit être supérieur à 0 octet et ne pas dépasser 10 MB.",
         });
       }
 
@@ -1636,7 +1714,7 @@ app.post(
   validateS3Config,
   async (req, res, next) => {
     try {
-      const { fileName, fileType, childId } = req.body;
+      const { fileName, fileType, childId, fileSize } = req.body;
 
       if (!fileName || !fileType) {
         return res.status(400).json({
@@ -1649,6 +1727,13 @@ app.post(
         return res.status(400).json({
           error: "invalid_file_type",
           message: "Ce type d’image n’est pas autorisé.",
+        });
+      }
+
+      if (fileSize && !isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
+        return res.status(400).json({
+          error: "invalid_file_size",
+          message: "L’image doit ne pas dépasser 5 MB.",
         });
       }
 
@@ -1709,7 +1794,7 @@ app.post(
   validateS3Config,
   async (req, res, next) => {
     try {
-      const { fileName, fileType } = req.body;
+      const { fileName, fileType, fileSize } = req.body;
 
       if (!fileName || !fileType) {
         return res.status(400).json({
@@ -1722,6 +1807,13 @@ app.post(
         return res.status(400).json({
           error: "invalid_file_type",
           message: "Ce type de photo n’est pas autorisé.",
+        });
+      }
+
+      if (fileSize && !isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
+        return res.status(400).json({
+          error: "invalid_file_size",
+          message: "La photo doit ne pas dépasser 5 MB.",
         });
       }
 
@@ -1945,8 +2037,8 @@ app.post(
   validateStripeConfig,
   async (req, res, next) => {
     try {
-      const lookupKey = req.body.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
-      const wantsTrial = req.body.trial === true;
+      const lookupKey = STRIPE_PRICE_LOOKUP_KEY;
+      const wantsTrial = true;
 
       const prices = await stripe.prices.list({
         lookup_keys: [lookupKey],
@@ -2009,28 +2101,37 @@ app.post(
   "/create-portal-session",
   requireAuth,
   validateStripeConfig,
+  validateAwsConfig,
   async (req, res, next) => {
     try {
-      const { session_id } = req.body;
+      const subscriptionResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: "SUBSCRIPTION",
+          },
+        })
+      );
 
-      if (!session_id) {
+      const subscription = subscriptionResult.Item || null;
+
+      if (!subscription?.stripeCustomerId) {
         return res.status(400).json({
-          error: "missing_session_id",
-          message: "session_id est requis.",
+          error: "stripe_customer_missing",
+          message: "Aucun client Stripe trouvé pour ce compte.",
         });
       }
 
-      const checkoutSession = await stripe.checkout.sessions.retrieve(session_id);
-
-      if (!checkoutSession.customer) {
-        return res.status(400).json({
-          error: "stripe_customer_missing",
-          message: "Aucun client Stripe trouvé pour cette session.",
+      if (subscription.userId && subscription.userId !== req.session.user.sub) {
+        return res.status(403).json({
+          error: "forbidden_customer",
+          message: "Ce client Stripe n’appartient pas à cet utilisateur.",
         });
       }
 
       const portalSession = await stripe.billingPortal.sessions.create({
-        customer: checkoutSession.customer,
+        customer: subscription.stripeCustomerId,
         return_url: `${APP_URL}/billing`,
       });
 
