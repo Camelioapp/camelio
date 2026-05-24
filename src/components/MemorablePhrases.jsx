@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronDown,
-  Heart,
+  Edit3,
   ImagePlus,
   Palette,
   Quote,
@@ -65,6 +65,13 @@ const monthOptions = [
   { value: "12", label: "Décembre" },
 ];
 
+const fallbackColor = {
+  main: "#8FA173",
+  soft: "#F0EAF8",
+  border: "#F3CDD3",
+  text: "#746F64",
+};
+
 function getTodayDate() {
   return new Date().toISOString().split("T")[0];
 }
@@ -98,6 +105,63 @@ function getYearValue(date) {
 function displayChildName(child) {
   if (!child) return "Enfant";
   return child.nickname || child.firstName || child.name || "Enfant";
+}
+
+function hexToRgba(hex, alpha = 1) {
+  if (!hex || typeof hex !== "string") return `rgba(143, 161, 115, ${alpha})`;
+
+  const clean = hex.replace("#", "");
+
+  if (clean.length !== 6) return `rgba(143, 161, 115, ${alpha})`;
+
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getChildTheme(child) {
+  const color =
+    child?.calendarColor ||
+    child?.color ||
+    child?.themeColor ||
+    child?.accentColor ||
+    child?.profileColor ||
+    "";
+
+  if (typeof color === "string" && color.startsWith("#")) {
+    return {
+      main: color,
+      soft: hexToRgba(color, 0.14),
+      border: hexToRgba(color, 0.38),
+      text: color,
+    };
+  }
+
+  const colorName = String(color || "").toLowerCase();
+
+  const map = {
+    rose: { main: "#EAA5AF", soft: "#FFF1F4", border: "#F3CDD3", text: "#B96B77" },
+    pink: { main: "#EAA5AF", soft: "#FFF1F4", border: "#F3CDD3", text: "#B96B77" },
+    mauve: { main: "#B5A7C8", soft: "#F3EAFB", border: "#DED2EA", text: "#8C76A8" },
+    violet: { main: "#B5A7C8", soft: "#F3EAFB", border: "#DED2EA", text: "#8C76A8" },
+    bleu: { main: "#A2BADF", soft: "#EEF5FF", border: "#CBDDF4", text: "#6D88B2" },
+    blue: { main: "#A2BADF", soft: "#EEF5FF", border: "#CBDDF4", text: "#6D88B2" },
+    vert: { main: "#A8B193", soft: "#F0F5EA", border: "#D7DFC9", text: "#748060" },
+    green: { main: "#A8B193", soft: "#F0F5EA", border: "#D7DFC9", text: "#748060" },
+    sage: { main: "#A8B193", soft: "#F0F5EA", border: "#D7DFC9", text: "#748060" },
+    jaune: { main: "#EEC988", soft: "#FFF6E3", border: "#F0D7A8", text: "#B58B42" },
+    dore: { main: "#EEC988", soft: "#FFF6E3", border: "#F0D7A8", text: "#B58B42" },
+    orange: { main: "#EEC988", soft: "#FFF6E3", border: "#F0D7A8", text: "#B58B42" },
+  };
+
+  return map[colorName] || fallbackColor;
+}
+
+function getPhraseTheme(phrase) {
+  const firstChild = phrase.children?.[0];
+  return getChildTheme(firstChild);
 }
 
 function calculateAgeAtDate(birthDate, situationDate) {
@@ -316,6 +380,7 @@ async function createShareImageBlob({ phrase, options }) {
 
   const ctx = canvas.getContext("2d");
   const background = options.backgroundColor || "#FCEEF3";
+  const theme = getPhraseTheme(phrase);
 
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -348,7 +413,7 @@ async function createShareImageBlob({ phrase, options }) {
       ctx.arc(540, topY + 58, 68, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.fillStyle = "#746F64";
+      ctx.fillStyle = theme.text;
       ctx.font = "bold 26px Arial";
       ctx.textAlign = "center";
       ctx.fillText(firstChild.name, 540, topY + 155);
@@ -358,7 +423,7 @@ async function createShareImageBlob({ phrase, options }) {
     }
   }
 
-  ctx.fillStyle = "#D99AB9";
+  ctx.fillStyle = theme.main;
   ctx.font = "bold 78px Georgia";
   ctx.textAlign = "left";
   ctx.fillText("“", 130, topY + 12);
@@ -380,9 +445,9 @@ async function createShareImageBlob({ phrase, options }) {
   const infoY = quoteY + 35;
   const childLabel = phrase.children?.length
     ? phrase.children.map((child) => child.name).join(", ")
-    : "Non associé";
+    : "";
 
-  ctx.fillStyle = "#8FA173";
+  ctx.fillStyle = theme.main;
   roundedRect(ctx, 150, infoY, 330, 64, 32);
   ctx.fill();
 
@@ -464,13 +529,17 @@ async function createShareImageBlob({ phrase, options }) {
   });
 }
 
-function AddPhrasePopup({
+function PhrasePopup({
+  mode,
   childrenOptions,
   formData,
   setFormData,
   onClose,
   onSave,
+  onDelete,
 }) {
+  const isEdit = mode === "edit";
+
   const updateField = (field, value) => {
     setFormData((current) => ({
       ...current,
@@ -521,12 +590,13 @@ function AddPhrasePopup({
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-2xl font-black text-[#3F3D38]">
-              Phrase mémorable
+              {isEdit ? "Modifier la phrase" : "Phrase mémorable"}
             </h3>
 
             <p className="mt-1 text-sm text-[#746F64]">
-              Ajoute une phrase, une date, un ou plusieurs enfants et une photo
-              souvenir.
+              {isEdit
+                ? "Modifie la phrase, la date, les enfants associés ou la photo."
+                : "Ajoute une phrase, une date, un ou plusieurs enfants et une photo souvenir."}
             </p>
           </div>
 
@@ -563,17 +633,22 @@ function AddPhrasePopup({
             <div className="mt-3 flex flex-wrap gap-2">
               {childrenOptions.map((child) => {
                 const selected = formData.childIds.includes(child.id);
+                const theme = getChildTheme(child);
 
                 return (
                   <button
                     key={child.id}
                     type="button"
                     onClick={() => toggleChild(child.id)}
-                    className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ring-1 transition ${
-                      selected
-                        ? "bg-[#8FA173] text-white ring-[#8FA173]"
-                        : "bg-white text-[#746F64] ring-[#EFE4D6]"
-                    }`}
+                    className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ring-1 transition"
+                    style={{
+                      backgroundColor: selected ? theme.main : "#FFFFFF",
+                      color: selected ? "#FFFFFF" : "#746F64",
+                      borderColor: selected ? theme.main : "#EFE4D6",
+                      boxShadow: `0 0 0 1px ${
+                        selected ? theme.main : "#EFE4D6"
+                      }`,
+                    }}
                   >
                     {child.photo ? (
                       <img
@@ -672,9 +747,20 @@ function AddPhrasePopup({
               disabled={!formData.phrase.trim() || formData.childIds.length === 0}
               className="rounded-2xl bg-[#8FA173] px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#7F9166] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Enregistrer
+              {isEdit ? "Enregistrer" : "Ajouter"}
             </button>
           </div>
+
+          {isEdit ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FFF1F1] px-4 py-3 text-sm font-black text-[#B96B77] ring-1 ring-[#F3CDD3]"
+            >
+              <Trash2 className="h-4 w-4" />
+              Supprimer cette phrase
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -693,6 +779,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
       ?.label || "Bulles et lignes";
 
   const firstChild = phrase.children?.[0];
+  const theme = getPhraseTheme(phrase);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
@@ -758,7 +845,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
 
           <div className="relative flex h-full flex-col rounded-[1.5rem] bg-white/75 p-5">
             <div className="flex items-center justify-between gap-3">
-              <Quote className="h-7 w-7 text-[#D99AB9]" />
+              <Quote className="h-7 w-7" style={{ color: theme.main }} />
 
               <span className="text-xs font-black uppercase tracking-[0.16em] text-[#B8819C]">
                 Effet : {selectedEffectLabel}
@@ -773,7 +860,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
                   className="h-20 w-20 rounded-full object-cover ring-4 ring-white"
                 />
 
-                <p className="mt-2 text-xs font-black text-[#746F64]">
+                <p className="mt-2 text-xs font-black" style={{ color: theme.text }}>
                   {firstChild.name}
                 </p>
               </div>
@@ -786,7 +873,10 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <span className="rounded-full bg-[#8FA173] px-4 py-2 text-xs font-black text-white">
+              <span
+                className="rounded-full px-4 py-2 text-xs font-black text-white"
+                style={{ backgroundColor: theme.main }}
+              >
                 {phrase.children.map((child) => child.name).join(", ")}
               </span>
 
@@ -943,6 +1033,13 @@ export default function MemorablePhrases({ children = [], onBack }) {
       name: displayChildName(child),
       photo: child.photo || "",
       birthDate: child.birthDate || "",
+      color:
+        child.calendarColor ||
+        child.color ||
+        child.themeColor ||
+        child.accentColor ||
+        child.profileColor ||
+        "",
     }));
   }, [children]);
 
@@ -987,17 +1084,20 @@ export default function MemorablePhrases({ children = [], onBack }) {
   const [selectedMonthFilter, setSelectedMonthFilter] = useState("all");
   const [selectedYearFilter, setSelectedYearFilter] = useState("all");
   const [showAddPopup, setShowAddPopup] = useState(false);
+  const [editingPhrase, setEditingPhrase] = useState(null);
   const [sharePhraseItem, setSharePhraseItem] = useState(null);
   const [shareMessage, setShareMessage] = useState("");
 
-  const [formData, setFormData] = useState({
+  const emptyForm = {
     phrase: "",
     childIds: [],
     date: getTodayDate(),
     context: "",
     photoUrl: "",
     photoFile: null,
-  });
+  };
+
+  const [formData, setFormData] = useState(emptyForm);
 
   const availableYears = useMemo(() => {
     const years = new Set();
@@ -1048,21 +1148,10 @@ export default function MemorablePhrases({ children = [], onBack }) {
   ]);
 
   const resetForm = () => {
-    setFormData({
-      phrase: "",
-      childIds: [],
-      date: getTodayDate(),
-      context: "",
-      photoUrl: "",
-      photoFile: null,
-    });
+    setFormData(emptyForm);
   };
 
-  const handleAddPhrase = () => {
-    const cleanedPhrase = formData.phrase.trim();
-
-    if (!cleanedPhrase || formData.childIds.length === 0) return;
-
+  const buildPhraseFromForm = (id = `phrase-${Date.now()`) => {
     const assignedChildren = childOptions.filter((child) =>
       formData.childIds.includes(child.id)
     );
@@ -1070,9 +1159,9 @@ export default function MemorablePhrases({ children = [], onBack }) {
     const situationDate = formData.date || getTodayDate();
     const firstChild = assignedChildren[0];
 
-    const newPhrase = {
-      id: `phrase-${Date.now()}`,
-      phrase: cleanedPhrase,
+    return {
+      id,
+      phrase: formData.phrase.trim(),
       childIds: assignedChildren.map((child) => child.id),
       children: assignedChildren,
       date: situationDate,
@@ -1084,27 +1173,59 @@ export default function MemorablePhrases({ children = [], onBack }) {
         ? calculateAgeAtDate(firstChild.birthDate, situationDate)
         : "",
     };
+  };
+
+  const handleAddPhrase = () => {
+    if (!formData.phrase.trim() || formData.childIds.length === 0) return;
+
+    const newPhrase = buildPhraseFromForm();
 
     setPhrases((current) => [newPhrase, ...current]);
     resetForm();
     setShowAddPopup(false);
   };
 
-  const toggleFavorite = (phraseId) => {
-    setPhrases((current) =>
-      current.map((item) =>
-        item.id === phraseId
-          ? {
-              ...item,
-              favorite: !item.favorite,
-            }
-          : item
-      )
-    );
+  const openEditPopup = (phrase) => {
+    setEditingPhrase(phrase);
+
+    setFormData({
+      phrase: phrase.phrase || "",
+      childIds: phrase.childIds || [],
+      date: phrase.date || getTodayDate(),
+      context: phrase.context || "",
+      photoUrl: phrase.photoUrl || "",
+      photoFile: phrase.photoFile || null,
+    });
   };
 
-  const deletePhrase = (phraseId) => {
-    setPhrases((current) => current.filter((item) => item.id !== phraseId));
+  const handleSaveEdit = () => {
+    if (!editingPhrase) return;
+    if (!formData.phrase.trim() || formData.childIds.length === 0) return;
+
+    const updatedPhrase = {
+      ...buildPhraseFromForm(editingPhrase.id),
+      favorite: editingPhrase.favorite || false,
+    };
+
+    setPhrases((current) =>
+      current.map((item) =>
+        item.id === editingPhrase.id ? updatedPhrase : item
+      )
+    );
+
+    setEditingPhrase(null);
+    resetForm();
+  };
+
+  const handleDeleteEditedPhrase = () => {
+    if (!editingPhrase) return;
+
+    setPhrases((current) =>
+      current.filter((item) => item.id !== editingPhrase.id)
+    );
+
+    setEditingPhrase(null);
+    resetForm();
   };
 
   const handleShareImage = async (options) => {
@@ -1186,7 +1307,10 @@ export default function MemorablePhrases({ children = [], onBack }) {
 
         <button
           type="button"
-          onClick={() => setShowAddPopup(true)}
+          onClick={() => {
+            resetForm();
+            setShowAddPopup(true);
+          }}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#F3EAFB] px-4 py-4 text-sm font-black text-[#A789C8] ring-1 ring-[#E5D5F2]"
         >
           <Quote className="h-5 w-5" />
@@ -1218,28 +1342,37 @@ export default function MemorablePhrases({ children = [], onBack }) {
               Tous
             </button>
 
-            {childOptions.map((child) => (
-              <button
-                key={child.id}
-                type="button"
-                onClick={() => setSelectedChildFilter(child.id)}
-                className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-black ring-1 ${
-                  selectedChildFilter === child.id
-                    ? "bg-[#8FA173] text-white ring-[#8FA173]"
-                    : "bg-white text-[#746F64] ring-[#EFE4D6]"
-                }`}
-              >
-                {child.photo ? (
-                  <img
-                    src={child.photo}
-                    alt={child.name}
-                    className="h-6 w-6 rounded-full object-cover"
-                  />
-                ) : null}
+            {childOptions.map((child) => {
+              const theme = getChildTheme(child);
 
-                {child.name}
-              </button>
-            ))}
+              return (
+                <button
+                  key={child.id}
+                  type="button"
+                  onClick={() => setSelectedChildFilter(child.id)}
+                  className="flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-black ring-1"
+                  style={{
+                    backgroundColor:
+                      selectedChildFilter === child.id ? theme.main : "#FFFFFF",
+                    color:
+                      selectedChildFilter === child.id ? "#FFFFFF" : "#746F64",
+                    boxShadow: `0 0 0 1px ${
+                      selectedChildFilter === child.id ? theme.main : "#EFE4D6"
+                    }`,
+                  }}
+                >
+                  {child.photo ? (
+                    <img
+                      src={child.photo}
+                      alt={child.name}
+                      className="h-6 w-6 rounded-full object-cover"
+                    />
+                  ) : null}
+
+                  {child.name}
+                </button>
+              );
+            })}
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1295,110 +1428,115 @@ export default function MemorablePhrases({ children = [], onBack }) {
               </p>
             </div>
           ) : (
-            filteredPhrases.map((item) => (
-              <article
-                key={item.id}
-                className="overflow-hidden rounded-[1.5rem] bg-[#FFF7FB] p-4 shadow-sm ring-1 ring-[#F3CDD3]"
-              >
-                {item.photoUrl ? (
-                  <img
-                    src={item.photoUrl}
-                    alt="Souvenir associé à la phrase"
-                    className="mb-4 h-52 w-full rounded-[1.25rem] object-cover"
-                  />
-                ) : null}
+            filteredPhrases.map((item) => {
+              const theme = getPhraseTheme(item);
 
-                <div className="flex items-start justify-between gap-3">
-                  <Quote className="mt-1 h-5 w-5 shrink-0 text-[#D99AB9]" />
+              return (
+                <article
+                  key={item.id}
+                  className="overflow-hidden rounded-[1.5rem] p-4 shadow-sm"
+                  style={{
+                    backgroundColor: theme.soft,
+                    boxShadow: `0 0 0 1px ${theme.border}`,
+                  }}
+                >
+                  {item.photoUrl ? (
+                    <img
+                      src={item.photoUrl}
+                      alt="Souvenir associé à la phrase"
+                      className="mb-4 h-52 w-full rounded-[1.25rem] object-cover"
+                    />
+                  ) : null}
 
-                  <div className="min-w-0 flex-1">
-                    <p className="text-base font-semibold italic leading-7 text-[#55534C]">
-                      "{item.phrase}"
-                    </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <Quote
+                      className="mt-1 h-5 w-5 shrink-0"
+                      style={{ color: theme.main }}
+                    />
 
-                    {item.context ? (
-                      <p className="mt-2 text-sm leading-6 text-[#746F64]">
-                        {item.context}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold italic leading-7 text-[#55534C]">
+                        "{item.phrase}"
                       </p>
-                    ) : null}
 
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex flex-wrap gap-2">
-                        {item.children.map((child) => (
-                          <span
-                            key={child.id}
-                            className="flex items-center gap-2 rounded-full bg-[#F0EAF8] px-3 py-1 text-xs font-black text-[#9A7BB7]"
-                          >
-                            {child.photo ? (
-                              <img
-                                src={child.photo}
-                                alt={child.name}
-                                className="h-6 w-6 rounded-full object-cover"
-                              />
-                            ) : null}
+                      {item.context ? (
+                        <p className="mt-2 text-sm leading-6 text-[#746F64]">
+                          {item.context}
+                        </p>
+                      ) : null}
 
-                            {child.name}
-                          </span>
-                        ))}
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {item.children.map((child) => {
+                            const childTheme = getChildTheme(child);
+
+                            return (
+                              <span
+                                key={child.id}
+                                className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black"
+                                style={{
+                                  backgroundColor: childTheme.soft,
+                                  color: childTheme.text,
+                                }}
+                              >
+                                {child.photo ? (
+                                  <img
+                                    src={child.photo}
+                                    alt={child.name}
+                                    className="h-6 w-6 rounded-full object-cover"
+                                  />
+                                ) : null}
+
+                                {child.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+
+                        <span className="flex items-center gap-1 text-xs font-bold text-[#8A8378]">
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          {formatDate(item.date)}
+                        </span>
                       </div>
 
-                      <span className="flex items-center gap-1 text-xs font-bold text-[#8A8378]">
-                        <CalendarDays className="h-3.5 w-3.5" />
-                        {formatDate(item.date)}
-                      </span>
+                      {item.childAgeAtSituation ? (
+                        <p className="mt-3 text-xs font-bold text-[#8A8378]">
+                          Âge au moment : {item.childAgeAtSituation}
+                        </p>
+                      ) : null}
                     </div>
 
-                    {item.childAgeAtSituation ? (
-                      <p className="mt-3 text-xs font-bold text-[#8A8378]">
-                        Âge au moment : {item.childAgeAtSituation}
-                      </p>
-                    ) : null}
+                    <div className="flex shrink-0 flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSharePhraseItem(item)}
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#8FA173] ring-1 ring-[#EFE4D6]"
+                        aria-label="Partager"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditPopup(item)}
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-white ring-1 ring-[#EFE4D6]"
+                        style={{ color: theme.main }}
+                        aria-label="Modifier"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="flex shrink-0 flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSharePhraseItem(item)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#8FA173] ring-1 ring-[#EFE4D6]"
-                      aria-label="Partager"
-                    >
-                      <Share2 className="h-4 w-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleFavorite(item.id)}
-                      className={`flex h-9 w-9 items-center justify-center rounded-full ring-1 ${
-                        item.favorite
-                          ? "bg-[#FBE6EF] text-[#D99AB9] ring-[#F3CDD3]"
-                          : "bg-white text-[#B8B0A3] ring-[#EFE4D6]"
-                      }`}
-                      aria-label="Favori"
-                    >
-                      <Heart
-                        className="h-4 w-4"
-                        fill={item.favorite ? "currentColor" : "none"}
-                      />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => deletePhrase(item.id)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#B8B0A3] ring-1 ring-[#EFE4D6]"
-                      aria-label="Supprimer"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))
+                </article>
+              );
+            })
           )}
         </section>
       </div>
 
       {showAddPopup && (
-        <AddPhrasePopup
+        <PhrasePopup
+          mode="add"
           childrenOptions={childOptions}
           formData={formData}
           setFormData={setFormData}
@@ -1407,6 +1545,21 @@ export default function MemorablePhrases({ children = [], onBack }) {
             setShowAddPopup(false);
           }}
           onSave={handleAddPhrase}
+        />
+      )}
+
+      {editingPhrase && (
+        <PhrasePopup
+          mode="edit"
+          childrenOptions={childOptions}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={() => {
+            setEditingPhrase(null);
+            resetForm();
+          }}
+          onSave={handleSaveEdit}
+          onDelete={handleDeleteEditedPhrase}
         />
       )}
 
