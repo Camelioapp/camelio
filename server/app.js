@@ -49,6 +49,7 @@ const APP_URL =
 
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
+
 const COGNITO_ISSUER = process.env.COGNITO_ISSUER;
 const COGNITO_CLIENT_ID = process.env.COGNITO_CLIENT_ID;
 const COGNITO_CLIENT_SECRET = process.env.COGNITO_CLIENT_SECRET || undefined;
@@ -60,7 +61,8 @@ const COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
 const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
 const ACCOUNT_DELETE_CONFIRMATION = "supprimer";
 
-const AWS_SESSION_SECRET = process.env.AWS_SESSION_SECRET;
+const AWS_SESSION_SECRET =
+  process.env.AWS_SESSION_SECRET || process.env.SESSION_SECRET;
 
 if (!AWS_SESSION_SECRET && IS_PRODUCTION) {
   throw new Error("AWS_SESSION_SECRET est requis en production.");
@@ -89,7 +91,12 @@ const ALLOWED_DOCUMENT_TYPES = [
   "image/webp",
 ];
 
-const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+const ALLOWED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+];
 
 const stripe = STRIPE_SECRET_KEY
   ? new Stripe(STRIPE_SECRET_KEY, {
@@ -124,7 +131,10 @@ app.use((req, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 
   if (IS_PRODUCTION) {
-    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    res.setHeader(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains"
+    );
   }
 
   next();
@@ -259,7 +269,9 @@ function validateAwsConfig(req, res, next) {
   const missing = [];
 
   if (!process.env.AWS_REGION && IS_PRODUCTION) missing.push("AWS_REGION");
-  if (!process.env.DYNAMODB_TABLE && IS_PRODUCTION) missing.push("DYNAMODB_TABLE");
+  if (!process.env.DYNAMODB_TABLE && IS_PRODUCTION) {
+    missing.push("DYNAMODB_TABLE");
+  }
 
   if (!process.env.AWS_ACCESS_KEY_ID && !IS_PRODUCTION) {
     missing.push("AWS_ACCESS_KEY_ID");
@@ -736,13 +748,6 @@ app.get("/callback", async (req, res, next) => {
       family_name: userinfo.family_name,
     };
 
-    req.session.tokens = {
-      id_token: tokenSet.id_token,
-      access_token: tokenSet.access_token,
-      refresh_token: tokenSet.refresh_token,
-      expires_at: tokenSet.expires_at,
-    };
-
     delete req.session.codeVerifier;
     delete req.session.state;
     delete req.session.nonce;
@@ -773,7 +778,6 @@ app.get("/me", (req, res) => {
 });
 
 app.get("/logout", (req, res) => {
-  const idToken = req.session.tokens?.id_token;
   const logoutRedirectUrl = COGNITO_LOGOUT_URI || "https://camelio.app";
 
   req.session.destroy(() => {
@@ -787,10 +791,6 @@ app.get("/logout", (req, res) => {
       const logoutUrl = new URL(`${COGNITO_DOMAIN.replace(/\/$/, "")}/logout`);
       logoutUrl.searchParams.set("client_id", COGNITO_CLIENT_ID);
       logoutUrl.searchParams.set("logout_uri", logoutRedirectUrl);
-
-      if (idToken) {
-        logoutUrl.searchParams.set("id_token_hint", idToken);
-      }
 
       return res.redirect(logoutUrl.toString());
     }
@@ -1495,7 +1495,8 @@ app.post(
       if (!isValidFileSize(payload.fileSize, MAX_DOCUMENT_SIZE_BYTES)) {
         return res.status(400).json({
           error: "invalid_file_size",
-          message: "Le document doit être supérieur à 0 octet et ne pas dépasser 10 MB.",
+          message:
+            "Le document doit être supérieur à 0 octet et ne pas dépasser 10 MB.",
         });
       }
 
