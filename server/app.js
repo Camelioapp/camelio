@@ -60,14 +60,14 @@ const COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
 const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
 const ACCOUNT_DELETE_CONFIRMATION = "supprimer";
 
-const SESSION_SECRET = process.env.SESSION_SECRET;
+const AWS_SESSION_SECRET = process.env.AWS_SESSION_SECRET;
 
-if (!SESSION_SECRET && IS_PRODUCTION) {
-  throw new Error("SESSION_SECRET est requis en production.");
+if (!AWS_SESSION_SECRET && IS_PRODUCTION) {
+  throw new Error("AWS_SESSION_SECRET est requis en production.");
 }
 
-const SESSION_SECRET_VALUE =
-  SESSION_SECRET || "dev-session-secret-only-for-local-development";
+const AWS_SESSION_SECRET_VALUE =
+  AWS_SESSION_SECRET || "dev-session-secret-only-for-local-development";
 
 const AWS_REGION = process.env.AWS_REGION || "ca-central-1";
 const S3_REGION = process.env.S3_REGION || "ca-central-1";
@@ -204,7 +204,7 @@ const sessionStore = new DynamoDBStore({
 app.use(
   session({
     name: "camelio.sid",
-    secret: SESSION_SECRET_VALUE,
+    secret: AWS_SESSION_SECRET_VALUE,
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
