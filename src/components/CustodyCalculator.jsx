@@ -83,10 +83,26 @@ function buildYearStats({ calendarEntries, children, year }) {
       return;
     }
 
-    const entryChildren = Array.isArray(entry.children) ? entry.children : [];
+    const entryChildIds = Array.isArray(entry.childIds)
+      ? entry.childIds
+      : [];
 
-    entryChildren.forEach((childName) => {
-      const childStat = baseStats.find((child) => child.name === childName);
+    const legacyEntryChildren = Array.isArray(entry.children)
+      ? entry.children
+      : [];
+
+    const linkedChildren =
+      entryChildIds.length > 0 ? entryChildIds : legacyEntryChildren;
+
+    linkedChildren.forEach((childReference) => {
+      const childStat = baseStats.find((child) => {
+        return (
+          child.id === childReference ||
+          child.name === childReference ||
+          child.firstName === childReference ||
+          child.nickname === childReference
+        );
+      });
 
       if (!childStat) {
         return;
@@ -398,13 +414,13 @@ export default function CustodyCalculator({
 
       <div className="space-y-4">
         {stats.map((child) => (
-          <ChildResultCard key={child.name} child={child} yearDays={yearDays} />
+          <ChildResultCard key={child.id || child.name} child={child} yearDays={yearDays} />
         ))}
       </div>
 
       <div className="space-y-4">
         {stats.map((child) => (
-          <MonthBreakdown key={`${child.name}-months`} child={child} />
+          <MonthBreakdown key={`${child.id || child.name}-months`} child={child} />
         ))}
       </div>
     </div>
