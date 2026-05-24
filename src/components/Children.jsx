@@ -22,6 +22,14 @@ const API_BASE_URL =
 
 const defaultPhotoPosition = { x: 50, y: 50 };
 
+function createChildId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  return `child-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 const childColorOptions = [
   { id: "sage", label: "Sauge", dot: "#A8B193" },
   { id: "rose", label: "Rose", dot: "#E99AAA" },
@@ -442,18 +450,19 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const [newChild, setNewChild] = useState({
-    firstName: "",
-    lastName: "",
-    nickname: "",
-    birthDate: "",
-    sex: "Garçon",
-    color: "sage",
-    photo: "",
-    avatar: "",
-    avatarS3Key: "",
-    photoPosition: defaultPhotoPosition,
-    photoZoom: 1,
-  });
+  id: createChildId(),
+  firstName: "",
+  lastName: "",
+  nickname: "",
+  birthDate: "",
+  sex: "Garçon",
+  color: "sage",
+  photo: "",
+  avatar: "",
+  avatarS3Key: "",
+  photoPosition: defaultPhotoPosition,
+  photoZoom: 1,
+});
 
   const inputClass =
     "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
@@ -621,7 +630,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     }));
 
     try {
-      const uploadedAvatar = await uploadAvatarToS3(file, "new");
+      const uploadedAvatar = await uploadAvatarToS3(file, newChild.id);
 
       setPreviewPhoto(uploadedAvatar.avatarUrl);
 
@@ -699,23 +708,24 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   };
 
   const resetForm = () => {
-    setNewChild({
-      firstName: "",
-      lastName: "",
-      nickname: "",
-      birthDate: "",
-      sex: "Garçon",
-      color: "sage",
-      photo: "",
-      avatar: "",
-      avatarS3Key: "",
-      photoPosition: defaultPhotoPosition,
-      photoZoom: 1,
-    });
+  setNewChild({
+    id: createChildId(),
+    firstName: "",
+    lastName: "",
+    nickname: "",
+    birthDate: "",
+    sex: "Garçon",
+    color: "sage",
+    photo: "",
+    avatar: "",
+    avatarS3Key: "",
+    photoPosition: defaultPhotoPosition,
+    photoZoom: 1,
+  });
 
-    setPreviewPhoto("");
-    setShowAddForm(false);
-  };
+  setPreviewPhoto("");
+  setShowAddForm(false);
+};
 
   const addChild = async (event) => {
     event.preventDefault();
@@ -740,6 +750,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          id: newChild.id,
           firstName,
           lastName: newChild.lastName.trim(),
           nickname,
@@ -767,15 +778,16 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       setChildren((current) => [
         ...current,
         formatChildFromServer({
-          ...data.child,
-          nickname,
-          avatar: newChild.photo || "",
-          photo: newChild.photo || "",
-          image: newChild.photo || "",
-          avatarS3Key: newChild.avatarS3Key || "",
-          photoPosition: newChild.photoPosition || defaultPhotoPosition,
-          photoZoom: newChild.photoZoom || 1,
-        }),
+  ...data.child,
+  id: data.child?.id || newChild.id,
+  nickname,
+  avatar: newChild.photo || "",
+  photo: newChild.photo || "",
+  image: newChild.photo || "",
+  avatarS3Key: newChild.avatarS3Key || "",
+  photoPosition: newChild.photoPosition || defaultPhotoPosition,
+  photoZoom: newChild.photoZoom || 1,
+}),
       ]);
 
       resetForm();
@@ -997,6 +1009,29 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             />
 
             <div className="w-full min-w-0 space-y-6">
+              <div className="rounded-2xl bg-[#FFF8EC] p-4 ring-1 ring-[#EFE4D6]">
+  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+    Identifiant enfant
+  </p>
+
+  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <code className="break-all rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
+      {selectedChild.id}
+    </code>
+
+    <button
+      type="button"
+      onClick={() => navigator.clipboard?.writeText(selectedChild.id)}
+      className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#6F785F] ring-1 ring-[#D8DDCB]"
+    >
+      Copier
+    </button>
+  </div>
+
+  <p className="mt-2 text-xs leading-5 text-[#8B7D6B]">
+    Cet identifiant sert à rattacher les photos, documents, rendez-vous et autres informations au bon enfant, même si son nom change.
+  </p>
+</div>
               <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
                 <FormField label="Prénom">
                   <input

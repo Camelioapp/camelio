@@ -1061,13 +1061,13 @@ app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next)
     const existingChildrenCount = existingChildrenResult.Items?.length || 0;
 
     if (existingChildrenCount >= MAX_CHILDREN_PER_ACCOUNT) {
-  return res.status(403).json({
-    error: "children_limit_reached",
-    message: `Vous avez atteint la limite de ${MAX_CHILDREN_PER_ACCOUNT} enfants pour ce compte.`,
-  });
-}
+      return res.status(403).json({
+        error: "children_limit_reached",
+        message: `Vous avez atteint la limite de ${MAX_CHILDREN_PER_ACCOUNT} enfants pour ce compte.`,
+      });
+    }
 
-    const childId = randomUUID();
+    const childId = req.body.id || randomUUID();
     const now = new Date().toISOString();
 
     const child = {
@@ -1084,7 +1084,6 @@ app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next)
       new PutCommand({
         TableName: DYNAMODB_TABLE,
         Item: child,
-        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
       })
     );
 
