@@ -256,7 +256,7 @@ function FamilyFloatingBubbles() {
             height: bubble.size,
             backgroundColor: bubble.color,
             opacity: 0.90,
-            boxShadow: `0 0 20px ${bubble.color}88`,
+            boxShadow: `0 0 10px ${bubble.color}88`,
           }}
           animate={{
             x: [0, 12 + index * 2, -10, 0],
@@ -722,47 +722,53 @@ export default function Dashboard({
 
           return (
             <button
-              key={child.id || child.name}
-              type="button"
-              onClick={() => openSection("children")}
-              className={`group relative isolate flex w-[118px] shrink-0 flex-col items-center ${
-                index === 0 ? "" : "-ml-7 sm:-ml-8 md:-ml-9"
-              }`}
-              style={{ zIndex: children.length + index }}
-            >
-              <div
-                className="relative z-10 flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
-                style={{
-                  backgroundColor: childTheme.soft,
-                  color: childTheme.text,
-                }}
-              >
-                {photo ? (
-                  <PhotoImage
-                    src={photo}
-                    alt={child.name}
-                    position={child.photoPosition}
-                    zoom={child.photoZoom || 1}
-                    className="h-full w-full"
-                  />
-                ) : initials ? (
-                  initials
-                ) : (
-                  <UserRound className="h-10 w-10" />
-                )}
-              </div>
+  key={child.id || child.name}
+  type="button"
+  onClick={() => openSection("children")}
+  className={`group relative isolate flex w-[118px] shrink-0 flex-col items-center ${
+    index === 0 ? "" : "-ml-7 sm:-ml-8 md:-ml-9"
+  }`}
+>
+  <div
+    className="relative z-10 flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+    style={{
+      backgroundColor: childTheme.soft,
+      color: childTheme.text,
+      zIndex: children.length + index,
+    }}
+  >
+    {photo ? (
+      <PhotoImage
+        src={photo}
+        alt={child.name}
+        position={child.photoPosition}
+        zoom={child.photoZoom || 1}
+        className="h-full w-full"
+      />
+    ) : initials ? (
+      initials
+    ) : (
+      <UserRound className="h-10 w-10" />
+    )}
+  </div>
 
-              <div
-                className="relative z-30 -mt-3 min-w-[104px] max-w-[112px] rounded-[14px] px-4 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:-mt-4 sm:min-w-[118px] sm:max-w-[132px] sm:rounded-[16px] sm:text-lg md:-mt-5 md:min-w-[126px] md:text-xl"
-                style={{
-                  backgroundColor: childTheme.dot,
-                }}
-              >
-                <span className="relative z-40 block truncate">
-                  {child.name}
-                </span>
-              </div>
-            </button>
+  <div
+    className={`relative z-50 -mt-3 min-w-[104px] max-w-[112px] rounded-[14px] px-4 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:-mt-4 sm:min-w-[118px] sm:max-w-[132px] sm:rounded-[16px] sm:text-lg md:-mt-5 md:min-w-[126px] md:text-xl ${
+      index === 0
+        ? "-translate-x-3 sm:-translate-x-4"
+        : index === 1
+          ? "translate-x-3 sm:translate-x-4"
+          : ""
+    }`}
+    style={{
+      backgroundColor: childTheme.dot,
+    }}
+  >
+    <span className="relative z-50 block truncate">
+      {child.name}
+    </span>
+  </div>
+</button>
           );
         })}
       </div>
