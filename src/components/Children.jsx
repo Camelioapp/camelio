@@ -548,7 +548,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
     return {
       ...child,
-      id: child.id,
+      id: child.id || child.SK?.replace("CHILD#", "") || "",
       name: nickname,
       firstName,
       lastName: child.lastName || "",
@@ -1009,29 +1009,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             />
 
             <div className="w-full min-w-0 space-y-6">
-              <div className="rounded-2xl bg-[#FFF8EC] p-4 ring-1 ring-[#EFE4D6]">
-  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
-    Identifiant enfant
-  </p>
-
-  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-    <code className="break-all rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
-      {selectedChild.id}
-    </code>
-
-    <button
-      type="button"
-      onClick={() => navigator.clipboard?.writeText(selectedChild.id)}
-      className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#6F785F] ring-1 ring-[#D8DDCB]"
-    >
-      Copier
-    </button>
-  </div>
-
-  <p className="mt-2 text-xs leading-5 text-[#8B7D6B]">
-    Cet identifiant sert à rattacher les photos, documents, rendez-vous et autres informations au bon enfant, même si son nom change.
-  </p>
-</div>
+            
               <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
                 <FormField label="Prénom">
                   <input
@@ -1271,32 +1249,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     }))
   }
 />
-<div className="rounded-2xl bg-[#FFF8EC] p-4 ring-1 ring-[#EFE4D6]">
-  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
-    Identifiant enfant
-  </p>
 
-  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-    <code className="break-all rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
-      {selectedChild.id || "ID non disponible"}
-    </code>
-
-    {selectedChild.id && (
-      <button
-        type="button"
-        onClick={() => navigator.clipboard?.writeText(selectedChild.id)}
-        className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#6F785F] ring-1 ring-[#D8DDCB]"
-      >
-        Copier
-      </button>
-    )}
-  </div>
-
-  <p className="mt-2 text-xs leading-5 text-[#8B7D6B]">
-    Cet identifiant sert à rattacher les photos, documents, rendez-vous et
-    autres informations au bon enfant, même si son nom change.
-  </p>
-</div>
             <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
               <FormField label="Prénom">
                 <input
@@ -1391,21 +1344,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             </FormField>
 
             <FormField label="Note du profil">
-              <textarea
-                className={textareaClass}
-                rows={5}
-                value={selectedChild.profileNote || ""}
-                onChange={(event) =>
-                  setSelectedChild((current) => ({
-                    ...current,
-                    profileNote: event.target.value,
-                  }))
-                }
-                placeholder="Habitudes, préférences, informations utiles..."
-              />
-            </FormField>
-
-            <FormField label="Note du profil">
   <textarea
     className={textareaClass}
     rows={5}
@@ -1419,7 +1357,29 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     placeholder="Habitudes, préférences, informations utiles..."
   />
 </FormField>
+<div className="rounded-2xl border border-[#EFE4D6] bg-white/60 px-4 py-3">
+  <div className="flex items-center justify-between gap-3">
+    <div className="min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#A8B193]">
+        ID enfant
+      </p>
 
+      <code className="mt-1 block max-w-[260px] truncate text-[11px] font-semibold text-[#9A8D7C] sm:max-w-none">
+        {selectedChild.id || "ID non disponible"}
+      </code>
+    </div>
+
+    {selectedChild.id && (
+      <button
+        type="button"
+        onClick={() => navigator.clipboard?.writeText(selectedChild.id)}
+        className="shrink-0 rounded-full border border-[#EFE4D6] bg-[#FFFDF8] px-3 py-1.5 text-[11px] font-bold text-[#8F9874] transition hover:bg-[#F7F1E8]"
+      >
+        Copier
+      </button>
+    )}
+  </div>
+</div>
 
             {confirmRemove && (
               <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm leading-6 text-[#B96B77] ring-1 ring-[#F3CDD3]">
