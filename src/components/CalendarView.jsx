@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Plus,
@@ -60,10 +61,24 @@ const calendarColorOptions = [
 ];
 
 function getCalendarColor(colorId) {
+  if (!colorId) return calendarColorOptions[0];
+
+  if (String(colorId).startsWith("#")) {
+    return {
+      id: colorId,
+      label: "Personnalisée",
+      hex: colorId,
+    };
+  }
+
   return (
     calendarColorOptions.find((color) => color.id === colorId) ||
     calendarColorOptions[0]
   );
+}
+
+function getHexColor(colorId) {
+  return getCalendarColor(colorId).hex;
 }
 
 const inputClass =
@@ -86,6 +101,31 @@ function toDateKey(year, monthIndex, day) {
   const month = String(monthIndex + 1).padStart(2, "0");
   const date = String(day).padStart(2, "0");
   return `${year}-${month}-${date}`;
+}
+
+function dateToKey(date) {
+  return toDateKey(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getStartOfWeek(date) {
+  const nextDate = new Date(date);
+  const dayIndex = nextDate.getDay();
+
+  nextDate.setDate(nextDate.getDate() - dayIndex);
+  nextDate.setHours(0, 0, 0, 0);
+
+  return nextDate;
+}
+
+function getWeekDates(year, month, day) {
+  const selectedDate = new Date(year, month, day);
+  const startOfWeek = getStartOfWeek(selectedDate);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(startOfWeek);
+    date.setDate(startOfWeek.getDate() + index);
+    return date;
+  });
 }
 
 function getChildPhoto(child) {
@@ -118,6 +158,23 @@ function formatEventFromServer(event) {
     createdAt: event.createdAt || "",
     updatedAt: event.updatedAt || "",
   };
+}
+
+function isCustodyEvent(event) {
+  return (
+    event.eventType === "custody" ||
+    event.eventType === "both" ||
+    event.eventType === "Garde"
+  );
+}
+
+function isAppointmentEvent(event) {
+  return (
+    event.eventType === "appointment" ||
+    event.eventType === "both" ||
+    event.eventType === "Rendez-vous" ||
+    event.eventType === "Médical"
+  );
 }
 
 function TimeDropdown({ label, value, onChange }) {
@@ -301,6 +358,8 @@ export default function CalendarView({ children = [] }) {
   const startYear = today.getFullYear();
   const maxYear = 2030;
 
+  const [viewMode, setViewMode] = useState("month");
+
   const [year, setYear] = useState(startYear);
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(today.getDate());
@@ -356,16 +415,25 @@ export default function CalendarView({ children = [] }) {
     });
   }, [year, month, events]);
 
+  const weekDays = useMemo(() => {
+    return getWeekDates(year, month, selectedDay).map((date) => {
+      const dateKey = dateToKey(date);
+      const dayEvents = events.filter((event) => event.date === dateKey);
+
+      return {
+        date,
+        day: date.getDate(),
+        month: date.getMonth(),
+        year: date.getFullYear(),
+        dateKey,
+        events: dayEvents,
+      };
+    });
+  }, [year, month, selectedDay, events]);
+
   const upcomingAppointments = useMemo(() => {
     return events
-      .filter(
-        (event) =>
-          event.date >= selectedDateKey &&
-          (event.eventType === "appointment" ||
-            event.eventType === "both" ||
-            event.eventType === "Rendez-vous" ||
-            event.eventType === "Médical")
-      )
+      .filter((event) => event.date >= selectedDateKey && isAppointmentEvent(event))
       .sort((a, b) => String(a.date).localeCompare(String(b.date)))
       .slice(0, 5);
   }, [events, selectedDateKey]);
@@ -375,9 +443,7 @@ export default function CalendarView({ children = [] }) {
       .filter(
         (event) =>
           event.date >= selectedDateKey &&
-          (event.eventType === "custody" ||
-            event.eventType === "both" ||
-            event.eventType === "Garde") &&
+          isCustodyEvent(event) &&
           event.childIds.length > 0
       )
       .sort((a, b) => String(a.date).localeCompare(String(b.date)))
@@ -444,6 +510,52 @@ export default function CalendarView({ children = [] }) {
     setSelectedDay(1);
   }
 
+  function previousWeek() {
+    const currentDate = new Date(year, month, selectedDay);
+    currentDate.setDate(currentDate.getDate() - 7);
+
+    if (currentDate.getFullYear() < startYear) return;
+
+    setYear(currentDate.getFullYear());
+    setMonth(currentDate.getMonth());
+    setSelectedDay(currentDate.getDate());
+  }
+
+  function nextWeek() {
+    const currentDate = new Date(year, month, selectedDay);
+    currentDate.setDate(currentDate.getDate() + 7);
+
+    if (currentDate.getFullYear() > maxYear) return;
+
+    setYear(currentDate.getFullYear());
+    setMonth(currentDate.getMonth());
+    setSelectedDay(currentDate.getDate());
+  }
+
+  function handlePreviousPeriod() {
+    if (viewMode === "week") {
+      previousWeek();
+      return;
+    }
+
+    previousMonth();
+  }
+
+  function handleNextPeriod() {
+    if (viewMode === "week") {
+      nextWeek();
+      return;
+    }
+
+    nextMonth();
+  }
+
+  function selectDate(nextYear, nextMonth, nextDay) {
+    setYear(nextYear);
+    setMonth(nextMonth);
+    setSelectedDay(nextDay);
+  }
+
   function getChildNamesFromIds(childIds) {
     return childIds
       .map((childId) => {
@@ -460,31 +572,28 @@ export default function CalendarView({ children = [] }) {
     return firstChild?.color || appointmentColor || "sage";
   }
 
-  function openDay(day) {
-    const dateKey = toDateKey(year, month, day);
-    const existingEvent = events.find((event) => event.date === dateKey);
+  function getCustodyLines(dayEvents) {
+    const childIds = [];
 
-    setSelectedDay(day);
+    dayEvents.forEach((event) => {
+      if (!isCustodyEvent(event)) return;
 
-    if (existingEvent) {
-      editEvent(existingEvent, false);
-    } else {
-      setSelectedEventId(null);
-      setDraft({
-        title: "",
-        eventType: "custody",
-        childIds: [],
-        date: dateKey,
-        start: "",
-        end: "",
-        note: "",
-        color: "sage",
-        appointmentEmoji,
-        recurrence: "Aucune",
+      event.childIds.forEach((childId) => {
+        if (!childIds.includes(childId)) {
+          childIds.push(childId);
+        }
       });
-    }
+    });
 
-    setShowEditor(true);
+    return childIds.slice(0, 4).map((childId) => {
+      const child = children.find((item) => item.id === childId);
+
+      return {
+        childId,
+        name: child ? displayName(child) : "Enfant",
+        color: getHexColor(child?.color || "sage"),
+      };
+    });
   }
 
   function openNewEvent() {
@@ -786,6 +895,9 @@ export default function CalendarView({ children = [] }) {
   const selectedAppointmentColor = getCalendarColor(appointmentColor);
   const appointmentColorOption = getColor(appointmentColor);
 
+  const weekStart = weekDays[0];
+  const weekEnd = weekDays[6];
+
   return (
     <div className="space-y-7">
       <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm md:p-6">
@@ -938,31 +1050,72 @@ export default function CalendarView({ children = [] }) {
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            disabled={year === startYear && month === today.getMonth()}
-            onClick={previousMonth}
-            className="rounded-2xl bg-white px-4 py-2 text-lg font-bold text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-40"
-          >
-            ‹
-          </button>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={handlePreviousPeriod}
+              disabled={
+                viewMode === "month" &&
+                year === startYear &&
+                month === today.getMonth()
+              }
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-40"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
 
-          <div className="text-center">
-            <p className="label">Mois affiché</p>
-            <h3 className="text-xl font-bold text-[#55534C]">
-              {MONTHS[month]} {year}
-            </h3>
+            <div className="min-w-[190px] text-center">
+              <p className="label">
+                {viewMode === "month" ? "Mois affiché" : "Semaine affichée"}
+              </p>
+
+              <h3 className="text-xl font-bold text-[#55534C]">
+                {viewMode === "month"
+                  ? `${MONTHS[month]} ${year}`
+                  : `${weekStart.day} ${MONTHS[
+                      weekStart.month
+                    ].toLowerCase()} au ${weekEnd.day} ${MONTHS[
+                      weekEnd.month
+                    ].toLowerCase()}`}
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNextPeriod}
+              disabled={viewMode === "month" && year === maxYear && month === 11}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-40"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
           </div>
 
-          <button
-            type="button"
-            disabled={year === maxYear && month === 11}
-            onClick={nextMonth}
-            className="rounded-2xl bg-white px-4 py-2 text-lg font-bold text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-40"
-          >
-            ›
-          </button>
+          <div className="grid grid-cols-2 rounded-full bg-[#F8F3EA] p-1 ring-1 ring-[#EFE4D6]">
+            <button
+              type="button"
+              onClick={() => setViewMode("month")}
+              className={`rounded-full px-5 py-2 text-sm font-bold transition ${
+                viewMode === "month"
+                  ? "bg-white text-[#7A8564] shadow-sm"
+                  : "text-[#A99D91]"
+              }`}
+            >
+              Mois
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode("week")}
+              className={`rounded-full px-5 py-2 text-sm font-bold transition ${
+                viewMode === "week"
+                  ? "bg-white text-[#7A8564] shadow-sm"
+                  : "text-[#A99D91]"
+              }`}
+            >
+              Semaine
+            </button>
+          </div>
         </div>
 
         {isLoading && (
@@ -971,84 +1124,178 @@ export default function CalendarView({ children = [] }) {
           </div>
         )}
 
-        <div className="mt-5 grid !grid-cols-7 gap-2 text-center">
-          {WEEK_DAYS.map((dayName, index) => (
-            <div
-              key={`${dayName}-${index}`}
-              className="text-xs font-bold text-[#A8B193]"
-            >
-              {dayName}
+        {viewMode === "month" ? (
+          <div className="mt-5 grid !grid-cols-7 gap-2 text-center">
+            {WEEK_DAYS.map((dayName, index) => (
+              <div
+                key={`${dayName}-${index}`}
+                className="text-xs font-bold text-[#A8B193]"
+              >
+                {dayName}
+              </div>
+            ))}
+
+            {Array.from({ length: monthStartOffset }).map((_, index) => (
+              <div
+                key={`empty-${year}-${month}-${index}`}
+                className="min-h-[64px] rounded-2xl"
+              />
+            ))}
+
+            {days.map((date) => {
+              const isSelected = selectedDay === date.day;
+              const hasAppointment = date.events.some(isAppointmentEvent);
+              const custodyLines = getCustodyLines(date.events);
+
+              const isToday =
+                year === today.getFullYear() &&
+                month === today.getMonth() &&
+                date.day === today.getDate();
+
+              return (
+                <button
+                  key={date.dateKey}
+                  type="button"
+                  onClick={() => selectDate(year, month, date.day)}
+                  className={`relative min-h-[76px] rounded-2xl p-2 text-center ring-1 transition hover:bg-[#FFFDF8] ${
+                    isSelected
+                      ? "bg-white text-[#55534C] ring-2 ring-[#A8B193] shadow-sm"
+                      : isToday
+                        ? "bg-[#F8F3EA] text-[#55534C] ring-[#EFE4D6]"
+                        : "bg-white text-[#746F64] ring-[#EFE4D6]"
+                  }`}
+                >
+                  <span
+                    className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                      isToday
+                        ? "bg-[#A8B193] text-white"
+                        : isSelected
+                          ? "text-[#55534C]"
+                          : "text-[#746F64]"
+                    }`}
+                  >
+                    {date.day}
+                  </span>
+
+                  <div className="mt-2 flex flex-col items-center gap-[3px]">
+                    {custodyLines.map((line) => (
+                      <span
+                        key={line.childId}
+                        className="h-[3px] w-8 rounded-full"
+                        style={{ backgroundColor: line.color }}
+                        title={line.name}
+                      />
+                    ))}
+                  </div>
+
+                  {hasAppointment && (
+                    <span className="absolute bottom-2 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-red-500" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-3 md:grid-cols-7">
+            {weekDays.map((date) => {
+              const isSelected =
+                date.year === year &&
+                date.month === month &&
+                date.day === selectedDay;
+
+              const hasAppointment = date.events.some(isAppointmentEvent);
+              const custodyLines = getCustodyLines(date.events);
+              const appointments = date.events.filter(isAppointmentEvent);
+
+              return (
+                <button
+                  key={date.dateKey}
+                  type="button"
+                  onClick={() => selectDate(date.year, date.month, date.day)}
+                  className={`min-h-[185px] rounded-[1.5rem] p-4 text-left ring-1 transition hover:bg-[#FFFDF8] ${
+                    isSelected
+                      ? "bg-white ring-2 ring-[#A8B193] shadow-sm"
+                      : "bg-white ring-[#EFE4D6]"
+                  }`}
+                >
+                  <div className="mb-4 flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-[#A8B193]">
+                        {WEEK_DAYS[date.date.getDay()]}
+                      </p>
+                      <p className="text-2xl font-bold text-[#55534C]">
+                        {date.day}
+                      </p>
+                      <p className="text-xs font-semibold text-[#A99D91]">
+                        {MONTHS[date.month].slice(0, 3)}
+                      </p>
+                    </div>
+
+                    {hasAppointment && (
+                      <span className="mt-1 h-2.5 w-2.5 rounded-full bg-red-500" />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {custodyLines.length > 0 ? (
+                      custodyLines.map((line) => (
+                        <div
+                          key={line.childId}
+                          className="flex items-center gap-2 rounded-full bg-[#FFFDF8] px-3 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+                        >
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: line.color }}
+                          />
+                          {line.name}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="rounded-full bg-[#FFFDF8] px-3 py-2 text-xs font-semibold text-[#A99D91] ring-1 ring-[#EFE4D6]">
+                        Aucune garde
+                      </p>
+                    )}
+
+                    {appointments.slice(0, 2).map((event) => (
+                      <div
+                        key={event.id}
+                        className="rounded-2xl bg-[#FFF5F5] px-3 py-2 text-xs ring-1 ring-[#F6D1D1]"
+                      >
+                        <p className="font-bold text-red-500">
+                          {event.appointmentEmoji || appointmentEmoji}{" "}
+                          {event.start || "Rendez-vous"}
+                        </p>
+                        <p className="mt-1 line-clamp-2 font-semibold text-[#746F64]">
+                          {event.title || "Rendez-vous"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-[#EFE4D6] pt-5">
+          {children.map((child) => (
+            <div key={child.id} className="flex items-center gap-2">
+              <span
+                className="h-3 w-3 rounded-full"
+                style={{ backgroundColor: getHexColor(child.color) }}
+              />
+              <span className="text-sm font-semibold text-[#746F64]">
+                {displayName(child)}
+              </span>
             </div>
           ))}
 
-          {Array.from({ length: monthStartOffset }).map((_, index) => (
-            <div
-              key={`empty-${year}-${month}-${index}`}
-              className="min-h-[64px] rounded-2xl"
-            />
-          ))}
-
-          {days.map((date) => {
-            const hasEvents = date.events.length > 0;
-            const isSelected = selectedDay === date.day;
-
-            const hasAppointment = date.events.some(
-              (event) =>
-                event.eventType === "appointment" ||
-                event.eventType === "both" ||
-                event.eventType === "Rendez-vous" ||
-                event.eventType === "Médical"
-            );
-
-            const isToday =
-              year === today.getFullYear() &&
-              month === today.getMonth() &&
-              date.day === today.getDate();
-
-            return (
-              <button
-                key={date.dateKey}
-                type="button"
-                onClick={() => openDay(date.day)}
-                className={`relative min-h-[72px] rounded-2xl p-1.5 pt-5 text-left ring-1 transition ${
-                  isSelected
-                    ? "bg-white text-[#55534C] ring-2 ring-[#A8B193] shadow-sm"
-                    : isToday
-                      ? "bg-[#F8F3EA] text-[#55534C] ring-[#EFE4D6]"
-                      : hasEvents
-                        ? "bg-[#F0F3EA] text-[#55534C] ring-[#DDE4D2]"
-                        : "bg-white text-[#A8B193] ring-[#EFE4D6]"
-                }`}
-              >
-                <p className="absolute left-2 top-2 text-xs font-bold leading-none">
-                  {date.day}
-                </p>
-
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {date.events.slice(0, 4).map((event) => {
-                    const eventColor = getCalendarColor(event.color);
-
-                    return (
-                      <span
-                        key={event.id}
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: eventColor.hex }}
-                      />
-                    );
-                  })}
-                </div>
-
-                {hasAppointment && (
-                  <div
-                    className={`absolute right-1 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold leading-none ring-1 ${appointmentColorOption.soft}`}
-                  >
-                    {date.events.find((event) => event.appointmentEmoji)
-                      ?.appointmentEmoji || appointmentEmoji}
-                  </div>
-                )}
-              </button>
-            );
-          })}
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full bg-red-500" />
+            <span className="text-sm font-semibold text-[#746F64]">
+              Rendez-vous / événement
+            </span>
+          </div>
         </div>
       </div>
 
