@@ -33,6 +33,13 @@ const brandColors = [
   { id: "mauve", label: "Mauve", value: "#F2EAFB" },
   { id: "bleu", label: "Bleu", value: "#EDF5FF" },
   { id: "dore", label: "Doré", value: "#FFF5DF" },
+  { id: "peche", label: "Pêche", value: "#FFF0E8" },
+  { id: "menthe", label: "Menthe", value: "#EAF8F1" },
+  { id: "lavande", label: "Lavande", value: "#F4EEFF" },
+  { id: "ciel", label: "Ciel", value: "#EAF4FF" },
+  { id: "creme", label: "Crème", value: "#FFF9EA" },
+  { id: "corail", label: "Corail", value: "#FFE9E4" },
+  { id: "perle", label: "Perle", value: "#F4F1EA" },
 ];
 
 const illustrationChoices = [
@@ -166,18 +173,50 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
+function drawImageCover(ctx, image, x, y, width, height) {
+  const imageRatio = image.width / image.height;
+  const targetRatio = width / height;
+
+  let sourceWidth = image.width;
+  let sourceHeight = image.height;
+  let sourceX = 0;
+  let sourceY = 0;
+
+  if (imageRatio > targetRatio) {
+    sourceWidth = image.height * targetRatio;
+    sourceX = (image.width - sourceWidth) / 2;
+  } else {
+    sourceHeight = image.width / targetRatio;
+    sourceY = (image.height - sourceHeight) / 2;
+  }
+
+  ctx.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    x,
+    y,
+    width,
+    height
+  );
+}
+
 function drawBackgroundEffects(ctx, type) {
   ctx.save();
 
-  if (type === "soft-circles") {
-    ctx.globalAlpha = 0.45;
+  if (type === "soft-circles" || type === "mixed") {
+    ctx.globalAlpha = 0.5;
 
     const circles = [
-      [120, 150, 70],
-      [930, 170, 95],
-      [170, 860, 80],
-      [900, 840, 70],
-      [540, 960, 45],
+      [130, 145, 72],
+      [925, 165, 100],
+      [165, 845, 90],
+      [900, 830, 82],
+      [540, 950, 48],
+      [820, 360, 34],
+      [255, 385, 28],
     ];
 
     circles.forEach(([x, y, radius]) => {
@@ -188,7 +227,7 @@ function drawBackgroundEffects(ctx, type) {
     });
   }
 
-  if (type === "playful-lines") {
+  if (type === "playful-lines" || type === "mixed") {
     ctx.globalAlpha = 0.42;
     ctx.strokeStyle = "#FFFFFF";
     ctx.lineWidth = 12;
@@ -199,6 +238,8 @@ function drawBackgroundEffects(ctx, type) {
       [700, 165, 850, 75, 1020, 160],
       [85, 850, 270, 950, 440, 850],
       [660, 930, 820, 820, 990, 930],
+      [130, 500, 260, 420, 390, 500],
+      [690, 520, 820, 440, 950, 520],
     ];
 
     lines.forEach(([x1, y1, x2, y2, x3, y3]) => {
@@ -209,8 +250,8 @@ function drawBackgroundEffects(ctx, type) {
     });
   }
 
-  if (type === "dots") {
-    ctx.globalAlpha = 0.55;
+  if (type === "dots" || type === "mixed") {
+    ctx.globalAlpha = 0.58;
     ctx.fillStyle = "#FFFFFF";
 
     const dots = [
@@ -224,55 +265,15 @@ function drawBackgroundEffects(ctx, type) {
       [940, 970],
       [520, 130],
       [600, 980],
+      [455, 270],
+      [705, 290],
+      [330, 760],
+      [760, 735],
     ];
 
     dots.forEach(([x, y]) => {
       ctx.beginPath();
-      ctx.arc(x, y, 12, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
-
-  if (type === "mixed") {
-    ctx.globalAlpha = 0.45;
-
-    ctx.strokeStyle = "#FFFFFF";
-    ctx.lineWidth = 10;
-    ctx.lineCap = "round";
-
-    ctx.beginPath();
-    ctx.moveTo(80, 230);
-    ctx.quadraticCurveTo(230, 110, 400, 220);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(700, 890);
-    ctx.quadraticCurveTo(850, 780, 1010, 900);
-    ctx.stroke();
-
-    const circles = [
-      [930, 200, 85],
-      [150, 860, 75],
-      [520, 945, 42],
-    ];
-
-    circles.forEach(([x, y, radius]) => {
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fill();
-    });
-
-    ctx.fillStyle = "#FFFFFF";
-
-    [
-      [160, 170],
-      [220, 270],
-      [860, 820],
-      [950, 960],
-    ].forEach(([x, y]) => {
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.arc(x, y, 11, 0, Math.PI * 2);
       ctx.fill();
     });
   }
@@ -321,45 +322,53 @@ async function createShareImageBlob({ phrase, options }) {
 
   drawBackgroundEffects(ctx, options.illustration || "mixed");
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.80)";
   roundedRect(ctx, 70, 70, 940, 940, 46);
   ctx.fill();
 
-  let topY = 125;
+  const firstChild = phrase.children?.[0] || null;
 
-  if (options.includeChildPhoto && phrase.childPhoto) {
-    const childImage = await loadImage(phrase.childPhoto);
+  let topY = 115;
+
+  if (options.includeChildPhoto && firstChild?.photo) {
+    const childImage = await loadImage(firstChild.photo);
 
     if (childImage) {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(540, topY + 55, 62, 0, Math.PI * 2);
+      ctx.arc(540, topY + 58, 62, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(childImage, 478, topY - 7, 124, 124);
+      drawImageCover(ctx, childImage, 478, topY - 4, 124, 124);
       ctx.restore();
 
       ctx.strokeStyle = "#FFFFFF";
       ctx.lineWidth = 10;
       ctx.beginPath();
-      ctx.arc(540, topY + 55, 68, 0, Math.PI * 2);
+      ctx.arc(540, topY + 58, 68, 0, Math.PI * 2);
       ctx.stroke();
 
-      topY += 150;
+      ctx.fillStyle = "#746F64";
+      ctx.font = "bold 26px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(firstChild.name, 540, topY + 155);
+      ctx.textAlign = "left";
+
+      topY += 190;
     }
   }
 
   ctx.fillStyle = "#D99AB9";
   ctx.font = "bold 78px Georgia";
   ctx.textAlign = "left";
-  ctx.fillText("“", 130, topY + 20);
+  ctx.fillText("“", 130, topY + 12);
 
   ctx.fillStyle = "#3F3D38";
   ctx.font = "bold italic 58px Georgia";
   ctx.textAlign = "center";
 
-  const phraseLines = wrapText(ctx, phrase.phrase, 790);
-  let quoteY = topY + 78;
+  const phraseLines = wrapText(ctx, phrase.phrase, 800);
+  let quoteY = topY + 74;
 
   phraseLines.slice(0, 5).forEach((line) => {
     ctx.fillText(line, 540, quoteY);
@@ -369,14 +378,17 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.textAlign = "left";
 
   const infoY = quoteY + 35;
+  const childLabel = phrase.children?.length
+    ? phrase.children.map((child) => child.name).join(", ")
+    : "Non associé";
 
   ctx.fillStyle = "#8FA173";
-  roundedRect(ctx, 150, infoY, 300, 64, 32);
+  roundedRect(ctx, 150, infoY, 330, 64, 32);
   ctx.fill();
 
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 30px Arial";
-  ctx.fillText(phrase.childName || "Non précisé", 190, infoY + 42);
+  ctx.font = "bold 28px Arial";
+  ctx.fillText(childLabel.slice(0, 22), 190, infoY + 42);
 
   ctx.fillStyle = "#746F64";
   ctx.font = "bold 30px Arial";
@@ -417,8 +429,8 @@ async function createShareImageBlob({ phrase, options }) {
   const logo = await loadFirstAvailableImage(logoPaths);
 
   if (logo) {
-    const maxLogoWidth = 460;
-    const maxLogoHeight = 135;
+    const maxLogoWidth = 470;
+    const maxLogoHeight = 145;
     const ratio = Math.min(
       maxLogoWidth / logo.width,
       maxLogoHeight / logo.height
@@ -459,13 +471,24 @@ function AddPhrasePopup({
   onClose,
   onSave,
 }) {
-  const selectedChildId = formData.childId || "";
-
   const updateField = (field, value) => {
     setFormData((current) => ({
       ...current,
       [field]: value,
     }));
+  };
+
+  const toggleChild = (childId) => {
+    setFormData((current) => {
+      const exists = current.childIds.includes(childId);
+
+      return {
+        ...current,
+        childIds: exists
+          ? current.childIds.filter((id) => id !== childId)
+          : [...current.childIds, childId],
+      };
+    });
   };
 
   const handlePhotoUpload = (event) => {
@@ -502,7 +525,8 @@ function AddPhrasePopup({
             </h3>
 
             <p className="mt-1 text-sm text-[#746F64]">
-              Ajoute une phrase, une date, un enfant et une photo souvenir.
+              Ajoute une phrase, une date, un ou plusieurs enfants et une photo
+              souvenir.
             </p>
           </div>
 
@@ -533,44 +557,36 @@ function AddPhrasePopup({
 
           <div>
             <label className="text-xs font-black uppercase tracking-[0.14em] text-[#8A8378]">
-              Enfant
+              Enfant(s)
             </label>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => updateField("childId", "")}
-                className={`rounded-full px-4 py-2 text-sm font-bold ring-1 transition ${
-                  selectedChildId === ""
-                    ? "bg-[#8FA173] text-white ring-[#8FA173]"
-                    : "bg-white text-[#746F64] ring-[#EFE4D6]"
-                }`}
-              >
-                Non précisé
-              </button>
+              {childrenOptions.map((child) => {
+                const selected = formData.childIds.includes(child.id);
 
-              {childrenOptions.map((child) => (
-                <button
-                  key={child.id}
-                  type="button"
-                  onClick={() => updateField("childId", child.id)}
-                  className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ring-1 transition ${
-                    selectedChildId === child.id
-                      ? "bg-[#8FA173] text-white ring-[#8FA173]"
-                      : "bg-white text-[#746F64] ring-[#EFE4D6]"
-                  }`}
-                >
-                  {child.photo ? (
-                    <img
-                      src={child.photo}
-                      alt={child.name}
-                      className="h-6 w-6 rounded-full object-cover"
-                    />
-                  ) : null}
+                return (
+                  <button
+                    key={child.id}
+                    type="button"
+                    onClick={() => toggleChild(child.id)}
+                    className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ring-1 transition ${
+                      selected
+                        ? "bg-[#8FA173] text-white ring-[#8FA173]"
+                        : "bg-white text-[#746F64] ring-[#EFE4D6]"
+                    }`}
+                  >
+                    {child.photo ? (
+                      <img
+                        src={child.photo}
+                        alt={child.name}
+                        className="h-6 w-6 rounded-full object-cover"
+                      />
+                    ) : null}
 
-                  {child.name}
-                </button>
-              ))}
+                    {child.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -653,7 +669,7 @@ function AddPhrasePopup({
             <button
               type="button"
               onClick={onSave}
-              disabled={!formData.phrase.trim()}
+              disabled={!formData.phrase.trim() || formData.childIds.length === 0}
               className="rounded-2xl bg-[#8FA173] px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#7F9166] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Enregistrer
@@ -675,6 +691,8 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
   const selectedEffectLabel =
     illustrationChoices.find((item) => item.id === options.illustration)
       ?.label || "Bulles et lignes";
+
+  const firstChild = phrase.children?.[0];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
@@ -701,7 +719,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
         </div>
 
         <div
-          className="relative overflow-hidden rounded-[2rem] p-5 ring-1 ring-[#EFE4D6]"
+          className="relative aspect-square overflow-hidden rounded-[2rem] p-5 ring-1 ring-[#EFE4D6]"
           style={{ backgroundColor: options.backgroundColor }}
         >
           {options.illustration !== "none" && (
@@ -712,6 +730,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
                   <div className="absolute -right-8 top-8 h-28 w-28 rounded-full bg-white/50" />
                   <div className="absolute -left-6 bottom-10 h-24 w-24 rounded-full bg-white/45" />
                   <div className="absolute bottom-20 right-16 h-12 w-12 rounded-full bg-white/40" />
+                  <div className="absolute left-24 top-28 h-10 w-10 rounded-full bg-white/35" />
                 </>
               )}
 
@@ -720,6 +739,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
                 <>
                   <div className="absolute left-8 top-12 h-24 w-40 rounded-[50%] border-t-4 border-white/60" />
                   <div className="absolute bottom-16 right-8 h-24 w-40 rounded-[50%] border-b-4 border-white/60" />
+                  <div className="absolute right-16 top-40 h-20 w-32 rounded-[50%] border-t-4 border-white/50" />
                 </>
               )}
 
@@ -730,12 +750,13 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
                   <div className="absolute left-20 bottom-28 h-2 w-2 rounded-full bg-white/70" />
                   <div className="absolute right-24 top-24 h-3 w-3 rounded-full bg-white/80" />
                   <div className="absolute right-14 top-36 h-2 w-2 rounded-full bg-white/70" />
+                  <div className="absolute left-1/2 top-20 h-2 w-2 rounded-full bg-white/70" />
                 </>
               )}
             </>
           )}
 
-          <div className="relative rounded-[1.5rem] bg-white/75 p-5">
+          <div className="relative flex h-full flex-col rounded-[1.5rem] bg-white/75 p-5">
             <div className="flex items-center justify-between gap-3">
               <Quote className="h-7 w-7 text-[#D99AB9]" />
 
@@ -744,21 +765,29 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
               </span>
             </div>
 
-            {options.includeChildPhoto && phrase.childPhoto ? (
-              <img
-                src={phrase.childPhoto}
-                alt={phrase.childName}
-                className="mx-auto mt-4 h-20 w-20 rounded-full object-cover ring-4 ring-white"
-              />
+            {options.includeChildPhoto && firstChild?.photo ? (
+              <div className="mt-4 flex flex-col items-center">
+                <img
+                  src={firstChild.photo}
+                  alt={firstChild.name}
+                  className="h-20 w-20 rounded-full object-cover ring-4 ring-white"
+                />
+
+                <p className="mt-2 text-xs font-black text-[#746F64]">
+                  {firstChild.name}
+                </p>
+              </div>
             ) : null}
 
-            <p className="mt-5 text-center text-xl font-black italic leading-9 text-[#3F3D38]">
-              “{phrase.phrase}”
-            </p>
+            <div className="flex flex-1 items-center">
+              <p className="w-full text-center text-xl font-black italic leading-9 text-[#3F3D38]">
+                “{phrase.phrase}”
+              </p>
+            </div>
 
-            <div className="mt-5 flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <span className="rounded-full bg-[#8FA173] px-4 py-2 text-xs font-black text-white">
-                {phrase.childName}
+                {phrase.children.map((child) => child.name).join(", ")}
               </span>
 
               <span className="text-xs font-bold text-[#746F64]">
@@ -772,7 +801,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
               </p>
             ) : null}
 
-            <div className="mt-6 border-t border-white/70 pt-4">
+            <div className="mt-5 border-t border-white/70 pt-4">
               <div className="flex justify-center">
                 <img
                   src="/Logo/Camelio et citation.png"
@@ -788,6 +817,48 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
         </div>
 
         <div className="mt-5 space-y-5">
+          <div>
+            <p className="text-sm font-black text-[#55534C]">
+              Photo de l’enfant
+            </p>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setOptions((current) => ({
+                    ...current,
+                    includeChildPhoto: true,
+                  }))
+                }
+                className={`rounded-2xl px-4 py-3 text-sm font-black ring-1 ${
+                  options.includeChildPhoto
+                    ? "bg-[#8FA173] text-white ring-[#8FA173]"
+                    : "bg-white text-[#746F64] ring-[#EFE4D6]"
+                }`}
+              >
+                Oui
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setOptions((current) => ({
+                    ...current,
+                    includeChildPhoto: false,
+                  }))
+                }
+                className={`rounded-2xl px-4 py-3 text-sm font-black ring-1 ${
+                  !options.includeChildPhoto
+                    ? "bg-[#8FA173] text-white ring-[#8FA173]"
+                    : "bg-white text-[#746F64] ring-[#EFE4D6]"
+                }`}
+              >
+                Non
+              </button>
+            </div>
+          </div>
+
           <div>
             <div className="flex items-center gap-2">
               <Palette className="h-4 w-4 text-[#8A8378]" />
@@ -853,25 +924,6 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
 
           <button
             type="button"
-            onClick={() =>
-              setOptions((current) => ({
-                ...current,
-                includeChildPhoto: !current.includeChildPhoto,
-              }))
-            }
-            className={`w-full rounded-2xl px-4 py-3 text-sm font-black ring-1 ${
-              options.includeChildPhoto
-                ? "bg-[#EEF4E8] text-[#5F7F52] ring-[#C9DFC0]"
-                : "bg-white text-[#746F64] ring-[#EFE4D6]"
-            }`}
-          >
-            {options.includeChildPhoto
-              ? "Photo de l’enfant activée"
-              : "Photo de l’enfant désactivée"}
-          </button>
-
-          <button
-            type="button"
             onClick={() => onShare(options)}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#8FA173] px-4 py-4 text-sm font-black text-white shadow-sm"
           >
@@ -894,42 +946,41 @@ export default function MemorablePhrases({ children = [], onBack }) {
     }));
   }, [children]);
 
-  const [phrases, setPhrases] = useState(() => [
-    {
-      id: "phrase-1",
-      phrase: "Papa, les nuages c’est du coton pour les anges!",
-      childId: childOptions?.[0]?.id || "loan",
-      childName: childOptions?.[0]?.name || "Loan",
-      childPhoto: childOptions?.[0]?.photo || "",
-      childBirthDate: childOptions?.[0]?.birthDate || "",
-      childAgeAtSituation: calculateAgeAtDate(
-        childOptions?.[0]?.birthDate,
-        "2025-12-04"
-      ),
-      date: "2025-12-04",
-      context: "",
-      favorite: false,
-      photoUrl: "",
-      photoFile: null,
-    },
-    {
-      id: "phrase-2",
-      phrase: "Maman, pourquoi le soleil se couche mais pas nous?",
-      childId: childOptions?.[1]?.id || "nora",
-      childName: childOptions?.[1]?.name || "Nora",
-      childPhoto: childOptions?.[1]?.photo || "",
-      childBirthDate: childOptions?.[1]?.birthDate || "",
-      childAgeAtSituation: calculateAgeAtDate(
-        childOptions?.[1]?.birthDate,
-        "2025-08-03"
-      ),
-      date: "2025-08-03",
-      context: "",
-      favorite: false,
-      photoUrl: "",
-      photoFile: null,
-    },
-  ]);
+  const [phrases, setPhrases] = useState(() => {
+    const firstChild = childOptions?.[0] || null;
+    const secondChild = childOptions?.[1] || null;
+
+    return [
+      {
+        id: "phrase-1",
+        phrase: "Papa, les nuages c’est du coton pour les anges!",
+        childIds: firstChild ? [firstChild.id] : [],
+        children: firstChild ? [firstChild] : [],
+        date: "2025-12-04",
+        context: "",
+        favorite: false,
+        photoUrl: "",
+        photoFile: null,
+        childAgeAtSituation: firstChild
+          ? calculateAgeAtDate(firstChild.birthDate, "2025-12-04")
+          : "",
+      },
+      {
+        id: "phrase-2",
+        phrase: "Maman, pourquoi le soleil se couche mais pas nous?",
+        childIds: secondChild ? [secondChild.id] : [],
+        children: secondChild ? [secondChild] : [],
+        date: "2025-08-03",
+        context: "",
+        favorite: false,
+        photoUrl: "",
+        photoFile: null,
+        childAgeAtSituation: secondChild
+          ? calculateAgeAtDate(secondChild.birthDate, "2025-08-03")
+          : "",
+      },
+    ];
+  });
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedChildFilter, setSelectedChildFilter] = useState("all");
@@ -941,7 +992,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
 
   const [formData, setFormData] = useState({
     phrase: "",
-    childId: "",
+    childIds: [],
     date: getTodayDate(),
     context: "",
     photoUrl: "",
@@ -963,15 +1014,20 @@ export default function MemorablePhrases({ children = [], onBack }) {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
     return phrases.filter((item) => {
+      const childNames = item.children
+        .map((child) => child.name)
+        .join(" ")
+        .toLowerCase();
+
       const matchesSearch =
         !normalizedSearch ||
         item.phrase.toLowerCase().includes(normalizedSearch) ||
         item.context.toLowerCase().includes(normalizedSearch) ||
-        item.childName.toLowerCase().includes(normalizedSearch);
+        childNames.includes(normalizedSearch);
 
       const matchesChild =
         selectedChildFilter === "all" ||
-        String(item.childId) === String(selectedChildFilter);
+        item.childIds.includes(selectedChildFilter);
 
       const matchesMonth =
         selectedMonthFilter === "all" ||
@@ -994,7 +1050,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
   const resetForm = () => {
     setFormData({
       phrase: "",
-      childId: "",
+      childIds: [],
       date: getTodayDate(),
       context: "",
       photoUrl: "",
@@ -1005,30 +1061,28 @@ export default function MemorablePhrases({ children = [], onBack }) {
   const handleAddPhrase = () => {
     const cleanedPhrase = formData.phrase.trim();
 
-    if (!cleanedPhrase) return;
+    if (!cleanedPhrase || formData.childIds.length === 0) return;
 
-    const selectedChild = childOptions.find(
-      (child) => String(child.id) === String(formData.childId)
+    const assignedChildren = childOptions.filter((child) =>
+      formData.childIds.includes(child.id)
     );
 
     const situationDate = formData.date || getTodayDate();
+    const firstChild = assignedChildren[0];
 
     const newPhrase = {
       id: `phrase-${Date.now()}`,
       phrase: cleanedPhrase,
-      childId: formData.childId,
-      childName: selectedChild?.name || "Non précisé",
-      childPhoto: selectedChild?.photo || "",
-      childBirthDate: selectedChild?.birthDate || "",
-      childAgeAtSituation: calculateAgeAtDate(
-        selectedChild?.birthDate,
-        situationDate
-      ),
+      childIds: assignedChildren.map((child) => child.id),
+      children: assignedChildren,
       date: situationDate,
       context: formData.context.trim(),
       favorite: false,
       photoUrl: formData.photoUrl,
       photoFile: formData.photoFile,
+      childAgeAtSituation: firstChild
+        ? calculateAgeAtDate(firstChild.birthDate, situationDate)
+        : "",
     };
 
     setPhrases((current) => [newPhrase, ...current]);
@@ -1268,18 +1322,25 @@ export default function MemorablePhrases({ children = [], onBack }) {
                       </p>
                     ) : null}
 
-                    <div className="mt-4 flex items-center justify-between gap-3">
-                      <span className="flex items-center gap-2 rounded-full bg-[#F0EAF8] px-3 py-1 text-xs font-black text-[#9A7BB7]">
-                        {item.childPhoto ? (
-                          <img
-                            src={item.childPhoto}
-                            alt={item.childName}
-                            className="h-6 w-6 rounded-full object-cover"
-                          />
-                        ) : null}
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap gap-2">
+                        {item.children.map((child) => (
+                          <span
+                            key={child.id}
+                            className="flex items-center gap-2 rounded-full bg-[#F0EAF8] px-3 py-1 text-xs font-black text-[#9A7BB7]"
+                          >
+                            {child.photo ? (
+                              <img
+                                src={child.photo}
+                                alt={child.name}
+                                className="h-6 w-6 rounded-full object-cover"
+                              />
+                            ) : null}
 
-                        {item.childName}
-                      </span>
+                            {child.name}
+                          </span>
+                        ))}
+                      </div>
 
                       <span className="flex items-center gap-1 text-xs font-bold text-[#8A8378]">
                         <CalendarDays className="h-3.5 w-3.5" />
