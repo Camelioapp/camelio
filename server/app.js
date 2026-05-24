@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const session = require("express-session");
 const DynamoDBStore = require("connect-dynamodb")({ session });
 const helmet = require("helmet");
@@ -36,6 +37,8 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { dynamo } = require("./dynamo");
 
 const app = express();
+
+app.set("trust proxy", 1);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
@@ -82,6 +85,7 @@ const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
 
 const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_CHILDREN_PER_ACCOUNT = 10;
 
 const ALLOWED_DOCUMENT_TYPES = [
   "application/pdf",
@@ -185,9 +189,12 @@ function validateTrustedOrigin(req, res, next) {
 
   const origin = req.get("origin");
 
-  if (!origin) {
-    return next();
-  }
+  if (!origin && IS_PRODUCTION && !safeMethods.includes(req.method)) {
+  return res.status(403).json({
+    error: "missing_origin",
+    message: "Origine manquante.",
+  });
+}
 
   if (!allowedOrigins.includes(origin)) {
     return res.status(403).json({
@@ -202,6 +209,47 @@ function validateTrustedOrigin(req, res, next) {
 app.use(validateTrustedOrigin);
 
 app.set("trust proxy", 1);
+
+app.use(validateTrustedOrigin);
+
+app.set("trust proxy", 1);
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "too_many_requests",
+    message: "Trop de requêtes. Veuillez réessayer dans quelques minutes.",
+  },
+});
+
+const sensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "too_many_requests",
+    message: "Trop de tentatives. Veuillez réessayer dans quelques minutes.",
+  },
+});
+
+app.use("/api", apiLimiter);
+app.use("/login", sensitiveLimiter);
+app.use("/signup", sensitiveLimiter);
+app.use("/api/documents/presign", sensitiveLimiter);
+app.use("/api/photos/presign", sensitiveLimiter);
+app.use("/api/uploads/avatar", sensitiveLimiter);
+
+const sessionStore = new DynamoDBStore({
+  table: SESSION_TABLE,
+  AWSConfigJSON: {
+    region: AWS_REGION,
+  },
+  reapInterval: 60 * 60 * 1000,
+});
 
 const sessionStore = new DynamoDBStore({
   table: SESSION_TABLE,
@@ -1005,6 +1053,26 @@ app.get("/api/children", requireAuth, validateAwsConfig, async (req, res, next) 
 
 app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const existingChildrenResult = await dynamo.send(
+      new QueryCommand({
+        TableName: DYNAMODB_TABLE,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": getUserPk(req),
+          ":sk": "CHILD#",
+        },
+      })
+    );
+
+    const existingChildrenCount = existingChildrenResult.Items?.length || 0;
+
+    if (existingChildrenCount >= MAX_CHILDREN_PER_ACCOUNT) {
+  return res.status(403).json({
+    error: "children_limit_reached",
+    message: `Vous avez atteint la limite de ${MAX_CHILDREN_PER_ACCOUNT} enfants pour ce compte.`,
+  });
+}
+
     const childId = randomUUID();
     const now = new Date().toISOString();
 
@@ -1022,6 +1090,7 @@ app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next)
       new PutCommand({
         TableName: DYNAMODB_TABLE,
         Item: child,
+        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
       })
     );
 
