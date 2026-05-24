@@ -17,6 +17,108 @@ const inputClass =
 const textareaClass =
   "mt-2 min-h-[105px] w-full resize-none rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm leading-6 text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#EAA5AF] focus:ring-2 focus:ring-[#F3CDD3]";
 
+const PHOTO_COMPRESSION_STORAGE_KEY = "camelio_photo_compression_enabled";
+
+function compressImageFile(file, options = {}) {
+  const {
+    maxWidth = 1600,
+    maxHeight = 1600,
+    quality = 0.78,
+  } = options;
+
+  return new Promise((resolve) => {
+    if (!file || !file.type?.startsWith("image/")) {
+      resolve(file);
+      return;
+    }
+
+    if (file.type === "image/gif" || file.type === "image/svg+xml") {
+      resolve(file);
+      return;
+    }
+
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      try {
+        const ratio = Math.min(
+          maxWidth / image.width,
+          maxHeight / image.height,
+          1
+        );
+
+        const width = Math.round(image.width * ratio);
+        const height = Math.round(image.height * ratio);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext("2d");
+
+        if (!context) {
+          URL.revokeObjectURL(objectUrl);
+          resolve(file);
+          return;
+        }
+
+        context.drawImage(image, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(objectUrl);
+
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+
+            const compressedFile = new File(
+              [blob],
+              file.name.replace(/\.[^.]+$/, ".jpg"),
+              {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              }
+            );
+
+            if (compressedFile.size >= file.size) {
+              resolve(file);
+              return;
+            }
+
+            resolve(compressedFile);
+          },
+          "image/jpeg",
+          quality
+        );
+      } catch (error) {
+        console.error("Erreur compression image:", error);
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    image.src = objectUrl;
+  });
+}
+
+function formatFileSize(bytes = 0) {
+  if (!bytes) return "0 Ko";
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} Ko`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
 function PhotoCard({ photo, children, onOpen, onDelete }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-white ring-1 ring-[#EFE4D6]">
@@ -172,6 +274,7 @@ function GalleryPopup({
 
   const sortedPhotos = [...photos].sort((a, b) => {
     if (sortMode === "oldest") return (a.date || "").localeCompare(b.date || "");
+
     if (sortMode === "album") {
       return (
         (a.album || "").localeCompare(b.album || "") ||
@@ -223,6 +326,65 @@ function GalleryPopup({
   );
 }
 
+function PhotoCompressionToggle({
+  enabled,
+  onToggle,
+  compact = false,
+}) {
+  return (
+    <div
+      className={`rounded-[22px] border border-[#F3CDD3] bg-[#FFF8F9] ${
+        compact ? "p-4" : "p-4"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-[#55534C]">
+            Compression automatique
+          </p>
+
+          <p className="mt-1 text-xs leading-5 text-[#746F64]">
+            Réduit la taille des photos avant l’importation pour économiser de
+            l’espace de stockage. La qualité peut être légèrement réduite.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onToggle}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+            enabled ? "bg-[#EAA5AF]" : "bg-[#DED6CC]"
+          }`}
+          aria-pressed={enabled}
+          aria-label="Activer ou désactiver la compression automatique des photos"
+        >
+          <span
+            className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${
+              enabled ? "left-6" : "left-1"
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-bold ${
+            enabled
+              ? "bg-[#EAA5AF] text-white"
+              : "border border-[#EFE4D6] bg-white text-[#746F64]"
+          }`}
+        >
+          {enabled ? "Activée" : "Désactivée"}
+        </span>
+
+        <span className="rounded-full border border-[#EFE4D6] bg-white px-3 py-1 text-xs font-semibold text-[#746F64]">
+          Recommandé pour mobile
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function PhotoPopup({
   albums,
   children,
@@ -235,6 +397,9 @@ function PhotoPopup({
   addAlbumFromPhotoPopup,
   close,
   isSaving,
+  compressPhotosBeforeUpload,
+  setCompressPhotosBeforeUpload,
+  isPreparingPhotos,
 }) {
   const [showNewAlbum, setShowNewAlbum] = useState(false);
   const [newAlbum, setNewAlbum] = useState({
@@ -262,17 +427,41 @@ function PhotoPopup({
         <div className="rounded-3xl bg-[#FFF8F9] p-4 ring-1 ring-[#F3CDD3]">
           <p className="label text-[#B96B77]">1. Choisir la ou les photos</p>
 
+          <div className="mt-3">
+            <PhotoCompressionToggle
+              enabled={compressPhotosBeforeUpload}
+              onToggle={() =>
+                setCompressPhotosBeforeUpload((current) => !current)
+              }
+              compact
+            />
+          </div>
+
           <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
             <Download className="h-4 w-4" />
-            Importer une ou plusieurs photos
+            {isPreparingPhotos
+              ? "Préparation des photos..."
+              : "Importer une ou plusieurs photos"}
             <input
               type="file"
               accept="image/*"
               multiple
               className="hidden"
               onChange={uploadPhotos}
+              disabled={isPreparingPhotos}
             />
           </label>
+
+          {photoForm.files.length > 0 && (
+            <div className="mt-3 rounded-2xl bg-white px-4 py-3 text-xs font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">
+              {photoForm.files.length} fichier
+              {photoForm.files.length > 1 ? "s" : ""} sélectionné
+              {photoForm.files.length > 1 ? "s" : ""} ·{" "}
+              {formatFileSize(
+                photoForm.files.reduce((total, file) => total + file.size, 0)
+              )}
+            </div>
+          )}
 
           {photoForm.urls.length > 0 && (
             <div className="mt-4 grid !grid-cols-3 gap-2">
@@ -448,7 +637,7 @@ function PhotoPopup({
           <button
             type="button"
             onClick={addPhoto}
-            disabled={isSaving}
+            disabled={isSaving || isPreparingPhotos}
             className="rounded-2xl bg-[#EAA5AF] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
           >
             {isSaving ? "Enregistrement..." : "Ajouter"}
@@ -534,7 +723,19 @@ export default function Photos({ children = [] }) {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreparingPhotos, setIsPreparingPhotos] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const [compressPhotosBeforeUpload, setCompressPhotosBeforeUpload] = useState(
+    () => {
+      try {
+        const saved = localStorage.getItem(PHOTO_COMPRESSION_STORAGE_KEY);
+        return saved ? JSON.parse(saved) : false;
+      } catch {
+        return false;
+      }
+    }
+  );
 
   const [photoForm, setPhotoForm] = useState({
     title: "",
@@ -548,6 +749,13 @@ export default function Photos({ children = [] }) {
     title: "",
     description: "",
   });
+
+  useEffect(() => {
+    localStorage.setItem(
+      PHOTO_COMPRESSION_STORAGE_KEY,
+      JSON.stringify(compressPhotosBeforeUpload)
+    );
+  }, [compressPhotosBeforeUpload]);
 
   const normalizedAlbums = useMemo(() => {
     const albumMap = new Map();
@@ -614,25 +822,57 @@ export default function Photos({ children = [] }) {
     }));
   };
 
-  const uploadPhotos = (event) => {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-
-    setPhotoForm((current) => ({
-      ...current,
-      files: [...current.files, ...files],
-      urls: [...current.urls, ...files.map((file) => URL.createObjectURL(file))],
-    }));
-
+  const uploadPhotos = async (event) => {
+    const selectedFiles = Array.from(event.target.files || []);
     event.target.value = "";
+
+    if (!selectedFiles.length) return;
+
+    try {
+      setIsPreparingPhotos(true);
+      setErrorMessage("");
+
+      const preparedFiles = await Promise.all(
+        selectedFiles.map((file) =>
+          compressPhotosBeforeUpload
+            ? compressImageFile(file, {
+                maxWidth: 1600,
+                maxHeight: 1600,
+                quality: 0.78,
+              })
+            : Promise.resolve(file)
+        )
+      );
+
+      const urls = preparedFiles.map((file) => URL.createObjectURL(file));
+
+      setPhotoForm((current) => ({
+        ...current,
+        files: [...current.files, ...preparedFiles],
+        urls: [...current.urls, ...urls],
+      }));
+    } catch (error) {
+      console.error("Erreur préparation photos:", error);
+      setErrorMessage("Impossible de préparer les photos sélectionnées.");
+    } finally {
+      setIsPreparingPhotos(false);
+    }
   };
 
   const removeSelectedPhoto = (indexToRemove) => {
-    setPhotoForm((current) => ({
-      ...current,
-      urls: current.urls.filter((_, index) => index !== indexToRemove),
-      files: current.files.filter((_, index) => index !== indexToRemove),
-    }));
+    setPhotoForm((current) => {
+      const urlToRemove = current.urls[indexToRemove];
+
+      if (urlToRemove) {
+        URL.revokeObjectURL(urlToRemove);
+      }
+
+      return {
+        ...current,
+        urls: current.urls.filter((_, index) => index !== indexToRemove),
+        files: current.files.filter((_, index) => index !== indexToRemove),
+      };
+    });
   };
 
   const addAlbum = () => {
@@ -765,6 +1005,8 @@ export default function Photos({ children = [] }) {
         await uploadOnePhoto(file, title, photoForm.album, photoForm.children);
       }
 
+      photoForm.urls.forEach((url) => URL.revokeObjectURL(url));
+
       setPhotoForm({
         title: "",
         album: photoForm.album,
@@ -845,6 +1087,15 @@ export default function Photos({ children = [] }) {
             Importe une ou plusieurs photos, choisis les enfants présents et
             classe-les dans un album.
           </p>
+
+          <div className="mt-5">
+            <PhotoCompressionToggle
+              enabled={compressPhotosBeforeUpload}
+              onToggle={() =>
+                setCompressPhotosBeforeUpload((current) => !current)
+              }
+            />
+          </div>
         </div>
 
         <div className="mt-5 grid !grid-cols-2 gap-3">
@@ -1098,6 +1349,9 @@ export default function Photos({ children = [] }) {
           addAlbumFromPhotoPopup={addAlbumFromPhotoPopup}
           close={() => setShowPhotoPopup(false)}
           isSaving={isSaving}
+          compressPhotosBeforeUpload={compressPhotosBeforeUpload}
+          setCompressPhotosBeforeUpload={setCompressPhotosBeforeUpload}
+          isPreparingPhotos={isPreparingPhotos}
         />
       )}
 
