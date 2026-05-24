@@ -251,14 +251,6 @@ const sessionStore = new DynamoDBStore({
   reapInterval: 60 * 60 * 1000,
 });
 
-const sessionStore = new DynamoDBStore({
-  table: SESSION_TABLE,
-  AWSConfigJSON: {
-    region: AWS_REGION,
-  },
-  reapInterval: 60 * 60 * 1000,
-});
-
 app.use(
   session({
     name: "camelio.sid",
