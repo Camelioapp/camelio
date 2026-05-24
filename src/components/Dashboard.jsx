@@ -144,63 +144,63 @@ function getInitials(child) {
 
 function FamilyFloatingBubbles() {
   const bubbles = [
-    {
-      top: "13%",
-      left: "9%",
-      size: 18,
-      color: "#eec988",
-      delay: 0.1,
-    },
-    {
-      top: "26%",
-      left: "25%",
-      size: 11,
-      color: "#eaa5af",
-      delay: 0.8,
-    },
-    {
-      top: "61%",
-      left: "8%",
-      size: 22,
-      color: "#b5a7c8",
-      delay: 1.3,
-    },
-    {
-      top: "78%",
-      left: "29%",
-      size: 13,
-      color: "#a2badf",
-      delay: 1.7,
-    },
-    {
-      top: "17%",
-      right: "15%",
-      size: 15,
-      color: "#a8b193",
-      delay: 0.5,
-    },
-    {
-      top: "50%",
-      right: "9%",
-      size: 22,
-      color: "#eec988",
-      delay: 1.1,
-    },
-    {
-      bottom: "14%",
-      right: "24%",
-      size: 12,
-      color: "#eaa5af",
-      delay: 1.9,
-    },
-    {
-      bottom: "24%",
-      left: "48%",
-      size: 10,
-      color: "#a8b193",
-      delay: 2.2,
-    },
-  ];
+  {
+    top: "10%",
+    left: "13%",
+    size: 24,
+    color: "#eec988",
+    delay: 0.1,
+  },
+  {
+    top: "30%",
+    left: "24%",
+    size: 14,
+    color: "#eaa5af",
+    delay: 0.8,
+  },
+  {
+    top: "62%",
+    left: "12%",
+    size: 30,
+    color: "#b5a7c8",
+    delay: 1.3,
+  },
+  {
+    top: "78%",
+    left: "29%",
+    size: 18,
+    color: "#a2badf",
+    delay: 1.7,
+  },
+  {
+    top: "20%",
+    right: "16%",
+    size: 18,
+    color: "#a8b193",
+    delay: 0.5,
+  },
+  {
+    top: "56%",
+    right: "11%",
+    size: 26,
+    color: "#eec988",
+    delay: 1.1,
+  },
+  {
+    bottom: "12%",
+    right: "27%",
+    size: 16,
+    color: "#eaa5af",
+    delay: 1.9,
+  },
+  {
+    bottom: "24%",
+    left: "48%",
+    size: 15,
+    color: "#a8b193",
+    delay: 2.2,
+  },
+];
 
   const softCircles = [
     {
@@ -713,57 +713,59 @@ export default function Dashboard({
                   ) : (
                     <div className="relative -mx-2 overflow-hidden">
   <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-    <div className="flex min-h-[165px] items-end justify-center gap-0 px-2 sm:min-h-[205px] md:min-h-[220px] md:px-8">
-      {children.map((child, index) => {
-        const photo = child.image || child.photo || "";
-        const initials = getInitials(child);
-        const childTheme = getChildColorTheme(child.color);
+    <div className="flex min-h-[165px] items-end justify-center px-2 sm:min-h-[205px] md:min-h-[220px] md:px-8">
+      <div className="flex items-end justify-center pl-7 sm:pl-8 md:pl-9">
+        {children.map((child, index) => {
+          const photo = child.image || child.photo || "";
+          const initials = getInitials(child);
+          const childTheme = getChildColorTheme(child.color);
 
-        return (
-          <button
-            key={child.id || child.name}
-            type="button"
-            onClick={() => openSection("children")}
-            className={`group relative isolate flex w-[118px] shrink-0 flex-col items-center ${
-              index === 0 ? "" : "-ml-7 sm:-ml-8 md:-ml-9"
-            }`}
-            style={{ zIndex: children.length + index }}
-          >
-            <div
-              className="relative z-10 flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
-              style={{
-                backgroundColor: childTheme.soft,
-                color: childTheme.text,
-              }}
+          return (
+            <button
+              key={child.id || child.name}
+              type="button"
+              onClick={() => openSection("children")}
+              className={`group relative isolate flex w-[118px] shrink-0 flex-col items-center ${
+                index === 0 ? "" : "-ml-7 sm:-ml-8 md:-ml-9"
+              }`}
+              style={{ zIndex: children.length + index }}
             >
-              {photo ? (
-                <PhotoImage
-                  src={photo}
-                  alt={child.name}
-                  position={child.photoPosition}
-                  zoom={child.photoZoom || 1}
-                  className="h-full w-full"
-                />
-              ) : initials ? (
-                initials
-              ) : (
-                <UserRound className="h-10 w-10" />
-              )}
-            </div>
+              <div
+                className="relative z-10 flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+                style={{
+                  backgroundColor: childTheme.soft,
+                  color: childTheme.text,
+                }}
+              >
+                {photo ? (
+                  <PhotoImage
+                    src={photo}
+                    alt={child.name}
+                    position={child.photoPosition}
+                    zoom={child.photoZoom || 1}
+                    className="h-full w-full"
+                  />
+                ) : initials ? (
+                  initials
+                ) : (
+                  <UserRound className="h-10 w-10" />
+                )}
+              </div>
 
-            <div
-              className="relative z-30 -mt-3 min-w-[104px] max-w-[112px] rounded-[14px] px-4 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:-mt-4 sm:min-w-[118px] sm:max-w-[132px] sm:rounded-[16px] sm:text-lg md:-mt-5 md:min-w-[126px] md:text-xl"
-              style={{
-                backgroundColor: childTheme.dot,
-              }}
-            >
-              <span className="relative z-40 block truncate">
-                {child.name}
-              </span>
-            </div>
-          </button>
-        );
-      })}
+              <div
+                className="relative z-30 -mt-3 min-w-[104px] max-w-[112px] rounded-[14px] px-4 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:-mt-4 sm:min-w-[118px] sm:max-w-[132px] sm:rounded-[16px] sm:text-lg md:-mt-5 md:min-w-[126px] md:text-xl"
+                style={{
+                  backgroundColor: childTheme.dot,
+                }}
+              >
+                <span className="relative z-40 block truncate">
+                  {child.name}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   </div>
 
