@@ -32,8 +32,31 @@ const noteInputClass =
 const noteTextareaClass =
   "mt-2 min-h-[140px] w-full resize-none rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm leading-6 text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]";
 
+const GENERAL_CHILD_ID = "general";
+const ALL_CHILDREN_ID = "all";
+
+function getChildId(child) {
+  return String(child?.id || child?.childId || "");
+}
+
+function getChildLabelById(childId, children = []) {
+  if (childId === GENERAL_CHILD_ID) return "Général";
+  const child = children.find((item) => getChildId(item) === childId);
+  return displayName(child) || "Enfant";
+}
+
+function noteBelongsToChild(note, childId, children = []) {
+  if (childId === ALL_CHILDREN_ID) return true;
+  if (note.childId) return note.childId === childId;
+  if (childId === GENERAL_CHILD_ID) return note.child === "Général";
+
+  const child = children.find((item) => getChildId(item) === childId);
+  return child ? note.child === child.name || note.child === displayName(child) : false;
+}
+
 function NoteCard({ note, children = [], onOpen, onDelete }) {
-  const child = children.find((item) => item.name === note.child);
+  const child = children.find((item) => getChildId(item) === note.childId);
+  const childLabel = getChildLabelById(note.childId || GENERAL_CHILD_ID, children);
   const color = getColor(child?.color);
 
   return (
@@ -64,7 +87,7 @@ function NoteCard({ note, children = [], onOpen, onDelete }) {
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          {note.child === "Général" ? (
+          {(note.childId || GENERAL_CHILD_ID) === GENERAL_CHILD_ID ? (
             <span className="rounded-full bg-[#FFFDF8] px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
               Général
             </span>
@@ -72,7 +95,7 @@ function NoteCard({ note, children = [], onOpen, onDelete }) {
             <span
               className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${color.soft}`}
             >
-              {displayName(child || { name: note.child })}
+              {childLabel}
             </span>
           )}
 
@@ -105,13 +128,13 @@ export default function Notes({ children = [] }) {
   const [noteToDelete, setNoteToDelete] = useState(null);
 
   const [query, setQuery] = useState("");
-  const [filterChild, setFilterChild] = useState("Tous");
+  const [filterChild, setFilterChild] = useState(ALL_CHILDREN_ID);
   const [filterCategory, setFilterCategory] = useState("Toutes");
 
   const [form, setForm] = useState({
     title: "",
     text: "",
-    child: "Général",
+    childId: GENERAL_CHILD_ID,
     category: "Note",
     date: getToday(),
     isPinned: false,
@@ -127,10 +150,12 @@ export default function Notes({ children = [] }) {
           note.title.toLowerCase().includes(search) ||
           note.text.toLowerCase().includes(search) ||
           note.category.toLowerCase().includes(search) ||
-          note.child.toLowerCase().includes(search);
+          getChildLabelById(note.childId || GENERAL_CHILD_ID, children)
+            .toLowerCase()
+            .includes(search);
 
         const matchesChild =
-          filterChild === "Tous" || note.child === filterChild;
+          noteBelongsToChild(note, filterChild, children);
 
         const matchesCategory =
           filterCategory === "Toutes" || note.category === filterCategory;
@@ -142,16 +167,19 @@ export default function Notes({ children = [] }) {
         if (!a.isPinned && b.isPinned) return 1;
         return String(b.date || "").localeCompare(String(a.date || ""));
       });
-  }, [notes, query, filterChild, filterCategory]);
+  }, [notes, query, filterChild, filterCategory, children]);
 
   const pinnedNotes = notes.filter((note) => note.isPinned);
-  const childOptions = ["Général", ...children.map((child) => child.name)];
+  const childOptions = [
+    { id: GENERAL_CHILD_ID, label: "Général" },
+    ...children.map((child) => ({ id: getChildId(child), label: displayName(child) })),
+  ];
 
   const resetForm = () => {
     setForm({
       title: "",
       text: "",
-      child: "Général",
+      childId: GENERAL_CHILD_ID,
       category: "Note",
       date: getToday(),
       isPinned: false,
@@ -166,7 +194,8 @@ export default function Notes({ children = [] }) {
         id: `note-${Date.now()}`,
         title: form.title.trim() || "Note",
         text: form.text.trim(),
-        child: form.child,
+        childId: form.childId,
+        childName: getChildLabelById(form.childId, children),
         category: form.category,
         date: form.date || getToday(),
         isPinned: form.isPinned,
@@ -291,13 +320,17 @@ export default function Notes({ children = [] }) {
               value={filterChild}
               onChange={(event) => setFilterChild(event.target.value)}
             >
-              <option>Tous</option>
-              <option>Général</option>
-              {children.map((child) => (
-                <option key={child.name} value={child.name}>
-                  {displayName(child)}
-                </option>
-              ))}
+              <option value={ALL_CHILDREN_ID}>Tous</option>
+              <option value={GENERAL_CHILD_ID}>Général</option>
+              {children.map((child) => {
+                const childId = getChildId(child);
+
+                return (
+                  <option key={childId} value={childId}>
+                    {displayName(child)}
+                  </option>
+                );
+              })}
             </select>
           </Field>
 
@@ -337,7 +370,7 @@ export default function Notes({ children = [] }) {
                     </p>
 
                     <p className="mt-1 text-xs text-[#746F64]">
-                      {note.child} · {note.category}
+                      {getChildLabelById(note.childId || GENERAL_CHILD_ID, children)} · {note.category}
                     </p>
                   </div>
 
@@ -393,23 +426,17 @@ export default function Notes({ children = [] }) {
               <Field label="Associer à">
                 <select
                   className={noteInputClass}
-                  value={form.child}
+                  value={form.childId}
                   onChange={(event) =>
                     setForm({
                       ...form,
-                      child: event.target.value,
+                      childId: event.target.value,
                     })
                   }
                 >
                   {childOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option === "Général"
-                        ? "Général"
-                        : displayName(
-                            children.find((child) => child.name === option) || {
-                              name: option,
-                            }
-                          )}
+                    <option key={option.id} value={option.id}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -525,7 +552,7 @@ export default function Notes({ children = [] }) {
             <div className="rounded-2xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
               <p className="label">Information</p>
               <p className="mt-1 text-sm font-bold text-[#55534C]">
-                {selectedNote.child} · {selectedNote.category} ·{" "}
+                {getChildLabelById(selectedNote.childId || GENERAL_CHILD_ID, children)} · {selectedNote.category} ·{" "}
                 {selectedNote.date}
               </p>
             </div>
@@ -581,17 +608,18 @@ export default function Notes({ children = [] }) {
               <Field label="Associer à">
                 <select
                   className={noteInputClass}
-                  value={editingNote.child}
+                  value={editingNote.childId || GENERAL_CHILD_ID}
                   onChange={(event) =>
                     setEditingNote({
                       ...editingNote,
-                      child: event.target.value,
+                      childId: event.target.value,
+                      childName: getChildLabelById(event.target.value, children),
                     })
                   }
                 >
                   {childOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.id} value={option.id}>
+                      {option.label}
                     </option>
                   ))}
                 </select>

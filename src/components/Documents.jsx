@@ -48,7 +48,7 @@ function inputClass(extra = "") {
 }
 
 function getChildId(child) {
-  return child?.id || child?.childId || child?.name || displayName(child);
+  return String(child?.id || child?.childId || "");
 }
 
 function getChildName(child) {
@@ -336,7 +336,9 @@ export default function Documents({
       const id = getChildId(child);
       const name = getChildName(child);
 
-      return docs.filter((doc) => doc.childId === id || doc.childName === name);
+      return docs.filter(
+        (doc) => doc.childId === id || (!doc.childId && doc.childName === name)
+      );
     },
     [docs]
   );

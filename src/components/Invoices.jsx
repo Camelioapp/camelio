@@ -19,6 +19,24 @@ function moneyLabel(value, rounded = false) {
   return `${number.toFixed(rounded ? 0 : 2).replace(".", ",")} $`;
 }
 
+const GENERAL_CHILD_ID = "general";
+const ALL_CHILDREN_ID = "all";
+
+function getChildId(child) {
+  return String(child?.id || child?.childId || "");
+}
+
+function getChildLabelById(childId, children = []) {
+  if (childId === GENERAL_CHILD_ID) return "Général";
+  const child = children.find((item) => getChildId(item) === childId);
+  return displayName(child) || "Enfant";
+}
+
+function receiptBelongsToChild(receipt, child, childId) {
+  if (receipt.childId) return receipt.childId === childId;
+  return receipt.child === child.name || receipt.child === displayName(child);
+}
+
 function SummaryButton({ label, value }) {
   return (
     <div className="rounded-[2rem] bg-white p-4 text-center shadow-sm ring-1 ring-[#EFE4D6]">
@@ -46,7 +64,7 @@ function ToggleButton({ active, onClick, children }) {
   );
 }
 
-function ReceiptSection({ title, receipts, onDetails }) {
+function ReceiptSection({ title, receipts, onDetails, children = [] }) {
   const [open, setOpen] = useState(title.toLowerCase().includes("rembourser"));
 
   return (
@@ -87,7 +105,7 @@ function ReceiptSection({ title, receipts, onDetails }) {
                     </p>
 
                     <p className="mt-1 text-sm text-[#746F64]">
-                      {receipt.child} · {receipt.category}
+                      {receipt.childName || getChildLabelById(receipt.childId || GENERAL_CHILD_ID, children)} · {receipt.category}
                     </p>
 
                     {receipt.invoiceDate && (
@@ -120,7 +138,7 @@ function ReceiptSection({ title, receipts, onDetails }) {
   );
 }
 
-function ReceiptDetails({ receipt, close, onUpdate }) {
+function ReceiptDetails({ receipt, close, onUpdate, children = [] }) {
   const [draft, setDraft] = useState(receipt);
   const [showPartialPayment, setShowPartialPayment] = useState(false);
   const [showAdditionalInfo, setShowAdditionalInfo] = useState(false);
@@ -461,7 +479,9 @@ function ReceiptDetails({ receipt, close, onUpdate }) {
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
                 <p className="label">Enfant</p>
-                <p className="mt-1 font-bold text-[#55534C]">{draft.child}</p>
+                <p className="mt-1 font-bold text-[#55534C]">
+                  {draft.childName || getChildLabelById(draft.childId || GENERAL_CHILD_ID, children)}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
@@ -516,6 +536,8 @@ export default function Receipts({ children = [] }) {
       title: "Pharmacie",
       amount: "24,95",
       invoiceDate: "2026-05-16",
+      childId: "",
+      childName: "Mia",
       child: "Mia",
       category: "Santé",
       tax: true,
@@ -533,6 +555,8 @@ export default function Receipts({ children = [] }) {
       title: "Matériel scolaire",
       amount: "42,30",
       invoiceDate: "2026-05-15",
+      childId: "",
+      childName: "Léo",
       child: "Léo",
       category: "École",
       tax: false,
@@ -562,7 +586,8 @@ export default function Receipts({ children = [] }) {
     title: "",
     amount: "",
     invoiceDate: new Date().toISOString().slice(0, 10),
-    child: "Général",
+    childId: GENERAL_CHILD_ID,
+    childName: "Général",
     category: "Santé",
     tax: false,
     reimbursement: false,
@@ -574,7 +599,8 @@ export default function Receipts({ children = [] }) {
 
   const [exportOptions, setExportOptions] = useState({
     exportType: "grid",
-    child: "Tous les enfants",
+    childId: ALL_CHILDREN_ID,
+    childName: "Tous les enfants",
     taxesOnly: false,
     startDate: "",
     endDate: "",
@@ -616,7 +642,7 @@ export default function Receipts({ children = [] }) {
   const expensesByChild = children
     .map((child) => {
       const childReceipts = reimbursementReceipts.filter(
-        (receipt) => receipt.child === child.name
+        (receipt) => receiptBelongsToChild(receipt, child, getChildId(child))
       );
 
       return {
@@ -635,7 +661,7 @@ export default function Receipts({ children = [] }) {
     .filter((entry) => entry.receipts.length > 0);
 
   const generalReimbursementReceipts = reimbursementReceipts.filter(
-    (receipt) => receipt.child === "Général"
+    (receipt) => (receipt.childId || GENERAL_CHILD_ID) === GENERAL_CHILD_ID
   );
 
   const addReceipt = () => {
@@ -659,7 +685,8 @@ export default function Receipts({ children = [] }) {
       title: "",
       amount: "",
       invoiceDate: new Date().toISOString().slice(0, 10),
-      child: "Général",
+      childId: GENERAL_CHILD_ID,
+      childName: "Général",
       category: "Santé",
       tax: false,
       reimbursement: false,
@@ -709,9 +736,17 @@ export default function Receipts({ children = [] }) {
 
   const getExportReceipts = () => {
     return receipts.filter((receipt) => {
+      const selectedChild = children.find(
+        (child) => getChildId(child) === exportOptions.childId
+      );
+
       const matchesChild =
-        exportOptions.child === "Tous les enfants" ||
-        receipt.child === exportOptions.child;
+        exportOptions.childId === ALL_CHILDREN_ID ||
+        (receipt.childId
+          ? receipt.childId === exportOptions.childId
+          : selectedChild
+            ? receiptBelongsToChild(receipt, selectedChild, exportOptions.childId)
+            : exportOptions.childId === GENERAL_CHILD_ID && receipt.child === "Général");
 
       const matchesTaxes = !exportOptions.taxesOnly || receipt.tax;
 
@@ -729,7 +764,7 @@ export default function Receipts({ children = [] }) {
     const lines = selectedReceipts.map((receipt) =>
       [
         receipt.invoiceDate || "Sans date",
-        receipt.child,
+        receipt.childName || getChildLabelById(receipt.childId || GENERAL_CHILD_ID, children),
         receipt.title,
         receipt.category,
         `${receipt.amount} $`,
@@ -741,7 +776,7 @@ export default function Receipts({ children = [] }) {
     const content = [
       "GRILLE DES DÉPENSES",
       "",
-      `Enfant : ${exportOptions.child}`,
+      `Enfant : ${exportOptions.childName}`,
       `Période : ${exportOptions.startDate || "début"} à ${
         exportOptions.endDate || "fin"
       }`,
@@ -760,7 +795,7 @@ export default function Receipts({ children = [] }) {
       [
         receipt.invoiceDate || "Sans date",
         receipt.title,
-        receipt.child,
+        receipt.childName || getChildLabelById(receipt.childId || GENERAL_CHILD_ID, children),
         receipt.category,
         `${receipt.amount} $`,
         `À rembourser : ${moneyLabel(calculateExpected(receipt))}`,
@@ -775,7 +810,7 @@ export default function Receipts({ children = [] }) {
     const content = [
       "EXPORT ZIP DES FACTURES",
       "",
-      `Enfant : ${exportOptions.child}`,
+      `Enfant : ${exportOptions.childName}`,
       `Période : ${exportOptions.startDate || "début"} à ${
         exportOptions.endDate || "fin"
       }`,
@@ -878,7 +913,7 @@ export default function Receipts({ children = [] }) {
 
               return (
                 <div
-                  key={entry.child.name}
+                  key={getChildId(entry.child)}
                   className={`rounded-2xl p-4 ring-1 ${color.soft}`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -960,6 +995,7 @@ export default function Receipts({ children = [] }) {
         title="Toutes les factures"
         receipts={receipts}
         onDetails={setDetails}
+        children={children}
       />
 
       <button
@@ -975,6 +1011,7 @@ export default function Receipts({ children = [] }) {
           receipt={details}
           close={() => setDetails(null)}
           onUpdate={updateReceipt}
+          children={children}
         />
       )}
 
@@ -1035,20 +1072,27 @@ export default function Receipts({ children = [] }) {
         <Field label="Enfant">
           <select
             className="mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none focus:border-[#9D86C8] focus:ring-2 focus:ring-[#D9C9F2]"
-            value={form.child}
-            onChange={(event) =>
+            value={form.childId}
+            onChange={(event) => {
+              const childId = event.target.value;
               setForm({
                 ...form,
-                child: event.target.value,
-              })
+                childId,
+                childName: getChildLabelById(childId, children),
+              });
+            }
             }
           >
-            <option>Général</option>
-            {children.map((child) => (
-              <option key={child.name} value={child.name}>
-                {displayName(child)}
-              </option>
-            ))}
+            <option value={GENERAL_CHILD_ID}>Général</option>
+            {children.map((child) => {
+              const childId = getChildId(child);
+
+              return (
+                <option key={childId} value={childId}>
+                  {displayName(child)}
+                </option>
+              );
+            })}
           </select>
         </Field>
 
@@ -1184,21 +1228,31 @@ export default function Receipts({ children = [] }) {
             <Field label="Enfant">
               <select
                 className="input"
-                value={exportOptions.child}
-                onChange={(event) =>
+                value={exportOptions.childId}
+                onChange={(event) => {
+                  const childId = event.target.value;
                   setExportOptions({
                     ...exportOptions,
-                    child: event.target.value,
-                  })
+                    childId,
+                    childName:
+                      childId === ALL_CHILDREN_ID
+                        ? "Tous les enfants"
+                        : getChildLabelById(childId, children),
+                  });
+                }
                 }
               >
-                <option>Tous les enfants</option>
-                <option>Général</option>
-                {children.map((child) => (
-                  <option key={child.name} value={child.name}>
-                    {displayName(child)}
-                  </option>
-                ))}
+                <option value={ALL_CHILDREN_ID}>Tous les enfants</option>
+                <option value={GENERAL_CHILD_ID}>Général</option>
+                {children.map((child) => {
+                  const childId = getChildId(child);
+
+                  return (
+                    <option key={childId} value={childId}>
+                      {displayName(child)}
+                    </option>
+                  );
+                })}
               </select>
             </Field>
 

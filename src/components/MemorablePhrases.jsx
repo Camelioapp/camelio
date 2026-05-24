@@ -1093,10 +1093,12 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
 
 export default function MemorablePhrases({ children = [], onBack }) {
   const childOptions = useMemo(() => {
-    return children.map((child) => ({
-      id: String(child.id || child.name),
+  return children
+    .filter((child) => child.id)
+    .map((child) => ({
+      id: String(child.id),
       name: displayChildName(child),
-      photo: child.photo || "",
+      photo: child.photo || child.image || child.avatar || "",
       birthDate: child.birthDate || "",
       color:
         child.calendarColor ||
@@ -1106,7 +1108,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
         child.profileColor ||
         "",
     }));
-  }, [children]);
+}, [children]);
 
   const [phrases, setPhrases] = useState(() => {
     const firstChild = childOptions?.[0] || null;

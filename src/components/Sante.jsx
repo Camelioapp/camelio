@@ -26,6 +26,20 @@ const inputClass =
 const textareaClass =
   "min-h-[110px] w-full resize-none bg-transparent text-sm leading-6 text-[#55534C] outline-none placeholder:text-[#A9A39A]";
 
+function getChildId(child) {
+  return String(child?.id || child?.childId || "");
+}
+
+function getChildLabelById(childId, children = []) {
+  const child = children.find((item) => getChildId(item) === childId);
+  return displayName(child) || "Enfant";
+}
+
+function itemBelongsToChild(item, child, childId) {
+  if (item.childId) return item.childId === childId;
+  return item.child === child.name || item.child === displayName(child);
+}
+
 function DocumentViewer({ doc, close }) {
   const fileName = doc.fileName || "Aucun fichier téléversé";
   const lowerName = fileName.toLowerCase();
@@ -156,8 +170,13 @@ export default function Sante({
     "Note",
   ];
 
-  const getSanteDocs = (childName) =>
-    docs.filter((doc) => doc.child === childName && doc.type === "Santé");
+  const getSanteDocs = (child, childId) =>
+    docs.filter(
+      (doc) =>
+        doc.type === "Santé" &&
+        (doc.childId === childId ||
+          (!doc.childId && (doc.child === child.name || doc.child === displayName(child))))
+    );
 
   const addGrowth = () => {
     if (!showGrowthPopup) return;
@@ -211,7 +230,8 @@ export default function Sante({
     setItems((current) => [
       {
         id: `sante-${Date.now()}`,
-        child: notePopup.child,
+        childId: notePopup.childId,
+        childName: getChildLabelById(notePopup.childId, children),
         type: notePopup.type,
         text: noteForm.trim(),
         date: new Date().toISOString().slice(0, 10),
@@ -221,7 +241,7 @@ export default function Sante({
 
     setOpenSections((current) => ({
       ...current,
-      [`${notePopup.child}-${notePopup.type}`]: true,
+      [`${notePopup.childId}-${notePopup.type}`]: true,
     }));
 
     setNoteForm("");
@@ -235,7 +255,8 @@ export default function Sante({
       {
         id: `sante-doc-${Date.now()}`,
         title: santeDocForm.title.trim(),
-        child: showSanteDocPopup,
+        childId: showSanteDocPopup,
+        childName: getChildLabelById(showSanteDocPopup, children),
         type: "Santé",
         note: santeDocForm.note.trim(),
         fileName: santeDocForm.fileName,
@@ -274,19 +295,20 @@ export default function Sante({
       )}
 
       {children.map((child) => {
-        const entries = items.filter((item) => item.child === child.name);
-        const history = growth[child.name] || [];
-        const childVaccines = vaccines[child.name] || [];
+        const childId = getChildId(child);
+        const entries = items.filter((item) => itemBelongsToChild(item, child, childId));
+        const history = growth[childId] || [];
+        const childVaccines = vaccines[childId] || [];
         const latest = history[0];
 
         const childOpen =
-          children.length === 1 ? true : Boolean(openChildSante[child.name]);
+          children.length === 1 ? true : Boolean(openChildSante[childId]);
 
         const color = getColor(child.color);
 
         return (
           <div
-            key={child.name}
+            key={childId}
             className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]"
           >
             <button
@@ -295,7 +317,7 @@ export default function Sante({
                 if (children.length === 1) return;
                 setOpenChildSante((current) => ({
                   ...current,
-                  [child.name]: !current[child.name],
+                  [childId]: !current[childId],
                 }));
               }}
               className="flex w-full items-center justify-between gap-3 text-left"
@@ -349,7 +371,7 @@ export default function Sante({
 
                     <button
                       type="button"
-                      onClick={() => setShowGrowthPopup(child.name)}
+                      onClick={() => setShowGrowthPopup(childId)}
                       className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#A2BADF] text-white shadow-sm"
                     >
                       <Plus className="h-5 w-5" />
@@ -388,7 +410,7 @@ export default function Sante({
                     onClick={() =>
                       setOpenHistory((current) => ({
                         ...current,
-                        [child.name]: !current[child.name],
+                        [childId]: !current[childId],
                       }))
                     }
                     className="mt-3 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left ring-1 ring-[#D3DFF1]"
@@ -399,12 +421,12 @@ export default function Sante({
 
                     <ChevronRight
                       className={`h-4 w-4 transition ${
-                        openHistory[child.name] ? "rotate-90" : ""
+                        openHistory[childId] ? "rotate-90" : ""
                       }`}
                     />
                   </button>
 
-                  {openHistory[child.name] && (
+                  {openHistory[childId] && (
                     <div className="mt-3 space-y-2">
                       {history.length ? (
                         history.map((entry, index) => (
@@ -435,8 +457,8 @@ export default function Sante({
                                 onClick={() =>
                                   setGrowth((current) => ({
                                     ...current,
-                                    [child.name]: (
-                                      current[child.name] || []
+                                    [childId]: (
+                                      current[childId] || []
                                     ).filter((_, i) => i !== index),
                                   }))
                                 }
@@ -458,8 +480,8 @@ export default function Sante({
 
                 <div className="space-y-3">
                   {(() => {
-                    const santeDocs = getSanteDocs(child.name);
-                    const docsOpenKey = `${child.name}-Documents`;
+                    const santeDocs = getSanteDocs(child, childId);
+                    const docsOpenKey = `${childId}-Documents`;
                     const isDocsOpen = Boolean(openSections[docsOpenKey]);
 
                     return (
@@ -488,7 +510,7 @@ export default function Sante({
 
                           <button
                             type="button"
-                            onClick={() => setShowSanteDocPopup(child.name)}
+                            onClick={() => setShowSanteDocPopup(childId)}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#6A85AF] ring-1 ring-[#D3DFF1]"
                           >
                             <Plus className="h-4 w-4" />
@@ -533,7 +555,7 @@ export default function Sante({
                   })()}
 
                   {santeTypes.map((type) => {
-                    const key = `${child.name}-${type}`;
+                    const key = `${childId}-${type}`;
                     const sectionEntries = entries.filter(
                       (entry) => entry.type === type
                     );
@@ -569,8 +591,8 @@ export default function Sante({
                             type="button"
                             onClick={() =>
                               isVaccines
-                                ? setShowVaccinePopup(child.name)
-                                : setNotePopup({ child: child.name, type })
+                                ? setShowVaccinePopup(childId)
+                                : setNotePopup({ childId, type })
                             }
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#6A85AF] ring-1 ring-[#D3DFF1]"
                           >
@@ -610,8 +632,8 @@ export default function Sante({
                                         onClick={() =>
                                           setVaccines((current) => ({
                                             ...current,
-                                            [child.name]: (
-                                              current[child.name] || []
+                                            [childId]: (
+                                              current[childId] || []
                                             ).filter(
                                               (item) =>
                                                 item.id !== vaccine.id
@@ -680,7 +702,7 @@ export default function Sante({
       {showGrowthPopup && (
         <Popup
           title="Ajouter une mensuration"
-          kicker={showGrowthPopup}
+          kicker={getChildLabelById(showGrowthPopup, children)}
           close={() => setShowGrowthPopup(null)}
         >
           <div className="space-y-4">
@@ -744,7 +766,7 @@ export default function Sante({
       {showVaccinePopup && (
         <Popup
           title="Ajouter un vaccin"
-          kicker={showVaccinePopup}
+          kicker={getChildLabelById(showVaccinePopup, children)}
           close={() => setShowVaccinePopup(null)}
         >
           <div className="space-y-4">
@@ -822,7 +844,7 @@ export default function Sante({
       {showSanteDocPopup && (
         <Popup
           title="Ajouter un document médical"
-          kicker={showSanteDocPopup}
+          kicker={getChildLabelById(showSanteDocPopup, children)}
           close={() => setShowSanteDocPopup(null)}
         >
           <div className="space-y-4">
@@ -939,7 +961,7 @@ export default function Sante({
       {notePopup && (
         <Popup
           title={`Ajouter ${notePopup.type.toLowerCase()}`}
-          kicker={notePopup.child}
+          kicker={getChildLabelById(notePopup.childId, children)}
           close={() => setNotePopup(null)}
         >
           <div className="space-y-4">

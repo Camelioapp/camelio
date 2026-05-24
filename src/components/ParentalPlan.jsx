@@ -26,6 +26,10 @@ const inputClass =
 const textareaClass =
   "min-h-[220px] w-full resize-none bg-transparent text-sm leading-6 text-[#55534C] outline-none placeholder:text-[#A9A39A]";
 
+function getChildId(child) {
+  return String(child?.id || child?.childId || "");
+}
+
 export default function ParentalPlan({
   children = [],
   setActiveSection = () => {},
@@ -105,7 +109,7 @@ export default function ParentalPlan({
     name: index === 1 ? "Plan parental principal" : `Plan parental ${index}`,
     context:
       "Ce plan vise à clarifier les règles importantes, faciliter la communication et favoriser une bonne entente entre les parents.",
-    childrenNames: children.map((child) => child.name),
+    childIds: children.map(getChildId).filter(Boolean),
     sections: createInitialSections(),
   });
 
@@ -120,7 +124,7 @@ export default function ParentalPlan({
   const activePlan = plans.find((plan) => plan.id === selectedPlanId) || plans[0];
 
   const selectedChildren = children.filter((child) =>
-    activePlan.childrenNames.includes(child.name)
+    activePlan.childIds?.includes(getChildId(child))
   );
 
   const numberedSections = activePlan.sections.map((section, index) => ({
@@ -143,13 +147,17 @@ export default function ParentalPlan({
     }));
   };
 
-  const toggleChild = (childName) => {
-    updateActivePlan((plan) => ({
-      ...plan,
-      childrenNames: plan.childrenNames.includes(childName)
-        ? plan.childrenNames.filter((name) => name !== childName)
-        : [...plan.childrenNames, childName],
-    }));
+  const toggleChild = (childId) => {
+    updateActivePlan((plan) => {
+      const currentChildIds = Array.isArray(plan.childIds) ? plan.childIds : [];
+
+      return {
+        ...plan,
+        childIds: currentChildIds.includes(childId)
+          ? currentChildIds.filter((id) => id !== childId)
+          : [...currentChildIds, childId],
+      };
+    });
   };
 
   const addPlan = () => {
@@ -362,14 +370,15 @@ export default function ParentalPlan({
         <div className="mt-4 space-y-2">
           {children.length ? (
             children.map((child) => {
-              const selected = activePlan.childrenNames.includes(child.name);
+              const childId = getChildId(child);
+              const selected = activePlan.childIds?.includes(childId);
               const color = getColor(child.color);
 
               return (
                 <button
-                  key={child.name}
+                  key={childId}
                   type="button"
-                  onClick={() => toggleChild(child.name)}
+                  onClick={() => toggleChild(childId)}
                   className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-1 ${
                     selected
                       ? color.soft
