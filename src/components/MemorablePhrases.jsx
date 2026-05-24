@@ -21,6 +21,8 @@ const textareaClass =
 const logoPaths = [
   "/Logo/Camelio et citation.png",
   "/Logo/Camelio%20et%20citation.png",
+  "/Logo/Logo Camelio 2.png",
+  "/Logo/Logo%20Camelio%202.png",
   "/Logo/Camelio.png",
   "/Logo/Logo Camelio Hor.png",
   "/Logo/Logo Camelio.png",
@@ -447,39 +449,54 @@ async function createShareImageBlob({ phrase, options }) {
 
   drawBackgroundEffects(ctx, options.illustration || "mixed");
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.80)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.82)";
   roundedRect(ctx, 70, 70, 940, 940, 46);
   ctx.fill();
 
   const firstChild = phrase.children?.[0] || null;
 
-  let topY = 115;
+  const iconLogo = await loadFirstAvailableImage([
+    "/Logo/Logo Camelio 2.png",
+    "/Logo/Logo%20Camelio%202.png",
+  ]);
+
+  if (iconLogo) {
+    const iconSize = 76;
+    ctx.drawImage(iconLogo, 850, 120, iconSize, iconSize);
+  }
+
+  let topY = 105;
 
   if (options.includeChildPhoto && firstChild?.photo) {
     const childImage = await loadImage(firstChild.photo);
 
     if (childImage) {
+      const photoSize = 150;
+      const photoRadius = photoSize / 2;
+      const photoX = 540 - photoRadius;
+      const photoY = topY;
+
       ctx.save();
       ctx.beginPath();
-      ctx.arc(540, topY + 58, 62, 0, Math.PI * 2);
+      ctx.arc(540, topY + photoRadius, photoRadius, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      drawImageCover(ctx, childImage, 478, topY - 4, 124, 124);
+      drawImageCover(ctx, childImage, photoX, photoY, photoSize, photoSize);
       ctx.restore();
 
       ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 10;
+      ctx.lineWidth = 12;
       ctx.beginPath();
-      ctx.arc(540, topY + 58, 68, 0, Math.PI * 2);
+      ctx.arc(540, topY + photoRadius, photoRadius + 6, 0, Math.PI * 2);
       ctx.stroke();
 
       ctx.fillStyle = theme.text;
-      ctx.font = "bold 26px Arial";
+      ctx.font = "bold 27px Arial";
       ctx.textAlign = "center";
-      ctx.fillText(firstChild.name, 540, topY + 155);
+      ctx.fillText(firstChild.name, 540, topY + photoSize + 34);
       ctx.textAlign = "left";
 
-      topY += 190;
+      topY += 230;
     }
   }
 
@@ -493,7 +510,7 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.textAlign = "center";
 
   const phraseLines = wrapText(ctx, phrase.phrase, 800);
-  let quoteY = topY + 74;
+  let quoteY = topY + 72;
 
   phraseLines.slice(0, 5).forEach((line) => {
     ctx.fillText(line, 540, quoteY);
@@ -503,17 +520,11 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.textAlign = "left";
 
   const infoY = quoteY + 35;
-  const childLabel = phrase.children?.length
-    ? phrase.children.map((child) => child.name).join(", ")
-    : "";
 
+  // Pastille verte sans texte, comme demandé
   ctx.fillStyle = theme.main;
   roundedRect(ctx, 150, infoY, 330, 64, 32);
   ctx.fill();
-
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 28px Arial";
-  ctx.fillText(childLabel.slice(0, 22), 190, infoY + 42);
 
   ctx.fillStyle = "#746F64";
   ctx.font = "bold 30px Arial";
