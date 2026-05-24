@@ -29,7 +29,10 @@ const logoPaths = [
   "/Logo/Camelio Hor.png",
 ];
 
-const iconLogoPaths = ["/Logo/Logo Camelio 2.png", "/Logo/Logo%20Camelio%202.png"];
+const iconLogoPaths = [
+  "/Logo/Logo Camelio 2.png",
+  "/Logo/Logo%20Camelio%202.png",
+];
 
 const brandColors = [
   { id: "rose", label: "Rose", value: "#FCEEF3" },
@@ -464,7 +467,7 @@ async function createShareImageBlob({ phrase, options }) {
     ctx.drawImage(iconLogo, 820, 115, iconSize, iconSize);
   }
 
-  let topY = 105;
+  let topY = 135;
 
   if (options.includeChildPhoto && firstChild?.photo) {
     const childImage = await loadImage(firstChild.photo);
@@ -477,13 +480,7 @@ async function createShareImageBlob({ phrase, options }) {
 
       ctx.save();
       ctx.beginPath();
-      ctx.arc(
-        540,
-        photoY + photoRadius,
-        photoRadius,
-        0,
-        Math.PI * 2
-      );
+      ctx.arc(540, photoY + photoRadius, photoRadius, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
       drawImageCover(ctx, childImage, photoX, photoY, photoSize, photoSize);
@@ -492,13 +489,7 @@ async function createShareImageBlob({ phrase, options }) {
       ctx.strokeStyle = "#FFFFFF";
       ctx.lineWidth = 12;
       ctx.beginPath();
-      ctx.arc(
-        540,
-        photoY + photoRadius,
-        photoRadius + 6,
-        0,
-        Math.PI * 2
-      );
+      ctx.arc(540, photoY + photoRadius, photoRadius + 6, 0, Math.PI * 2);
       ctx.stroke();
 
       ctx.fillStyle = theme.text;
@@ -507,7 +498,7 @@ async function createShareImageBlob({ phrase, options }) {
       ctx.fillText(firstChild.name, 540, topY + photoSize + 28);
       ctx.textAlign = "left";
 
-      topY += 255;
+      topY += 235;
     }
   }
 
@@ -521,14 +512,14 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.textAlign = "center";
 
   const phraseLines = wrapText(ctx, phrase.phrase, 800);
-  let quoteY = topY + 74;
+  let quoteY = topY + 95;
 
   phraseLines.slice(0, 5).forEach((line) => {
     ctx.fillText(line, 540, quoteY);
     quoteY += 76;
   });
 
-  const infoY = quoteY + 35;
+  const infoY = quoteY + 55;
 
   ctx.fillStyle = "#746F64";
   ctx.font = "bold 28px Arial";
@@ -933,7 +924,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
             </div>
 
             {options.includeChildPhoto && firstChild?.photo ? (
-              <div className="mt-3 flex flex-col items-center">
+              <div className="mt-6 flex flex-col items-center">
                 <img
                   src={firstChild.photo}
                   alt={firstChild.name}
@@ -949,8 +940,8 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
               </div>
             ) : null}
 
-            <div className="flex flex-1 items-center">
-              <p className="w-full text-center text-xl font-black italic leading-9 text-[#3F3D38]">
+            <div className="flex flex-1 items-center justify-center">
+              <p className="mx-auto max-w-[90%] text-center text-xl font-black italic leading-9 text-[#3F3D38]">
                 “{phrase.phrase}”
               </p>
             </div>
