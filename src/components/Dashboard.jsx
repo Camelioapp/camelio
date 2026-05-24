@@ -145,72 +145,79 @@ function getInitials(child) {
 function FamilyFloatingBubbles() {
   const bubbles = [
     {
-      top: "14%",
-      left: "7%",
+      top: "13%",
+      left: "9%",
       size: 18,
       color: "#eec988",
       delay: 0.1,
     },
     {
-      top: "28%",
-      left: "23%",
-      size: 10,
+      top: "26%",
+      left: "25%",
+      size: 11,
       color: "#eaa5af",
       delay: 0.8,
     },
     {
-      top: "62%",
-      left: "10%",
+      top: "61%",
+      left: "8%",
       size: 22,
       color: "#b5a7c8",
       delay: 1.3,
     },
     {
       top: "78%",
-      left: "30%",
-      size: 12,
+      left: "29%",
+      size: 13,
       color: "#a2badf",
       delay: 1.7,
     },
     {
-      top: "18%",
-      right: "16%",
-      size: 14,
+      top: "17%",
+      right: "15%",
+      size: 15,
       color: "#a8b193",
       delay: 0.5,
     },
     {
       top: "50%",
       right: "9%",
-      size: 20,
+      size: 22,
       color: "#eec988",
       delay: 1.1,
     },
     {
-      bottom: "15%",
+      bottom: "14%",
       right: "24%",
-      size: 11,
+      size: 12,
       color: "#eaa5af",
       delay: 1.9,
+    },
+    {
+      bottom: "24%",
+      left: "48%",
+      size: 10,
+      color: "#a8b193",
+      delay: 2.2,
     },
   ];
 
   const softCircles = [
     {
       className:
-        "absolute -left-16 bottom-[-70px] h-44 w-44 sm:h-56 sm:w-56 lg:h-64 lg:w-64",
-      color: "rgba(168, 177, 147, 0.22)",
+        "absolute -left-20 bottom-[-78px] h-48 w-48 sm:h-60 sm:w-60 lg:h-72 lg:w-72",
+      color: "rgba(168, 177, 147, 0.24)",
       duration: 12,
     },
     {
       className:
-        "absolute -right-14 -top-16 h-36 w-36 sm:h-44 sm:w-44 lg:h-52 lg:w-52",
-      color: "rgba(234, 165, 175, 0.28)",
+        "absolute -right-16 -top-16 h-40 w-40 sm:h-48 sm:w-48 lg:h-56 lg:w-56",
+      color: "rgba(234, 165, 175, 0.30)",
       duration: 14,
     },
     {
       className:
-        "absolute left-[48%] top-[36%] h-20 w-20 sm:h-24 sm:w-24 lg:h-28 lg:w-28",
+        "absolute left-[47%] top-[38%] h-24 w-24 sm:h-28 sm:w-28 lg:h-32 lg:w-32",
       color: "rgba(181, 167, 200, 0.16)",
       duration: 10,
     },
@@ -248,14 +255,14 @@ function FamilyFloatingBubbles() {
             width: bubble.size,
             height: bubble.size,
             backgroundColor: bubble.color,
-            opacity: 0.7,
-            boxShadow: `0 0 18px ${bubble.color}80`,
+            opacity: 0.72,
+            boxShadow: `0 0 20px ${bubble.color}88`,
           }}
           animate={{
-            x: [0, 12 + index * 2, -8, 0],
-            y: [0, -12, 10, 0],
-            scale: [1, 1.22, 0.92, 1],
-            opacity: [0.45, 0.8, 0.5, 0.45],
+            x: [0, 12 + index * 2, -10, 0],
+            y: [0, -13, 11, 0],
+            scale: [1, 1.25, 0.92, 1],
+            opacity: [0.45, 0.82, 0.5, 0.45],
           }}
           transition={{
             duration: 7 + index,
@@ -265,6 +272,34 @@ function FamilyFloatingBubbles() {
           }}
         />
       ))}
+
+      <motion.div
+        className="absolute right-[18%] top-[18%] hidden h-8 w-8 rotate-12 border-r-4 border-t-4 border-[#ffd27a] md:block"
+        animate={{
+          y: [0, -8, 6, 0],
+          rotate: [12, 18, 8, 12],
+          opacity: [0.45, 0.9, 0.6, 0.45],
+        }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      <motion.div
+        className="absolute right-[16%] top-[29%] hidden h-7 w-7 rotate-[-8deg] border-r-4 border-t-4 border-[#ffd27a] md:block"
+        animate={{
+          y: [0, 7, -6, 0],
+          rotate: [-8, -14, -4, -8],
+          opacity: [0.45, 0.85, 0.55, 0.45],
+        }}
+        transition={{
+          duration: 9,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
     </div>
   );
 }
@@ -677,67 +712,67 @@ export default function Dashboard({
                     </button>
                   ) : (
                     <div className="relative -mx-2 overflow-hidden">
-                      <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        <div className="flex min-h-[170px] items-end gap-4 px-2 sm:min-h-[205px] sm:gap-5 md:justify-center md:gap-0 md:px-8">
-                          {children.map((child, index) => {
-                            const photo = child.image || child.photo || "";
-                            const initials = getInitials(child);
-                            const childTheme = getChildColorTheme(child.color);
+  <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex min-h-[165px] items-end justify-center gap-0 px-2 sm:min-h-[205px] md:min-h-[220px] md:px-8">
+      {children.map((child, index) => {
+        const photo = child.image || child.photo || "";
+        const initials = getInitials(child);
+        const childTheme = getChildColorTheme(child.color);
 
-                            return (
-                              <button
-                                key={child.id || child.name}
-                                type="button"
-                                onClick={() => openSection("children")}
-                                className={`group relative isolate flex w-[104px] shrink-0 snap-center flex-col items-center sm:w-[132px] md:w-auto ${
-                                  index === 0 ? "" : "md:-ml-7"
-                                }`}
-                                style={{ zIndex: children.length + index }}
-                              >
-                                <div
-                                  className="relative z-10 flex h-[108px] w-[108px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_12px_24px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
-                                  style={{
-                                    backgroundColor: childTheme.soft,
-                                    color: childTheme.text,
-                                  }}
-                                >
-                                  {photo ? (
-                                    <PhotoImage
-                                      src={photo}
-                                      alt={child.name}
-                                      position={child.photoPosition}
-                                      zoom={child.photoZoom || 1}
-                                      className="h-full w-full"
-                                    />
-                                  ) : initials ? (
-                                    initials
-                                  ) : (
-                                    <UserRound className="h-10 w-10" />
-                                  )}
-                                </div>
+        return (
+          <button
+            key={child.id || child.name}
+            type="button"
+            onClick={() => openSection("children")}
+            className={`group relative isolate flex w-[118px] shrink-0 flex-col items-center ${
+              index === 0 ? "" : "-ml-7 sm:-ml-8 md:-ml-9"
+            }`}
+            style={{ zIndex: children.length + index }}
+          >
+            <div
+              className="relative z-10 flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+              style={{
+                backgroundColor: childTheme.soft,
+                color: childTheme.text,
+              }}
+            >
+              {photo ? (
+                <PhotoImage
+                  src={photo}
+                  alt={child.name}
+                  position={child.photoPosition}
+                  zoom={child.photoZoom || 1}
+                  className="h-full w-full"
+                />
+              ) : initials ? (
+                initials
+              ) : (
+                <UserRound className="h-10 w-10" />
+              )}
+            </div>
 
-                                <div
-                                  className="relative z-30 -mt-4 max-w-[108px] rounded-[16px] px-4 py-2 text-center text-sm font-semibold text-white shadow-sm transition group-hover:brightness-95 sm:max-w-[132px] sm:text-base md:-mt-5 md:min-w-[120px] md:text-xl"
-                                  style={{
-                                    backgroundColor: childTheme.dot,
-                                  }}
-                                >
-                                  <span className="relative z-40 block truncate">
-                                    {child.name}
-                                  </span>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+            <div
+              className="relative z-30 -mt-3 min-w-[104px] max-w-[112px] rounded-[14px] px-4 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:-mt-4 sm:min-w-[118px] sm:max-w-[132px] sm:rounded-[16px] sm:text-lg md:-mt-5 md:min-w-[126px] md:text-xl"
+              style={{
+                backgroundColor: childTheme.dot,
+              }}
+            >
+              <span className="relative z-40 block truncate">
+                {child.name}
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  </div>
 
-                      {children.length > 2 && (
-                        <p className="mt-1 text-center text-xs font-semibold text-[#9A8D7C] md:hidden">
-                          Glisse pour voir tous les profils.
-                        </p>
-                      )}
-                    </div>
+  {children.length > 2 && (
+    <p className="mt-1 text-center text-xs font-semibold text-[#9A8D7C] md:hidden">
+      Glisse pour voir tous les profils.
+    </p>
+  )}
+</div>
                   )}
                 </div>
               </section>
