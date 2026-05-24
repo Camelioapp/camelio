@@ -69,7 +69,7 @@ if (!AWS_SESSION_SECRET && IS_PRODUCTION) {
 const AWS_SESSION_SECRET_VALUE =
   AWS_SESSION_SECRET || "dev-session-secret-only-for-local-development";
 
-const AWS_REGION = process.env.AWS_REGION || "ca-central-1";
+const AWS_REGION = process.env.AWS_REGION || "us-east-2";
 const S3_REGION = process.env.S3_REGION || "ca-central-1";
 const S3_DOCUMENTS_BUCKET = process.env.S3_DOCUMENTS_BUCKET;
 
