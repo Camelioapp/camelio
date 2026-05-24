@@ -255,7 +255,7 @@ function FamilyFloatingBubbles() {
             width: bubble.size,
             height: bubble.size,
             backgroundColor: bubble.color,
-            opacity: 0.72,
+            opacity: 0.90,
             boxShadow: `0 0 20px ${bubble.color}88`,
           }}
           animate={{
