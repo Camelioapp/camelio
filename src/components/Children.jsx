@@ -1405,6 +1405,22 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
               />
             </FormField>
 
+            <FormField label="Note du profil">
+  <textarea
+    className={textareaClass}
+    rows={5}
+    value={selectedChild.profileNote || ""}
+    onChange={(event) =>
+      setSelectedChild((current) => ({
+        ...current,
+        profileNote: event.target.value,
+      }))
+    }
+    placeholder="Habitudes, préférences, informations utiles..."
+  />
+</FormField>
+
+
             {confirmRemove && (
               <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm leading-6 text-[#B96B77] ring-1 ring-[#F3CDD3]">
                 Es-tu certain de vouloir retirer ce profil enfant?
