@@ -627,7 +627,7 @@ export default function Dashboard({
 
             <main className="p-4 md:p-8">
               <section className="relative overflow-hidden rounded-[30px] border border-[#eadfcf] bg-white shadow-sm">
-                <FamilySoftCircles />
+                <FamilyFloatingBubbles />
 
                 <div className="relative z-10 px-5 py-6 md:px-8 md:py-8">
                   <div className="mb-5 flex items-center justify-between gap-4">
@@ -839,20 +839,3 @@ export default function Dashboard({
   );
 }
 
-function FamilySoftCircles() {
-  return (
-    <>
-      <div className="pointer-events-none absolute -left-16 bottom-0 h-40 w-64 rounded-tr-[120px] bg-[#dfe7d7]/65 md:h-52 md:w-80" />
-
-      <div className="pointer-events-none absolute -right-10 top-0 h-32 w-32 rounded-bl-[80px] bg-[#f7dfe0]/85 md:h-44 md:w-44" />
-
-      <div className="pointer-events-none absolute left-[22%] top-[58%] h-5 w-5 rounded-full bg-[#c78cb7]/70 md:h-6 md:w-6" />
-
-      <div className="pointer-events-none absolute right-[18%] bottom-[20%] h-5 w-5 rounded-full bg-[#ffd27a]/90 md:h-6 md:w-6" />
-
-      <div className="pointer-events-none absolute right-[21%] top-[18%] hidden h-8 w-8 rotate-12 border-r-4 border-t-4 border-[#ffd27a] md:block" />
-
-      <div className="pointer-events-none absolute right-[19%] top-[27%] hidden h-7 w-7 rotate-[-8deg] border-r-4 border-t-4 border-[#ffd27a] md:block" />
-    </>
-  );
-}
