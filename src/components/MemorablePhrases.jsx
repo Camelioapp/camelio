@@ -29,6 +29,8 @@ const logoPaths = [
   "/Logo/Camelio Hor.png",
 ];
 
+const iconLogoPaths = ["/Logo/Logo Camelio 2.png", "/Logo/Logo%20Camelio%202.png"];
+
 const brandColors = [
   { id: "rose", label: "Rose", value: "#FCEEF3" },
   { id: "sauge", label: "Sauge", value: "#EEF4E8" },
@@ -455,14 +457,11 @@ async function createShareImageBlob({ phrase, options }) {
 
   const firstChild = phrase.children?.[0] || null;
 
-  const iconLogo = await loadFirstAvailableImage([
-    "/Logo/Logo Camelio 2.png",
-    "/Logo/Logo%20Camelio%202.png",
-  ]);
+  const iconLogo = await loadFirstAvailableImage(iconLogoPaths);
 
   if (iconLogo) {
-    const iconSize = 76;
-    ctx.drawImage(iconLogo, 850, 120, iconSize, iconSize);
+    const iconSize = 105;
+    ctx.drawImage(iconLogo, 820, 115, iconSize, iconSize);
   }
 
   let topY = 105;
@@ -471,14 +470,20 @@ async function createShareImageBlob({ phrase, options }) {
     const childImage = await loadImage(firstChild.photo);
 
     if (childImage) {
-      const photoSize = 150;
+      const photoSize = 185;
       const photoRadius = photoSize / 2;
       const photoX = 540 - photoRadius;
-      const photoY = topY;
+      const photoY = topY - 10;
 
       ctx.save();
       ctx.beginPath();
-      ctx.arc(540, topY + photoRadius, photoRadius, 0, Math.PI * 2);
+      ctx.arc(
+        540,
+        photoY + photoRadius,
+        photoRadius,
+        0,
+        Math.PI * 2
+      );
       ctx.closePath();
       ctx.clip();
       drawImageCover(ctx, childImage, photoX, photoY, photoSize, photoSize);
@@ -487,16 +492,22 @@ async function createShareImageBlob({ phrase, options }) {
       ctx.strokeStyle = "#FFFFFF";
       ctx.lineWidth = 12;
       ctx.beginPath();
-      ctx.arc(540, topY + photoRadius, photoRadius + 6, 0, Math.PI * 2);
+      ctx.arc(
+        540,
+        photoY + photoRadius,
+        photoRadius + 6,
+        0,
+        Math.PI * 2
+      );
       ctx.stroke();
 
       ctx.fillStyle = theme.text;
       ctx.font = "bold 27px Arial";
       ctx.textAlign = "center";
-      ctx.fillText(firstChild.name, 540, topY + photoSize + 34);
+      ctx.fillText(firstChild.name, 540, topY + photoSize + 28);
       ctx.textAlign = "left";
 
-      topY += 230;
+      topY += 255;
     }
   }
 
@@ -510,42 +521,32 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.textAlign = "center";
 
   const phraseLines = wrapText(ctx, phrase.phrase, 800);
-  let quoteY = topY + 72;
+  let quoteY = topY + 74;
 
   phraseLines.slice(0, 5).forEach((line) => {
     ctx.fillText(line, 540, quoteY);
     quoteY += 76;
   });
 
-  ctx.textAlign = "left";
-
   const infoY = quoteY + 35;
 
-  // Pastille verte sans texte, comme demandé
-  ctx.fillStyle = theme.main;
-  roundedRect(ctx, 150, infoY, 330, 64, 32);
-  ctx.fill();
-
   ctx.fillStyle = "#746F64";
-  ctx.font = "bold 30px Arial";
-  ctx.textAlign = "right";
-  ctx.fillText(formatDate(phrase.date), 930, infoY + 42);
-  ctx.textAlign = "left";
+  ctx.font = "bold 28px Arial";
+  ctx.textAlign = "center";
 
-  let detailY = infoY + 108;
+  const ageText = phrase.childAgeAtSituation
+    ? `Âge au moment : ${phrase.childAgeAtSituation}`
+    : "";
 
-  if (phrase.childAgeAtSituation) {
-    ctx.fillStyle = "#746F64";
-    ctx.font = "bold 28px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(
-      `Âge au moment : ${phrase.childAgeAtSituation}`,
-      540,
-      detailY
-    );
-    ctx.textAlign = "left";
-    detailY += 46;
-  }
+  const dateText = formatDate(phrase.date);
+
+  ctx.fillText(
+    ageText ? `${ageText} · ${dateText}` : dateText,
+    540,
+    infoY + 42
+  );
+
+  let detailY = infoY + 92;
 
   if (phrase.context) {
     ctx.fillStyle = "#746F64";
@@ -558,9 +559,9 @@ async function createShareImageBlob({ phrase, options }) {
       ctx.fillText(line, 540, detailY);
       detailY += 38;
     });
-
-    ctx.textAlign = "left";
   }
+
+  ctx.textAlign = "left";
 
   const logo = await loadFirstAvailableImage(logoPaths);
 
@@ -914,20 +915,29 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
           )}
 
           <div className="relative flex h-full flex-col rounded-[1.5rem] bg-white/75 p-5">
+            <img
+              src="/Logo/Logo Camelio 2.png"
+              alt="Camelio"
+              className="absolute right-5 top-5 h-14 w-14 object-contain"
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+            />
+
             <div className="flex items-center justify-between gap-3">
               <Quote className="h-7 w-7" style={{ color: theme.main }} />
 
-              <span className="text-xs font-black uppercase tracking-[0.16em] text-[#B8819C]">
+              <span className="pr-16 text-xs font-black uppercase tracking-[0.16em] text-[#B8819C]">
                 Effet : {selectedEffectLabel}
               </span>
             </div>
 
             {options.includeChildPhoto && firstChild?.photo ? (
-              <div className="mt-4 flex flex-col items-center">
+              <div className="mt-3 flex flex-col items-center">
                 <img
                   src={firstChild.photo}
                   alt={firstChild.name}
-                  className="h-20 w-20 rounded-full object-cover ring-4 ring-white"
+                  className="h-32 w-32 rounded-full object-cover ring-4 ring-white"
                 />
 
                 <p
@@ -945,24 +955,15 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
               </p>
             </div>
 
-            <div className="flex items-center justify-between gap-3">
-              <span
-                className="rounded-full px-4 py-2 text-xs font-black text-white"
-                style={{ backgroundColor: theme.main }}
-              >
-                {phrase.children.map((child) => child.name).join(", ")}
-              </span>
-
-              <span className="text-xs font-bold text-[#746F64]">
-                {formatDate(phrase.date)}
-              </span>
-            </div>
-
-            {phrase.childAgeAtSituation ? (
-              <p className="mt-3 text-center text-xs font-bold text-[#746F64]">
-                Âge au moment : {phrase.childAgeAtSituation}
+            <div className="text-center">
+              <p className="text-xs font-bold text-[#746F64]">
+                {phrase.childAgeAtSituation
+                  ? `Âge au moment : ${phrase.childAgeAtSituation} · ${formatDate(
+                      phrase.date
+                    )}`
+                  : formatDate(phrase.date)}
               </p>
-            ) : null}
+            </div>
 
             <div className="mt-5 border-t border-white/70 pt-4">
               <div className="flex justify-center">
