@@ -278,6 +278,31 @@ export default function SettingsView({
     };
   });
 
+  const [uploadPreferences, setUploadPreferences] = useState(() => {
+  try {
+    const saved = localStorage.getItem("camelio_upload_preferences");
+    if (saved) return JSON.parse(saved);
+  } catch (error) {
+    console.error("Erreur lecture préférences importation:", error);
+  }
+
+  return {
+    autoCompressImages: false,
+  };
+});
+
+const saveUploadPreferences = (preferences) => {
+  setUploadPreferences(preferences);
+
+  localStorage.setItem(
+    "camelio_upload_preferences",
+    JSON.stringify({
+      ...preferences,
+      savedAt: new Date().toISOString(),
+    })
+  );
+};
+
   const manageableSections = useMemo(() => {
     return sections.filter((section) => section.id !== "settings");
   }, []);
@@ -864,6 +889,64 @@ export default function SettingsView({
           })}
         </div>
       </DropdownSection>
+
+<DropdownSection
+  id="uploads"
+  title="Importations"
+  description="Gérer la compression automatique lors de l’ajout de photos et de documents."
+  icon={FileText}
+  iconColor="#A2BADF"
+  openSection={openMainSection}
+  setOpenSection={setOpenMainSection}
+>
+  <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 shadow-sm">
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="font-bold text-[#3F3D38]">
+          Compression automatique des images
+        </p>
+
+        <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
+          Lorsque cette option est activée, Camelio réduit automatiquement le
+          poids des photos trop lourdes avant l’importation. Les documents
+          originaux ne sont pas modifiés.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          saveUploadPreferences({
+            ...uploadPreferences,
+            autoCompressImages: !uploadPreferences.autoCompressImages,
+          })
+        }
+        className={`relative h-8 w-14 shrink-0 rounded-full transition ${
+          uploadPreferences.autoCompressImages
+            ? "bg-[#5F7F52]"
+            : "bg-[#B9B2A5]"
+        }`}
+        aria-label="Activer ou désactiver la compression automatique"
+      >
+        <span
+          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${
+            uploadPreferences.autoCompressImages ? "left-7" : "left-1"
+          }`}
+        />
+      </button>
+    </div>
+
+    <p
+      className={`mt-3 text-xs font-bold ${
+        uploadPreferences.autoCompressImages
+          ? "text-[#5F7F52]"
+          : "text-[#8A6F5A]"
+      }`}
+    >
+      {uploadPreferences.autoCompressImages ? "Activée" : "Désactivée"}
+    </p>
+  </div>
+</DropdownSection>
 
       <DropdownSection
         id="subscription"

@@ -86,6 +86,8 @@ const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
 const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CHILDREN_PER_ACCOUNT = 10;
+const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
+const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 const ALLOWED_DOCUMENT_TYPES = [
   "application/pdf",
@@ -1558,6 +1560,20 @@ app.post(
           error: "invalid_file_size",
           message:
             "Le document doit être supérieur à 0 octet et ne pas dépasser 10 MB.",
+        });
+      }
+
+      if (!isValidFileSize(fileSize, MAX_UPLOAD_SIZE_BYTES)) {
+        return res.status(400).json({
+          error: "invalid_file_size",
+          message: "Le fichier doit être supérieur à 0 octet et ne pas dépasser 5 GB.",
+        });
+      }
+
+      if (!isValidFileSize(fileSize, MAX_AVATAR_SIZE_BYTES)) {
+        return res.status(400).json({
+          error: "invalid_file_size",
+          message: "Le document doit être supérieur à 0 octet et ne pas dépasser 5 MB.",
         });
       }
 
