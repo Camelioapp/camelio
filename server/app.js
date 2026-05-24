@@ -194,7 +194,7 @@ app.use(validateTrustedOrigin);
 app.set("trust proxy", 1);
 
 const sessionStore = new DynamoDBStore({
-  table: AWS_SESSION_SECRET,
+  table: SESSION_TABLE,
   AWSConfigJSON: {
     region: AWS_REGION,
   },
