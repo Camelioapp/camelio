@@ -19,11 +19,12 @@ const textareaClass =
   "mt-2 min-h-[110px] w-full resize-none rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#D99AB9] focus:ring-2 focus:ring-[#F3D8E6]";
 
 const logoPaths = [
+  "/Logo/Camelio et citation.png",
+  "/Logo/Camelio%20et%20citation.png",
   "/Logo/Camelio.png",
   "/Logo/Logo Camelio Hor.png",
   "/Logo/Logo Camelio.png",
   "/Logo/Camelio Hor.png",
-  "/Logo/Camelio-flaticon.ico",
 ];
 
 const brandColors = [
@@ -172,11 +173,11 @@ function drawBackgroundEffects(ctx, type) {
     ctx.globalAlpha = 0.45;
 
     const circles = [
-      [120, 160, 70],
-      [930, 210, 95],
-      [180, 1060, 90],
-      [870, 1030, 65],
-      [540, 1160, 45],
+      [120, 150, 70],
+      [930, 170, 95],
+      [170, 860, 80],
+      [900, 840, 70],
+      [540, 960, 45],
     ];
 
     circles.forEach(([x, y, radius]) => {
@@ -194,10 +195,10 @@ function drawBackgroundEffects(ctx, type) {
     ctx.lineCap = "round";
 
     const lines = [
-      [80, 220, 260, 120, 430, 220],
-      [700, 180, 850, 90, 1020, 170],
-      [90, 1030, 270, 1150, 440, 1040],
-      [660, 1120, 820, 1000, 990, 1110],
+      [80, 210, 260, 110, 430, 210],
+      [700, 165, 850, 75, 1020, 160],
+      [85, 850, 270, 950, 440, 850],
+      [660, 930, 820, 820, 990, 930],
     ];
 
     lines.forEach(([x1, y1, x2, y2, x3, y3]) => {
@@ -213,16 +214,16 @@ function drawBackgroundEffects(ctx, type) {
     ctx.fillStyle = "#FFFFFF";
 
     const dots = [
-      [140, 230],
-      [210, 310],
-      [890, 170],
-      [960, 290],
-      [130, 1130],
-      [230, 1210],
-      [820, 1120],
-      [940, 1190],
+      [140, 220],
+      [210, 300],
+      [890, 160],
+      [960, 280],
+      [130, 900],
+      [230, 980],
+      [820, 900],
+      [940, 970],
       [520, 130],
-      [600, 1220],
+      [600, 980],
     ];
 
     dots.forEach(([x, y]) => {
@@ -240,19 +241,19 @@ function drawBackgroundEffects(ctx, type) {
     ctx.lineCap = "round";
 
     ctx.beginPath();
-    ctx.moveTo(80, 240);
-    ctx.quadraticCurveTo(230, 120, 400, 230);
+    ctx.moveTo(80, 230);
+    ctx.quadraticCurveTo(230, 110, 400, 220);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(700, 1120);
-    ctx.quadraticCurveTo(850, 1000, 1010, 1120);
+    ctx.moveTo(700, 890);
+    ctx.quadraticCurveTo(850, 780, 1010, 900);
     ctx.stroke();
 
     const circles = [
-      [930, 220, 85],
-      [150, 1080, 75],
-      [520, 1180, 42],
+      [930, 200, 85],
+      [150, 860, 75],
+      [520, 945, 42],
     ];
 
     circles.forEach(([x, y, radius]) => {
@@ -265,10 +266,10 @@ function drawBackgroundEffects(ctx, type) {
     ctx.fillStyle = "#FFFFFF";
 
     [
-      [160, 180],
-      [220, 280],
-      [860, 1020],
-      [950, 1200],
+      [160, 170],
+      [220, 270],
+      [860, 820],
+      [950, 960],
     ].forEach(([x, y]) => {
       ctx.beginPath();
       ctx.arc(x, y, 10, 0, Math.PI * 2);
@@ -308,8 +309,9 @@ async function loadFirstAvailableImage(paths = []) {
 
 async function createShareImageBlob({ phrase, options }) {
   const canvas = document.createElement("canvas");
+
   canvas.width = 1080;
-  canvas.height = 1350;
+  canvas.height = 1080;
 
   const ctx = canvas.getContext("2d");
   const background = options.backgroundColor || "#FCEEF3";
@@ -319,9 +321,11 @@ async function createShareImageBlob({ phrase, options }) {
 
   drawBackgroundEffects(ctx, options.illustration || "mixed");
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.74)";
-  roundedRect(ctx, 70, 80, 940, 1190, 46);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+  roundedRect(ctx, 70, 70, 940, 940, 46);
   ctx.fill();
+
+  let topY = 125;
 
   if (options.includeChildPhoto && phrase.childPhoto) {
     const childImage = await loadImage(phrase.childPhoto);
@@ -329,102 +333,118 @@ async function createShareImageBlob({ phrase, options }) {
     if (childImage) {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(540, 245, 82, 0, Math.PI * 2);
+      ctx.arc(540, topY + 55, 62, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(childImage, 458, 163, 164, 164);
+      ctx.drawImage(childImage, 478, topY - 7, 124, 124);
       ctx.restore();
 
       ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 12;
+      ctx.lineWidth = 10;
       ctx.beginPath();
-      ctx.arc(540, 245, 88, 0, Math.PI * 2);
+      ctx.arc(540, topY + 55, 68, 0, Math.PI * 2);
       ctx.stroke();
+
+      topY += 150;
     }
   }
 
-  let y = options.includeChildPhoto && phrase.childPhoto ? 430 : 330;
-
   ctx.fillStyle = "#D99AB9";
-  ctx.font = "bold 82px Georgia";
-  ctx.fillText("“", 120, y - 50);
+  ctx.font = "bold 78px Georgia";
+  ctx.textAlign = "left";
+  ctx.fillText("“", 130, topY + 20);
 
   ctx.fillStyle = "#3F3D38";
-  ctx.font = "bold italic 48px Georgia";
+  ctx.font = "bold italic 58px Georgia";
+  ctx.textAlign = "center";
 
-  const phraseLines = wrapText(ctx, phrase.phrase, 760);
+  const phraseLines = wrapText(ctx, phrase.phrase, 790);
+  let quoteY = topY + 78;
 
-  phraseLines.slice(0, 7).forEach((line) => {
-    ctx.fillText(line, 150, y);
-    y += 70;
+  phraseLines.slice(0, 5).forEach((line) => {
+    ctx.fillText(line, 540, quoteY);
+    quoteY += 76;
   });
 
-  y += 35;
+  ctx.textAlign = "left";
+
+  const infoY = quoteY + 35;
 
   ctx.fillStyle = "#8FA173";
-  roundedRect(ctx, 150, y, 290, 62, 31);
+  roundedRect(ctx, 150, infoY, 300, 64, 32);
   ctx.fill();
 
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 28px Arial";
-  ctx.fillText(phrase.childName || "Non précisé", 185, y + 40);
+  ctx.font = "bold 30px Arial";
+  ctx.fillText(phrase.childName || "Non précisé", 190, infoY + 42);
 
   ctx.fillStyle = "#746F64";
-  ctx.font = "bold 28px Arial";
-  ctx.fillText(formatDate(phrase.date), 690, y + 40);
+  ctx.font = "bold 30px Arial";
+  ctx.textAlign = "right";
+  ctx.fillText(formatDate(phrase.date), 930, infoY + 42);
+  ctx.textAlign = "left";
 
-  y += 95;
+  let detailY = infoY + 108;
 
   if (phrase.childAgeAtSituation) {
     ctx.fillStyle = "#746F64";
     ctx.font = "bold 28px Arial";
-    ctx.fillText(`Âge au moment : ${phrase.childAgeAtSituation}`, 150, y);
-    y += 50;
+    ctx.textAlign = "center";
+    ctx.fillText(
+      `Âge au moment : ${phrase.childAgeAtSituation}`,
+      540,
+      detailY
+    );
+    ctx.textAlign = "left";
+    detailY += 46;
   }
 
   if (phrase.context) {
     ctx.fillStyle = "#746F64";
-    ctx.font = "28px Arial";
+    ctx.font = "26px Arial";
+    ctx.textAlign = "center";
+
     const contextLines = wrapText(ctx, phrase.context, 760);
 
-    contextLines.slice(0, 3).forEach((line) => {
-      ctx.fillText(line, 150, y);
-      y += 44;
+    contextLines.slice(0, 2).forEach((line) => {
+      ctx.fillText(line, 540, detailY);
+      detailY += 38;
     });
+
+    ctx.textAlign = "left";
   }
-
-  ctx.fillStyle = "#A8B193";
-  ctx.font = "bold 30px Arial";
-  ctx.fillText("Propulsé par Camelio", 150, 1155);
-
-  ctx.fillStyle = "#746F64";
-  ctx.font = "26px Arial";
-  ctx.fillText("Carnet numérique de vos enfants", 150, 1197);
-
-  ctx.fillStyle = "#746F64";
-  ctx.font = "24px Arial";
-  ctx.fillText("camelio.app", 150, 1237);
 
   const logo = await loadFirstAvailableImage(logoPaths);
 
   if (logo) {
-    const maxLogoWidth = 180;
-    const maxLogoHeight = 90;
-    const ratio = Math.min(maxLogoWidth / logo.width, maxLogoHeight / logo.height);
+    const maxLogoWidth = 460;
+    const maxLogoHeight = 135;
+    const ratio = Math.min(
+      maxLogoWidth / logo.width,
+      maxLogoHeight / logo.height
+    );
+
     const logoWidth = logo.width * ratio;
     const logoHeight = logo.height * ratio;
 
     ctx.drawImage(
       logo,
-      850 - logoWidth / 2,
-      1175 - logoHeight / 2,
+      540 - logoWidth / 2,
+      900 - logoHeight / 2,
       logoWidth,
       logoHeight
     );
   } else {
     ctx.fillStyle = "#8FA173";
-    ctx.font = "bold 36px Arial";
-    ctx.fillText("Camelio", 760, 1195);
+    ctx.font = "bold 34px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Propulsé par Camelio", 540, 870);
+
+    ctx.fillStyle = "#746F64";
+    ctx.font = "24px Arial";
+    ctx.fillText("Carnet numérique de vos enfants", 540, 912);
+    ctx.fillText("camelio.app", 540, 950);
+    ctx.textAlign = "left";
   }
 
   return new Promise((resolve) => {
@@ -732,7 +752,7 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
               />
             ) : null}
 
-            <p className="mt-5 text-center text-lg font-black italic leading-8 text-[#3F3D38]">
+            <p className="mt-5 text-center text-xl font-black italic leading-9 text-[#3F3D38]">
               “{phrase.phrase}”
             </p>
 
@@ -753,29 +773,15 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
             ) : null}
 
             <div className="mt-6 border-t border-white/70 pt-4">
-              <div className="flex items-center gap-3">
+              <div className="flex justify-center">
                 <img
-                  src="/Logo/Camelio.png"
-                  alt="Camelio"
-                  className="h-9 w-auto object-contain"
+                  src="/Logo/Camelio et citation.png"
+                  alt="Propulsé par Camelio, carnet numérique de vos enfants"
+                  className="h-12 w-auto object-contain"
                   onError={(event) => {
-                    event.currentTarget.style.display = "none";
+                    event.currentTarget.src = "/Logo/Camelio.png";
                   }}
                 />
-
-                <div>
-                  <p className="text-xs font-black text-[#8FA173]">
-                    Propulsé par Camelio
-                  </p>
-
-                  <p className="mt-0.5 text-xs font-bold text-[#746F64]">
-                    Carnet numérique de vos enfants
-                  </p>
-
-                  <p className="mt-0.5 text-xs font-bold text-[#746F64]">
-                    camelio.app
-                  </p>
-                </div>
               </div>
             </div>
           </div>
