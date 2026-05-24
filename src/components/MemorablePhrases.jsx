@@ -67,9 +67,9 @@ const monthOptions = [
 
 const fallbackColor = {
   main: "#8FA173",
-  soft: "#F0EAF8",
-  border: "#F3CDD3",
-  text: "#746F64",
+  soft: "#F0F5EA",
+  border: "#D7DFC9",
+  text: "#748060",
 };
 
 function getTodayDate() {
@@ -142,18 +142,78 @@ function getChildTheme(child) {
   const colorName = String(color || "").toLowerCase();
 
   const map = {
-    rose: { main: "#EAA5AF", soft: "#FFF1F4", border: "#F3CDD3", text: "#B96B77" },
-    pink: { main: "#EAA5AF", soft: "#FFF1F4", border: "#F3CDD3", text: "#B96B77" },
-    mauve: { main: "#B5A7C8", soft: "#F3EAFB", border: "#DED2EA", text: "#8C76A8" },
-    violet: { main: "#B5A7C8", soft: "#F3EAFB", border: "#DED2EA", text: "#8C76A8" },
-    bleu: { main: "#A2BADF", soft: "#EEF5FF", border: "#CBDDF4", text: "#6D88B2" },
-    blue: { main: "#A2BADF", soft: "#EEF5FF", border: "#CBDDF4", text: "#6D88B2" },
-    vert: { main: "#A8B193", soft: "#F0F5EA", border: "#D7DFC9", text: "#748060" },
-    green: { main: "#A8B193", soft: "#F0F5EA", border: "#D7DFC9", text: "#748060" },
-    sage: { main: "#A8B193", soft: "#F0F5EA", border: "#D7DFC9", text: "#748060" },
-    jaune: { main: "#EEC988", soft: "#FFF6E3", border: "#F0D7A8", text: "#B58B42" },
-    dore: { main: "#EEC988", soft: "#FFF6E3", border: "#F0D7A8", text: "#B58B42" },
-    orange: { main: "#EEC988", soft: "#FFF6E3", border: "#F0D7A8", text: "#B58B42" },
+    rose: {
+      main: "#EAA5AF",
+      soft: "#FFF1F4",
+      border: "#F3CDD3",
+      text: "#B96B77",
+    },
+    pink: {
+      main: "#EAA5AF",
+      soft: "#FFF1F4",
+      border: "#F3CDD3",
+      text: "#B96B77",
+    },
+    mauve: {
+      main: "#B5A7C8",
+      soft: "#F3EAFB",
+      border: "#DED2EA",
+      text: "#8C76A8",
+    },
+    violet: {
+      main: "#B5A7C8",
+      soft: "#F3EAFB",
+      border: "#DED2EA",
+      text: "#8C76A8",
+    },
+    bleu: {
+      main: "#A2BADF",
+      soft: "#EEF5FF",
+      border: "#CBDDF4",
+      text: "#6D88B2",
+    },
+    blue: {
+      main: "#A2BADF",
+      soft: "#EEF5FF",
+      border: "#CBDDF4",
+      text: "#6D88B2",
+    },
+    vert: {
+      main: "#A8B193",
+      soft: "#F0F5EA",
+      border: "#D7DFC9",
+      text: "#748060",
+    },
+    green: {
+      main: "#A8B193",
+      soft: "#F0F5EA",
+      border: "#D7DFC9",
+      text: "#748060",
+    },
+    sage: {
+      main: "#A8B193",
+      soft: "#F0F5EA",
+      border: "#D7DFC9",
+      text: "#748060",
+    },
+    jaune: {
+      main: "#EEC988",
+      soft: "#FFF6E3",
+      border: "#F0D7A8",
+      text: "#B58B42",
+    },
+    dore: {
+      main: "#EEC988",
+      soft: "#FFF6E3",
+      border: "#F0D7A8",
+      text: "#B58B42",
+    },
+    orange: {
+      main: "#EEC988",
+      soft: "#FFF6E3",
+      border: "#F0D7A8",
+      text: "#B58B42",
+    },
   };
 
   return map[colorName] || fallbackColor;
@@ -644,7 +704,6 @@ function PhrasePopup({
                     style={{
                       backgroundColor: selected ? theme.main : "#FFFFFF",
                       color: selected ? "#FFFFFF" : "#746F64",
-                      borderColor: selected ? theme.main : "#EFE4D6",
                       boxShadow: `0 0 0 1px ${
                         selected ? theme.main : "#EFE4D6"
                       }`,
@@ -860,7 +919,10 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
                   className="h-20 w-20 rounded-full object-cover ring-4 ring-white"
                 />
 
-                <p className="mt-2 text-xs font-black" style={{ color: theme.text }}>
+                <p
+                  className="mt-2 text-xs font-black"
+                  style={{ color: theme.text }}
+                >
                   {firstChild.name}
                 </p>
               </div>
@@ -1148,10 +1210,17 @@ export default function MemorablePhrases({ children = [], onBack }) {
   ]);
 
   const resetForm = () => {
-    setFormData(emptyForm);
+    setFormData({
+      phrase: "",
+      childIds: [],
+      date: getTodayDate(),
+      context: "",
+      photoUrl: "",
+      photoFile: null,
+    });
   };
 
-  const buildPhraseFromForm = (id = `phrase-${Date.now()`) => {
+  const buildPhraseFromForm = (id = `phrase-${Date.now()}`) => {
     const assignedChildren = childOptions.filter((child) =>
       formData.childIds.includes(child.id)
     );
