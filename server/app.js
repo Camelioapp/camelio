@@ -1484,6 +1484,14 @@ app.post(
 
       const now = new Date().toISOString();
 
+      const trialEnd = stripeSubscription.trial_end
+        ? new Date(stripeSubscription.trial_end * 1000).toISOString()
+        : null;
+
+      const currentPeriodEnd = stripeSubscription.current_period_end
+        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+        : null;
+
       const subscriptionItem = {
         PK: getUserPk(req),
         SK: "SUBSCRIPTION",
@@ -1503,12 +1511,9 @@ app.post(
         stripeCustomerId: checkoutSession.customer || "",
         stripeSubscriptionId: stripeSubscription.id,
         stripeCheckoutSessionId: checkoutSession.id,
-        trialEndsAt: stripeSubscription.trial_end
-          ? new Date(stripeSubscription.trial_end * 1000).toISOString()
-          : null,
-        currentPeriodEnd: stripeSubscription.current_period_end
-          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
-          : null,
+        trialEnd,
+        trialEndsAt: trialEnd,
+        currentPeriodEnd,
         cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
         updatedAt: now,
         createdAt: now,
@@ -1527,9 +1532,11 @@ app.post(
         status: subscriptionItem.status,
         plan: subscriptionItem.plan,
         storageGb: subscriptionItem.storageGb,
+        trialEnd: subscriptionItem.trialEnd,
         trialEndsAt: subscriptionItem.trialEndsAt,
         currentPeriodEnd: subscriptionItem.currentPeriodEnd,
         cancelAtPeriodEnd: subscriptionItem.cancelAtPeriodEnd,
+        subscription: subscriptionItem,
       });
     } catch (error) {
       next(error);
@@ -2119,8 +2126,8 @@ app.post(
   validateStripeConfig,
   async (req, res, next) => {
     try {
-      const lookupKey = STRIPE_PRICE_LOOKUP_KEY;
-      const wantsTrial = true;
+      const lookupKey = req.body?.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
+      const wantsTrial = req.body?.trial !== false;
 
       const prices = await stripe.prices.list({
         lookup_keys: [lookupKey],
