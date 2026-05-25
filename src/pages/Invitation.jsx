@@ -1,5 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Loader2, LockKeyhole, LogIn, UserPlus } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CheckCircle2,
+  Loader2,
+  LockKeyhole,
+  LogIn,
+  UserPlus,
+} from "lucide-react";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://api.camelio.app";
@@ -23,6 +29,10 @@ function clearInvitationToken() {
   sessionStorage.removeItem("camelio_invitation_token");
 }
 
+function getErrorMessage(data, fallback) {
+  return data?.message || data?.error || fallback;
+}
+
 export default function Invitation({
   authenticated = false,
   user = null,
@@ -35,6 +45,8 @@ export default function Invitation({
   const [invitation, setInvitation] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const hasImportedRef = useRef(false);
 
   const token = useMemo(() => {
     return getTokenFromUrl() || getSavedInvitationToken();
@@ -49,7 +61,13 @@ export default function Invitation({
   }, [token]);
 
   useEffect(() => {
-    if (authenticated && token && invitation && !isImporting) {
+    if (
+      authenticated &&
+      token &&
+      invitation &&
+      !isImporting &&
+      !hasImportedRef.current
+    ) {
       importInvitation();
     }
   }, [authenticated, token, invitation]);
@@ -80,16 +98,20 @@ export default function Invitation({
 
       if (!response.ok) {
         throw new Error(
-          data?.message || "Cette invitation est introuvable ou expirée."
+          getErrorMessage(
+            data,
+            "Cette invitation est introuvable ou expirée."
+          )
         );
       }
 
-      setInvitation(data.invitation || null);
-      if (data.alreadyAccepted && authenticated) {
-  clearInvitationToken();
-  window.location.href = "/";
-  return;
-}
+      setInvitation(data?.invitation || null);
+
+      if (data?.alreadyAccepted && authenticated) {
+        clearInvitationToken();
+        window.location.href = "/";
+        return;
+      }
     } catch (loadError) {
       console.error("Erreur chargement invitation:", loadError);
       setError(loadError?.message || "Impossible de charger l’invitation.");
@@ -100,6 +122,8 @@ export default function Invitation({
 
   async function importInvitation() {
     try {
+      hasImportedRef.current = true;
+
       setIsImporting(true);
       setError("");
       setMessage("");
@@ -118,8 +142,17 @@ export default function Invitation({
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
+        if (
+          data?.error === "invitation_already_accepted" ||
+          response.status === 409
+        ) {
+          clearInvitationToken();
+          window.location.href = "/";
+          return;
+        }
+
         throw new Error(
-          data?.message || "Impossible d’importer cette invitation."
+          getErrorMessage(data, "Impossible d’importer cette invitation.")
         );
       }
 
@@ -132,6 +165,9 @@ export default function Invitation({
       window.location.href = "/";
     } catch (importError) {
       console.error("Erreur import invitation:", importError);
+
+      hasImportedRef.current = false;
+
       setError(
         importError?.message ||
           "Impossible d’ajouter cet accès partagé à votre compte."
@@ -141,12 +177,22 @@ export default function Invitation({
     }
   }
 
+  function handleLogin() {
+    saveInvitationToken(token);
+    window.location.href = `${API_BASE_URL}/login`;
+  }
+
+  function handleSignup() {
+    saveInvitationToken(token);
+    window.location.href = `${API_BASE_URL}/signup`;
+  }
+
   const invitedEmail = invitation?.inviteeEmail || "";
   const connectedEmail = user?.email || "";
 
   return (
     <div className="relative z-10 min-h-screen bg-[#fbf7ef] px-4 py-10 text-[#4f4a45]">
-     <div className="relative z-20 mx-auto max-w-2xl rounded-[32px] border border-[#eadfcf] bg-[#fffdf8] p-6 shadow-sm md:p-8">
+      <div className="relative z-20 mx-auto max-w-2xl rounded-[32px] border border-[#eadfcf] bg-[#fffdf8] p-6 shadow-sm md:p-8">
         <div className="flex items-start gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#eef0e7] text-[#8f9874]">
             <LockKeyhole className="h-7 w-7" />
@@ -231,28 +277,22 @@ export default function Invitation({
 
                 <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                   <button
-  type="button"
-  onClick={() => {
-    saveInvitationToken(token);
-    window.location.href = `${API_BASE_URL}/login`;
-  }}
-  className="relative z-20 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#a8b193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
->
-  <LogIn className="h-4 w-4" />
-  Me connecter
-</button>
+                    type="button"
+                    onClick={handleLogin}
+                    className="relative z-20 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#a8b193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    Me connecter
+                  </button>
 
-<button
-  type="button"
-  onClick={() => {
-    saveInvitationToken(token);
-    window.location.href = `${API_BASE_URL}/signup`;
-  }}
-  className="relative z-20 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#eadfcf] bg-white px-5 py-3 text-sm font-bold text-[#7d756e] shadow-sm transition hover:bg-[#faf4ec]"
->
-  <UserPlus className="h-4 w-4" />
-  Créer mon compte
-</button>
+                  <button
+                    type="button"
+                    onClick={handleSignup}
+                    className="relative z-20 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#eadfcf] bg-white px-5 py-3 text-sm font-bold text-[#7d756e] shadow-sm transition hover:bg-[#faf4ec]"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Créer mon compte
+                  </button>
                 </div>
               </div>
             ) : (
@@ -266,7 +306,7 @@ export default function Invitation({
                   <button
                     type="button"
                     onClick={importInvitation}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#a8b193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                    className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#a8b193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
                   >
                     <CheckCircle2 className="h-4 w-4" />
                     Activer mon accès partagé

@@ -2012,14 +2012,13 @@ app.get(
     try {
       const token = String(req.params.token || "").trim();
 
-      if (share.status === "accepted") {
-  return res.json({
-    success: true,
-    invitation: sanitizePublicInvitation(share),
-    alreadyAccepted: true,
-    message: "Cette invitation a déjà été acceptée.",
-  });
-}
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_token",
+          message: "Le lien d’invitation est incomplet.",
+        });
+      }
 
       const share = await findProfileShareByToken(token);
 
@@ -2040,9 +2039,10 @@ app.get(
       }
 
       if (share.status === "accepted") {
-        return res.status(409).json({
-          success: false,
-          error: "invitation_already_accepted",
+        return res.json({
+          success: true,
+          invitation: sanitizePublicInvitation(share),
+          alreadyAccepted: true,
           message: "Cette invitation a déjà été acceptée.",
         });
       }
@@ -2058,9 +2058,16 @@ app.get(
       return res.json({
         success: true,
         invitation: sanitizePublicInvitation(share),
+        alreadyAccepted: false,
       });
     } catch (error) {
-      next(error);
+      console.error("Erreur lecture invitation Camelio:", error);
+
+      return res.status(500).json({
+        success: false,
+        error: "invitation_server_error",
+        message: error?.message || "Erreur serveur.",
+      });
     }
   }
 );
