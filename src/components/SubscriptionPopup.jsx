@@ -1,13 +1,65 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Sparkles, CheckCircle2, KeyRound } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
-export default function SubscriptionPopup({ onClose = () => window.location.reload() }) {
+export default function SubscriptionPopup({
+  onClose = () => window.location.reload(),
+}) {
+  const [checkingSubscription, setCheckingSubscription] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
+
   const [loadingType, setLoadingType] = useState("");
   const [error, setError] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkSubscription() {
+      try {
+        setCheckingSubscription(true);
+
+        const response = await fetch(`${API_URL}/api/subscription`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        let data = {};
+
+        try {
+          data = await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (!isMounted) return;
+
+        if (response.ok && data.hasAccess === true) {
+          setHasAccess(true);
+        } else {
+          setHasAccess(false);
+        }
+      } catch (err) {
+        console.error("Erreur vérification abonnement:", err);
+
+        if (isMounted) {
+          setHasAccess(false);
+        }
+      } finally {
+        if (isMounted) {
+          setCheckingSubscription(false);
+        }
+      }
+    }
+
+    checkSubscription();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const startCheckout = async (trial) => {
     try {
@@ -89,13 +141,10 @@ export default function SubscriptionPopup({ onClose = () => window.location.relo
       }
 
       if (!response.ok) {
-        throw new Error(
-          data.message ||
-            data.error ||
-            "Ce code n’est pas valide."
-        );
+        throw new Error(data.message || data.error || "Ce code n’est pas valide.");
       }
 
+      setHasAccess(true);
       setSuccessMessage("Votre accès gratuit est maintenant activé.");
 
       setTimeout(() => {
@@ -108,6 +157,14 @@ export default function SubscriptionPopup({ onClose = () => window.location.relo
       setLoadingType("");
     }
   };
+
+  if (checkingSubscription) {
+    return null;
+  }
+
+  if (hasAccess) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/35 px-4">

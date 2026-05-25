@@ -1488,6 +1488,8 @@ app.get(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      const now = new Date().toISOString();
+
       const result = await dynamo.send(
         new GetCommand({
           TableName: DYNAMODB_TABLE,
@@ -1501,16 +1503,128 @@ app.get(
       const subscription = result.Item || null;
       const activeStatuses = ["trialing", "active"];
 
-      const hasAccess =
-        subscription && activeStatuses.includes(subscription.status);
+      if (subscription && activeStatuses.includes(subscription.status)) {
+        return res.json({
+          hasAccess: true,
+          status: subscription.status,
+          plan: subscription.plan || null,
+          source: subscription.source || "dynamodb",
+          stripeCustomerId: subscription.stripeCustomerId || null,
+          stripeSubscriptionId: subscription.stripeSubscriptionId || null,
+          currentPeriodEnd: subscription.currentPeriodEnd || null,
+          trialEnd: subscription.trialEnd || null,
+          trialEndsAt: subscription.trialEndsAt || subscription.trialEnd || null,
+          cancelAtPeriodEnd: Boolean(subscription.cancelAtPeriodEnd),
+          subscription,
+        });
+      }
+
+      if (!stripe || !req.session.user?.email) {
+        return res.json({
+          hasAccess: false,
+          status: subscription?.status || "none",
+          plan: subscription?.plan || null,
+          currentPeriodEnd: subscription?.currentPeriodEnd || null,
+          trialEnd: subscription?.trialEnd || null,
+          trialEndsAt: subscription?.trialEndsAt || subscription?.trialEnd || null,
+          cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
+          subscription,
+        });
+      }
+
+      const customers = await stripe.customers.list({
+        email: req.session.user.email,
+        limit: 10,
+      });
+
+      let activeStripeSubscription = null;
+      let stripeCustomerId = "";
+
+      for (const customer of customers.data || []) {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: customer.id,
+          status: "all",
+          limit: 10,
+        });
+
+        activeStripeSubscription = (subscriptions.data || []).find((item) =>
+          activeStatuses.includes(item.status)
+        );
+
+        if (activeStripeSubscription) {
+          stripeCustomerId = customer.id;
+          break;
+        }
+      }
+
+      if (!activeStripeSubscription) {
+        return res.json({
+          hasAccess: false,
+          status: subscription?.status || "none",
+          plan: subscription?.plan || null,
+          currentPeriodEnd: subscription?.currentPeriodEnd || null,
+          trialEnd: subscription?.trialEnd || null,
+          trialEndsAt: subscription?.trialEndsAt || subscription?.trialEnd || null,
+          cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
+          subscription,
+        });
+      }
+
+      const trialEnd = activeStripeSubscription.trial_end
+        ? new Date(activeStripeSubscription.trial_end * 1000).toISOString()
+        : null;
+
+      const currentPeriodEnd = activeStripeSubscription.current_period_end
+        ? new Date(activeStripeSubscription.current_period_end * 1000).toISOString()
+        : null;
+
+      const syncedSubscription = {
+        PK: getUserPk(req),
+        SK: "SUBSCRIPTION",
+        type: "subscription",
+        userId: req.session.user.sub,
+        email: req.session.user.email || "",
+        status: activeStripeSubscription.status,
+        plan:
+          activeStripeSubscription.metadata?.plan ||
+          subscription?.plan ||
+          STRIPE_PRICE_LOOKUP_KEY,
+        storageGb:
+          Number(activeStripeSubscription.metadata?.storageGb) ||
+          Number(subscription?.storageGb) ||
+          Number(STRIPE_STORAGE_GB) ||
+          5,
+        source: "stripe_sync",
+        stripeCustomerId,
+        stripeSubscriptionId: activeStripeSubscription.id,
+        stripeCheckoutSessionId: subscription?.stripeCheckoutSessionId || "",
+        trialEnd,
+        trialEndsAt: trialEnd,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: Boolean(activeStripeSubscription.cancel_at_period_end),
+        createdAt: subscription?.createdAt || now,
+        updatedAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: syncedSubscription,
+        })
+      );
 
       return res.json({
-        hasAccess: Boolean(hasAccess),
-        status: subscription?.status || "none",
-        plan: subscription?.plan || null,
-        currentPeriodEnd: subscription?.currentPeriodEnd || null,
-        trialEnd: subscription?.trialEnd || null,
-        cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
+        hasAccess: true,
+        status: syncedSubscription.status,
+        plan: syncedSubscription.plan,
+        source: "stripe_sync",
+        stripeCustomerId: syncedSubscription.stripeCustomerId,
+        stripeSubscriptionId: syncedSubscription.stripeSubscriptionId,
+        currentPeriodEnd: syncedSubscription.currentPeriodEnd,
+        trialEnd: syncedSubscription.trialEnd,
+        trialEndsAt: syncedSubscription.trialEndsAt,
+        cancelAtPeriodEnd: syncedSubscription.cancelAtPeriodEnd,
+        subscription: syncedSubscription,
       });
     } catch (error) {
       next(error);
