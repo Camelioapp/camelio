@@ -417,23 +417,20 @@ export default function FirstStep({ onComplete, onSkip }) {
   return (
   <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/40 px-3 py-4 sm:px-4 sm:py-6">
     <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
-      <div className="border-b border-slate-100 bg-gradient-to-r from-[#f8f3ed] via-[#fbf3f6] to-[#f3f6fb] px-5 py-5 sm:px-6 md:px-8">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-[#f8f3ed] via-[#fbf3f6] to-[#f3f6fb] px-5 py-4 sm:px-6 md:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold leading-5 text-[#5b6b8a] sm:text-sm">
               Configuration initiale de votre espace Camelio
             </p>
 
-            <h2 className="mt-2 text-3xl font-bold leading-tight text-slate-950 sm:text-2xl md:text-3xl">
-              Bienvenue dans Camelio
-            </h2>
+            <h2 className="mt-2 text-2xl font-bold leading-tight text-slate-950 md:text-3xl">
+  Bienvenue dans Camelio
+</h2>
 
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#465a78]">
-              Avant de commencer, prenons quelques minutes pour bien configurer
-              l’application comme premier pas. Ces informations permettront à
-              Camelio de mieux organiser votre calendrier, vos documents, vos
-              souvenirs et les informations importantes liées à vos enfants.
-            </p>
+            <p className="mt-2 max-w-2xl text-sm leading-5 text-[#465a78]">
+  Prenons quelques minutes à configurer votre compte Camelio.
+</p>
           </div>
 
           <button
