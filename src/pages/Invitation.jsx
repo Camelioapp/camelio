@@ -140,8 +140,8 @@ export default function Invitation({
   const connectedEmail = user?.email || "";
 
   return (
-    <div className="min-h-screen bg-[#fbf7ef] px-4 py-10 text-[#4f4a45]">
-      <div className="mx-auto max-w-2xl rounded-[32px] border border-[#eadfcf] bg-[#fffdf8] p-6 shadow-sm md:p-8">
+    <div className="relative z-10 min-h-screen bg-[#fbf7ef] px-4 py-10 text-[#4f4a45]">
+     <div className="relative z-20 mx-auto max-w-2xl rounded-[32px] border border-[#eadfcf] bg-[#fffdf8] p-6 shadow-sm md:p-8">
         <div className="flex items-start gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#eef0e7] text-[#8f9874]">
             <LockKeyhole className="h-7 w-7" />
@@ -226,28 +226,28 @@ export default function Invitation({
 
                 <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                   <button
-                    type="button"
-                    onClick={() => {
-                      saveInvitationToken(token);
-                      onLogin();
-                    }}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#a8b193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
-                  >
-                    <LogIn className="h-4 w-4" />
-                    Me connecter
-                  </button>
+  type="button"
+  onClick={() => {
+    saveInvitationToken(token);
+    window.location.href = `${API_BASE_URL}/login`;
+  }}
+  className="relative z-20 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#a8b193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+>
+  <LogIn className="h-4 w-4" />
+  Me connecter
+</button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      saveInvitationToken(token);
-                      onSignup();
-                    }}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#eadfcf] bg-white px-5 py-3 text-sm font-bold text-[#7d756e] shadow-sm transition hover:bg-[#faf4ec]"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Créer mon compte
-                  </button>
+<button
+  type="button"
+  onClick={() => {
+    saveInvitationToken(token);
+    window.location.href = `${API_BASE_URL}/signup`;
+  }}
+  className="relative z-20 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#eadfcf] bg-white px-5 py-3 text-sm font-bold text-[#7d756e] shadow-sm transition hover:bg-[#faf4ec]"
+>
+  <UserPlus className="h-4 w-4" />
+  Créer mon compte
+</button>
                 </div>
               </div>
             ) : (
