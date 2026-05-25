@@ -583,8 +583,7 @@ export default function Documents({
           </h3>
 
           <p className="mt-2 text-sm leading-6 text-[#746F64]">
-            Le document sera envoyé dans S3 et associé à l’enfant choisi dans
-            DynamoDB.
+            Le document sera ajouté dans un espace sécurisé accessible à partir du profil de l’enfant sélectionné.
           </p>
         </div>
 
