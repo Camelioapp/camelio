@@ -1,16 +1,42 @@
 import React, { useEffect, useState } from "react";
-import WelcomeScreen from "./components/WelcomeScreen.jsx";
-import Dashboard from "./components/Dashboard.jsx";
-import Billing from "./components/billing.jsx";
-import LandingPage from "./LandingPage.jsx";
-import Invitation from "./pages/Invitation.jsx";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+import Dashboard from "./components/Dashboard.jsx";
+import Login from "./pages/Login.jsx";
+import Invitation from "./pages/Invitation.jsx";
+import LandingPage from "./LandingPage.jsx";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
+
+function getPath() {
+  return window.location.pathname || "/";
+}
+
+function getTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search || "");
+  return params.get("token") || params.get("invite") || "";
+}
+
+function getSavedInvitationToken() {
+  return sessionStorage.getItem("camelio_invitation_token") || "";
+}
+
+function saveTokenIfPresent() {
+  const token = getTokenFromUrl();
+
+  if (token) {
+    sessionStorage.setItem("camelio_invitation_token", token);
+  }
+
+  return token;
+}
 
 export default function App() {
-  const [authLoading, setAuthLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [auth, setAuth] = useState({
+    authenticated: false,
+    user: null,
+    referralCode: null,
+  });
 
   const [parentProfile, setParentProfile] = useState({
     name: "",
@@ -19,117 +45,157 @@ export default function App() {
     userId: "",
   });
 
-  const currentPath = window.location.pathname;
+  const path = getPath();
 
-  const loadParentProfile = async () => {
+  useEffect(() => {
+    saveTokenIfPresent();
+    loadSession();
+  }, []);
+
+  async function loadSession() {
     try {
-      setProfileLoading(true);
+      setIsLoading(true);
 
-      const response = await fetch(`${API_URL}/api/profile`, {
+      const response = await fetch(`${API_BASE_URL}/me`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
       });
 
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(
-          data.message || "Impossible de charger le profil utilisateur."
-        );
+        throw new Error(data?.message || "Impossible de vérifier la session.");
       }
 
-      if (data.profile) {
-        setParentProfile({
-          name: data.profile.name || data.profile.displayName || "",
-          email: data.profile.email || "",
-          phone: data.profile.phone || "",
-          userId: data.profile.userId || "",
-        });
+      const nextAuth = {
+        authenticated: Boolean(data?.authenticated),
+        user: data?.user || null,
+        referralCode: data?.referralCode || null,
+      };
+
+      setAuth(nextAuth);
+
+      if (nextAuth.authenticated && nextAuth.user) {
+        setParentProfile((current) => ({
+          ...current,
+          name:
+            nextAuth.user.name ||
+            nextAuth.user.given_name ||
+            current.name ||
+            "",
+          email: nextAuth.user.email || current.email || "",
+        }));
       }
     } catch (error) {
-      console.error("PROFILE LOAD ERROR:", error);
+      console.error("Erreur vérification session:", error);
+
+      setAuth({
+        authenticated: false,
+        user: null,
+        referralCode: null,
+      });
     } finally {
-      setProfileLoading(false);
+      setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    let mounted = true;
-
-    const checkAuth = async () => {
-      try {
-        const response = await fetch(`${API_URL}/me`, {
-          credentials: "include",
-          cache: "no-store",
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        if (!mounted) return;
-
-        const authenticated = Boolean(data.authenticated);
-        setIsAuthenticated(authenticated);
-
-        if (authenticated) {
-          await loadParentProfile();
-        }
-      } catch (error) {
-        console.error("AUTH CHECK ERROR:", error);
-
-        if (mounted) {
-          setIsAuthenticated(false);
-        }
-      } finally {
-        if (mounted) {
-          setAuthLoading(false);
-        }
-      }
-    };
-
-    checkAuth();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (currentPath === "/invitation") {
-    return <Invitation />;
   }
 
-  /*
-    Route publique de la landing page.
-    Accessible ici :
-    https://camelio.app/accueil
-  */
-  if (currentPath === "/accueil") {
-  return <LandingPage />;
-}
+  function goToLogin() {
+    const token = getTokenFromUrl() || getSavedInvitationToken();
 
-  /*
-    Route billing existante.
-  */
-  if (currentPath === "/billing") {
-    return <Billing />;
+    if (token) {
+      sessionStorage.setItem("camelio_invitation_token", token);
+    }
+
+    window.location.href = `${API_BASE_URL}/login`;
   }
 
-  if (authLoading || profileLoading) {
+  function goToSignup() {
+    const token = getTokenFromUrl() || getSavedInvitationToken();
+
+    if (token) {
+      sessionStorage.setItem("camelio_invitation_token", token);
+    }
+
+    window.location.href = `${API_BASE_URL}/signup`;
+  }
+
+  function goToLogout() {
+    sessionStorage.removeItem("camelio_invitation_token");
+    window.location.href = `${API_BASE_URL}/logout`;
+  }
+
+  if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F8F3EA] text-[#55534C]">
-        Chargement...
+      <div className="flex min-h-screen items-center justify-center bg-[#fbf7ef] text-[#4f4a45]">
+        <div className="rounded-[28px] border border-[#eadfcf] bg-white px-6 py-5 text-center shadow-sm">
+          <p className="text-sm font-semibold text-[#8b8278]">
+            Chargement de Camelio...
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <WelcomeScreen />;
+  const invitationToken = getTokenFromUrl() || getSavedInvitationToken();
+
+  if (path === "/invitation") {
+    return (
+      <Invitation
+        authenticated={auth.authenticated}
+        user={auth.user}
+        onLogin={goToLogin}
+        onSignup={goToSignup}
+        onSessionRefresh={loadSession}
+      />
+    );
+  }
+
+  if (auth.authenticated && invitationToken) {
+    window.history.replaceState(
+      null,
+      "",
+      `/invitation?token=${encodeURIComponent(invitationToken)}`
+    );
+
+    return (
+      <Invitation
+        authenticated={auth.authenticated}
+        user={auth.user}
+        onLogin={goToLogin}
+        onSignup={goToSignup}
+        onSessionRefresh={loadSession}
+      />
+    );
+  }
+
+  if (path === "/accueil") {
+    return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
+  }
+
+  if (path === "/login") {
+    if (!auth.authenticated) {
+      return <Login onLogin={goToLogin} onSignup={goToSignup} />;
+    }
+
+    return (
+      <Dashboard
+        parentProfile={parentProfile}
+        setParentProfile={setParentProfile}
+        onLogout={goToLogout}
+      />
+    );
+  }
+
+  if (!auth.authenticated) {
+    return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
   }
 
   return (
     <Dashboard
       parentProfile={parentProfile}
       setParentProfile={setParentProfile}
+      onLogout={goToLogout}
     />
   );
 }
