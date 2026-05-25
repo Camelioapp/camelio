@@ -32,6 +32,24 @@ const documentTypes = [
 const allowedAccept =
   ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,image/png,image/jpeg,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
+  function getFileType(file) {
+  const fileName = String(file?.name || "").toLowerCase();
+  const fileType = String(file?.type || "").trim();
+
+  if (fileType) return fileType;
+
+  if (fileName.endsWith(".pdf")) return "application/pdf";
+  if (fileName.endsWith(".png")) return "image/png";
+  if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) return "image/jpeg";
+  if (fileName.endsWith(".webp")) return "image/webp";
+  if (fileName.endsWith(".doc")) return "application/msword";
+  if (fileName.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+
+  return "application/octet-stream";
+}
+
 function FormField({ label, children }) {
   return (
     <label className="block">
@@ -351,7 +369,7 @@ export default function Documents({
       ...current,
       fileName: file.name,
       fileSize: file.size,
-      fileType: file.type || "application/octet-stream",
+      fileType: getFileType(file),
       title: current.title || file.name,
     }));
   };
@@ -428,8 +446,8 @@ export default function Documents({
       const uploadResponse = await fetch(presignData.uploadUrl, {
         method: "PUT",
         headers: {
-          "Content-Type": selectedFile.type,
-        },
+  "Content-Type": getFileType(selectedFile),
+},
         body: selectedFile,
       });
 

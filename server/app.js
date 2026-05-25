@@ -95,6 +95,8 @@ const ALLOWED_DOCUMENT_TYPES = [
   "image/jpeg",
   "image/jpg",
   "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
 const ALLOWED_IMAGE_TYPES = [
@@ -497,15 +499,23 @@ function cleanEventPayload(body = {}) {
   };
 }
 
-function cleanDocumentPayload(body = {}) {
-  return {
-    fileName: body.fileName || "",
-    fileType: body.fileType || "",
-    fileSize: Number(body.fileSize) || 0,
-    childId: body.childId || "",
-    childName: body.childName || "",
-    category: body.category || "Général",
-  };
+function inferDocumentFileType(fileName = "", fileType = "") {
+  const normalizedType = String(fileType || "").trim();
+
+  if (normalizedType) return normalizedType;
+
+  const lowerName = String(fileName || "").toLowerCase();
+
+  if (lowerName.endsWith(".pdf")) return "application/pdf";
+  if (lowerName.endsWith(".png")) return "image/png";
+  if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) return "image/jpeg";
+  if (lowerName.endsWith(".webp")) return "image/webp";
+  if (lowerName.endsWith(".doc")) return "application/msword";
+  if (lowerName.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+
+  return "";
 }
 
 function sanitizeFileName(fileName = "") {
@@ -1538,14 +1548,21 @@ app.post(
   validateS3Config,
   async (req, res, next) => {
     try {
-      const payload = cleanDocumentPayload(req.body);
+      function cleanDocumentPayload(body = {}) {
+  const fileName = body.fileName || "";
+  const fileType = inferDocumentFileType(fileName, body.fileType);
 
-      if (!payload.fileName || !payload.fileType || !payload.childId) {
-        return res.status(400).json({
-          error: "missing_fields",
-          message: "fileName, fileType et childId sont requis.",
-        });
-      }
+  return {
+    fileName,
+    fileType,
+    fileSize: Number(body.fileSize) || 0,
+    childId: body.childId || "",
+    childName: body.childName || "",
+    category: body.category || body.type || "Document",
+    title: body.title || fileName || "Document",
+    note: body.note || "",
+  };
+}
 
       if (!isAllowedDocumentType(payload.fileType)) {
         return res.status(400).json({
@@ -1559,20 +1576,6 @@ app.post(
           error: "invalid_file_size",
           message:
             "Le document doit être supérieur à 0 octet et ne pas dépasser 10 MB.",
-        });
-      }
-
-      if (!isValidFileSize(fileSize, MAX_UPLOAD_SIZE_BYTES)) {
-        return res.status(400).json({
-          error: "invalid_file_size",
-          message: "Le fichier doit être supérieur à 0 octet et ne pas dépasser 5 GB.",
-        });
-      }
-
-      if (!isValidFileSize(fileSize, MAX_AVATAR_SIZE_BYTES)) {
-        return res.status(400).json({
-          error: "invalid_file_size",
-          message: "Le document doit être supérieur à 0 octet et ne pas dépasser 5 MB.",
         });
       }
 
@@ -1600,21 +1603,23 @@ app.post(
       });
 
       const document = {
-        PK: getUserPk(req),
-        SK: `DOCUMENT#${documentId}`,
-        id: documentId,
-        type: "document",
-        ownerId,
-        childId: payload.childId,
-        childName: payload.childName,
-        category: payload.category,
-        fileName: payload.fileName,
-        fileType: payload.fileType,
-        fileSize: payload.fileSize,
-        s3Key,
-        createdAt: now,
-        updatedAt: now,
-      };
+  PK: getUserPk(req),
+  SK: `DOCUMENT#${documentId}`,
+  id: documentId,
+  type: "document",
+  ownerId,
+  childId: payload.childId,
+  childName: payload.childName,
+  category: payload.category,
+  title: payload.title,
+  note: payload.note,
+  fileName: payload.fileName,
+  fileType: payload.fileType,
+  fileSize: payload.fileSize,
+  s3Key,
+  createdAt: now,
+  updatedAt: now,
+};
 
       await dynamo.send(
         new PutCommand({
