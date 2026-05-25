@@ -377,24 +377,43 @@ const saveUploadPreferences = (preferences) => {
     return "bg-[#F8E1E1] text-[#9A4F4F] ring-[#E8B8B8]";
   };
 
-  const handleCancelSubscription = () => {
-    if (subscription.cancelAtPeriodEnd) return;
+  const handleCancelSubscription = async () => {
+  try {
+    setSubscriptionActionLoading(true);
+    setSubscriptionMessage("");
 
-    const effectiveDate =
-      subscription.trialEndDate || subscription.nextPaymentDate || null;
+    const response = await fetch(`${API_BASE_URL}/create-portal-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+    });
 
-    const updatedSubscription = {
-      ...subscription,
-      cancelAtPeriodEnd: true,
-      cancelEffectiveDate: effectiveDate,
-    };
+    const data = await response.json().catch(() => ({}));
 
-    saveSubscription(updatedSubscription);
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          data.error ||
+          "Impossible d’ouvrir le portail de gestion Stripe."
+      );
+    }
 
+    if (!data.url) {
+      throw new Error("Aucune URL Stripe reçue.");
+    }
+
+    window.location.href = data.url;
+  } catch (error) {
     setSubscriptionMessage(
-      "Votre abonnement est maintenant programmé pour prendre fin à la fin de la période gratuite."
+      error.message ||
+        "Une erreur est survenue lors de l’ouverture du portail Stripe."
     );
-  };
+  } finally {
+    setSubscriptionActionLoading(false);
+  }
+};
 
   const startPaidSubscription = async () => {
     try {
@@ -1068,12 +1087,15 @@ const saveUploadPreferences = (preferences) => {
                 </p>
 
                 <button
-                  type="button"
-                  onClick={handleCancelSubscription}
-                  className="mt-4 w-full rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F]"
-                >
-                  Annuler mon abonnement
-                </button>
+  type="button"
+  onClick={handleCancelSubscription}
+  disabled={subscriptionActionLoading}
+  className="mt-4 w-full rounded-2xl bg-[#C96F6F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#B85F5F] disabled:cursor-not-allowed disabled:opacity-60"
+>
+  {subscriptionActionLoading
+    ? "Ouverture du portail Stripe..."
+    : "Gérer ou annuler mon abonnement"}
+</button>
               </div>
             )}
 
