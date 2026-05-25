@@ -55,10 +55,20 @@ const mailTransporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
   secure: process.env.SMTP_SECURE === "true",
+
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+
+  requireTLS: process.env.SMTP_REQUIRE_TLS !== "false",
+
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
+
+  logger: true,
+  debug: true,
 });
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
@@ -896,6 +906,18 @@ app.get("/api/version", (req, res) => {
 
 app.get("/api/test-email", async (req, res) => {
   try {
+    console.log("TEST EMAIL START", {
+      smtpHost: process.env.SMTP_HOST || null,
+      smtpPort: process.env.SMTP_PORT || null,
+      smtpSecure: process.env.SMTP_SECURE || null,
+      smtpUser: process.env.SMTP_USER || null,
+      hasPassword: Boolean(process.env.SMTP_PASS),
+    });
+
+    await mailTransporter.verify();
+
+    console.log("SMTP VERIFY OK");
+
     await mailTransporter.sendMail({
       from: `"Camelio" <${process.env.SMTP_USER}>`,
       replyTo: process.env.MAIL_REPLY_TO || process.env.SMTP_USER,
@@ -904,12 +926,21 @@ app.get("/api/test-email", async (req, res) => {
       text: "Si tu reçois ce courriel, SMTP fonctionne.",
     });
 
+    console.log("TEST EMAIL SENT");
+
     return res.json({
       success: true,
       message: "Courriel de test envoyé.",
     });
   } catch (error) {
-    console.error("Erreur test SMTP:", error);
+    console.error("Erreur test SMTP:", {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode,
+      stack: error.stack,
+    });
 
     return res.status(500).json({
       success: false,
