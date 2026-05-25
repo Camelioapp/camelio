@@ -82,6 +82,8 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PRICE_LOOKUP_KEY =
   process.env.STRIPE_PRICE_LOOKUP_KEY || "camelio_monthly_595";
 const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
 
 const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -124,6 +126,83 @@ let oidcClientPromise = null;
 
 app.set("view engine", "ejs");
 app.set("views", `${__dirname}/views`);
+
+app.post(
+  "/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    if (!stripe) {
+      return res.status(500).json({
+        error: "stripe_not_configured",
+        message: "Stripe n'est pas configuré.",
+      });
+    }
+
+    if (!STRIPE_WEBHOOK_SECRET) {
+      return res.status(500).json({
+        error: "stripe_webhook_secret_missing",
+        message: "STRIPE_WEBHOOK_SECRET est manquant.",
+      });
+    }
+
+    const signature = req.headers["stripe-signature"];
+
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        signature,
+        STRIPE_WEBHOOK_SECRET
+      );
+    } catch (error) {
+      console.error("STRIPE WEBHOOK SIGNATURE ERROR:", error.message);
+
+      return res.status(400).json({
+        error: "invalid_stripe_signature",
+        message: error.message,
+      });
+    }
+
+    try {
+      switch (event.type) {
+        case "customer.subscription.created":
+        case "customer.subscription.updated":
+        case "customer.subscription.deleted": {
+          const stripeSubscription = event.data.object;
+
+          const updatedSubscription = await upsertSubscriptionFromStripe(
+            stripeSubscription
+          );
+
+          console.log("Stripe subscription synchronisée:", {
+            eventType: event.type,
+            stripeSubscriptionId: stripeSubscription.id,
+            status: stripeSubscription.status,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            updated: Boolean(updatedSubscription),
+          });
+
+          break;
+        }
+
+        default:
+          console.log(`Webhook Stripe ignoré: ${event.type}`);
+      }
+
+      return res.json({
+        received: true,
+      });
+    } catch (error) {
+      console.error("STRIPE WEBHOOK PROCESSING ERROR:", error);
+
+      return res.status(500).json({
+        error: "stripe_webhook_processing_error",
+        message: "Erreur pendant le traitement du webhook Stripe.",
+      });
+    }
+  }
+);
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -432,6 +511,65 @@ function requireAuth(req, res, next) {
 
 function getUserPk(req) {
   return `USER#${req.session.user.sub}`;
+}
+
+async function upsertSubscriptionFromStripe(stripeSubscription) {
+  const userId = stripeSubscription.metadata?.userId;
+
+  if (!userId) {
+    console.warn(
+      "Webhook Stripe ignoré : aucun userId dans metadata de l'abonnement.",
+      stripeSubscription.id
+    );
+    return null;
+  }
+
+  const now = new Date().toISOString();
+
+  const trialEnd = stripeSubscription.trial_end
+    ? new Date(stripeSubscription.trial_end * 1000).toISOString()
+    : null;
+
+  const currentPeriodEnd = stripeSubscription.current_period_end
+    ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+    : null;
+
+  const canceledAt = stripeSubscription.canceled_at
+    ? new Date(stripeSubscription.canceled_at * 1000).toISOString()
+    : null;
+
+  const endedAt = stripeSubscription.ended_at
+    ? new Date(stripeSubscription.ended_at * 1000).toISOString()
+    : null;
+
+  const subscriptionItem = {
+    PK: `USER#${userId}`,
+    SK: "SUBSCRIPTION",
+    type: "subscription",
+    userId,
+    email: stripeSubscription.metadata?.userEmail || "",
+    status: stripeSubscription.status,
+    plan: stripeSubscription.metadata?.plan || STRIPE_PRICE_LOOKUP_KEY,
+    storageGb: Number(stripeSubscription.metadata?.storageGb) || Number(STRIPE_STORAGE_GB) || 5,
+    stripeCustomerId: stripeSubscription.customer || "",
+    stripeSubscriptionId: stripeSubscription.id,
+    trialEnd,
+    trialEndsAt: trialEnd,
+    currentPeriodEnd,
+    cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
+    canceledAt,
+    endedAt,
+    updatedAt: now,
+  };
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: DYNAMODB_TABLE,
+      Item: subscriptionItem,
+    })
+  );
+
+  return subscriptionItem;
 }
 
 function getDemoUserPk(req) {
