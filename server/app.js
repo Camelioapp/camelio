@@ -1651,6 +1651,81 @@ app.post(
         });
       }
 
+app.post(
+  "/api/subscription/activate-code",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const submittedCode = String(req.body?.code || "")
+        .trim()
+        .toUpperCase();
+
+      const validCodes = String(process.env.FREE_ACCESS_CODES || "")
+        .split(",")
+        .map((code) => code.trim().toUpperCase())
+        .filter(Boolean);
+
+      if (!submittedCode) {
+        return res.status(400).json({
+          error: "missing_code",
+          message: "Le code d’accès est requis.",
+        });
+      }
+
+      if (!validCodes.includes(submittedCode)) {
+        return res.status(403).json({
+          error: "invalid_code",
+          message: "Ce code d’accès n’est pas valide.",
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      const subscriptionItem = {
+        PK: getUserPk(req),
+        SK: "SUBSCRIPTION",
+        type: "subscription",
+        userId: req.session.user.sub,
+        email: req.session.user.email || "",
+        status: "active",
+        plan: "free_access_code",
+        storageGb: Number(process.env.STRIPE_STORAGE_GB) || 5,
+        source: "access_code",
+        accessCode: submittedCode,
+        stripeCustomerId: "",
+        stripeSubscriptionId: "",
+        stripeCheckoutSessionId: "",
+        trialEnd: null,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        activatedAt: now,
+        updatedAt: now,
+        createdAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: subscriptionItem,
+        })
+      );
+
+      return res.json({
+        success: true,
+        hasAccess: true,
+        status: "active",
+        plan: subscriptionItem.plan,
+        storageGb: subscriptionItem.storageGb,
+        subscription: subscriptionItem,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
       const checkoutSession = await stripe.checkout.sessions.retrieve(
         session_id,
         {
