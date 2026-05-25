@@ -1428,22 +1428,34 @@ async function findProfileShareByToken(invitationToken) {
 
   if (!token) return null;
 
-  const scanResult = await dynamo.send(
-    new ScanCommand({
-      TableName: DYNAMODB_TABLE,
-      FilterExpression: "#type = :type AND invitationToken = :invitationToken",
-      ExpressionAttributeNames: {
-        "#type": "type",
-      },
-      ExpressionAttributeValues: {
-        ":type": "profileShare",
-        ":invitationToken": token,
-      },
-      Limit: 1,
-    })
-  );
+  let lastEvaluatedKey;
 
-  return (scanResult.Items || [])[0] || null;
+  do {
+    const scanResult = await dynamo.send(
+      new ScanCommand({
+        TableName: DYNAMODB_TABLE,
+        FilterExpression: "#type = :type AND invitationToken = :invitationToken",
+        ExpressionAttributeNames: {
+          "#type": "type",
+        },
+        ExpressionAttributeValues: {
+          ":type": "profileShare",
+          ":invitationToken": token,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+
+    const share = (scanResult.Items || [])[0];
+
+    if (share) {
+      return share;
+    }
+
+    lastEvaluatedKey = scanResult.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return null;
 }
 
 function sanitizePublicInvitation(share) {
