@@ -608,74 +608,234 @@ export default function Dashboard({
     }
   }
 
+  function normalizeSetupSectionId(sectionId) {
+    const map = {
+      medical: "sante",
+      parentalPlan: "parental-plan",
+      custodyCalculator: "calculator",
+      memorablePhrases: "memorable-phrases",
+    };
+
+    return map[sectionId] || sectionId;
+  }
+
+  function getSectionOrderFromSetup(setupData) {
+    const availableIds = sections
+      .filter((section) => section.id !== "settings")
+      .map((section) => section.id);
+
+    const selectedIds = (setupData?.selectedSections || [])
+      .map(normalizeSetupSectionId)
+      .filter((id) => availableIds.includes(id));
+
+    const uniqueSelectedIds = Array.from(new Set(["children", ...selectedIds]))
+      .filter((id) => availableIds.includes(id));
+
+    if (uniqueSelectedIds.length === 0) {
+      return defaultSectionOrder;
+    }
+
+    return uniqueSelectedIds;
+  }
+
+  function buildChildPayloadFromSetup(child, index) {
+    const firstName = String(child?.firstName || "").trim();
+    const lastName = String(child?.lastName || "").trim();
+    const nickname = String(child?.nickname || "").trim();
+    const birthDate = child?.birthDate || "";
+
+    const hasUsefulInfo = firstName || lastName || nickname || birthDate;
+
+    if (!hasUsefulInfo) {
+      return null;
+    }
+
+    const childId =
+      child?.id ||
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `child-${Date.now()}-${index}`);
+
+    const photo = child?.avatar || child?.photo || child?.image || "";
+
+    return {
+      id: childId,
+      firstName,
+      lastName,
+      nickname,
+      birthDate,
+      gender: child?.gender || child?.sex || "",
+      sex: child?.gender || child?.sex || "",
+      color: child?.color || "sage",
+      avatar: photo,
+      photo,
+      image: photo,
+      avatarS3Key: "",
+      photoPosition: child?.photoPosition || defaultPhotoPosition,
+      photoZoom: Number(child?.photoZoom) || 1,
+      notes: child?.notes || child?.profileNote || "",
+    };
+  }
+
+  function isSameSetupChild(existingChild, setupChild) {
+    const existingKey = [
+      existingChild?.firstName || "",
+      existingChild?.lastName || "",
+      existingChild?.birthDate || "",
+    ]
+      .join("|")
+      .toLowerCase();
+
+    const setupKey = [
+      setupChild?.firstName || "",
+      setupChild?.lastName || "",
+      setupChild?.birthDate || "",
+    ]
+      .join("|")
+      .toLowerCase();
+
+    return existingKey === setupKey;
+  }
+
+  async function createChildrenFromSetup(setupData) {
+    const setupChildren = Array.isArray(setupData?.children)
+      ? setupData.children
+      : [];
+
+    const payloads = setupChildren
+      .map((child, index) => buildChildPayloadFromSetup(child, index))
+      .filter(Boolean)
+      .filter((setupChild) => {
+        return !children.some((existingChild) =>
+          isSameSetupChild(existingChild, setupChild)
+        );
+      });
+
+    if (payloads.length === 0) {
+      return [];
+    }
+
+    const createdChildren = [];
+
+    for (const payload of payloads) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/children`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error("Erreur création enfant depuis onboarding:", data);
+          continue;
+        }
+
+        if (data.child) {
+          createdChildren.push(formatChildFromServer(data.child));
+        }
+      } catch (error) {
+        console.error("Erreur création enfant depuis onboarding:", error);
+      }
+    }
+
+    if (createdChildren.length > 0) {
+      setChildren((current) => {
+        const currentIds = new Set(current.map((child) => child.id));
+
+        return [
+          ...current,
+          ...createdChildren.filter((child) => !currentIds.has(child.id)),
+        ];
+      });
+    }
+
+    return createdChildren;
+  }
+
+  async function applyInitialSetup(setupData = {}) {
+    const normalizedSectionOrder = getSectionOrderFromSetup(setupData);
+
+    setSectionOrderIds(normalizedSectionOrder);
+    localStorage.setItem(
+      SECTION_ORDER_STORAGE_KEY,
+      JSON.stringify(normalizedSectionOrder)
+    );
+
+    const hiddenSections = sections
+      .filter(
+        (section) =>
+          section.id !== "settings" && !normalizedSectionOrder.includes(section.id)
+      )
+      .map((section) => section.id);
+
+    const normalizedSetupData = {
+      ...setupData,
+      selectedSections: normalizedSectionOrder,
+      hiddenSections,
+    };
+
+    localStorage.setItem("camelio_first_step_completed", "true");
+    localStorage.setItem(
+      "camelio_initial_setup",
+      JSON.stringify(normalizedSetupData)
+    );
+
+    await createChildrenFromSetup(normalizedSetupData);
+
+    await fetch(`${API_BASE_URL}/api/profile`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        onboardingCompleted: true,
+        onboardingSkipped: Boolean(normalizedSetupData?.skipped),
+        onboardingCompletedAt: new Date().toISOString(),
+        onboarding: normalizedSetupData,
+      }),
+    });
+
+    setShowFirstStep(false);
+  }
+
   const subscriptionPopup = showSubscriptionPopup ? (
     <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
   ) : null;
-const firstStepPopup = showFirstStep ? (
-  <FirstStep
-    onComplete={async (setupData) => {
-      try {
-        await fetch(`${API_BASE_URL}/api/profile`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            onboardingCompleted: true,
-            onboardingSkipped: Boolean(setupData?.skipped),
-            onboardingCompletedAt: new Date().toISOString(),
-            onboarding: setupData,
-          }),
-        });
 
-        localStorage.setItem("camelio_first_step_completed", "true");
-        localStorage.setItem(
-          "camelio_initial_setup",
-          JSON.stringify(setupData)
-        );
-
-        setShowFirstStep(false);
-      } catch (error) {
-        console.error("Erreur sauvegarde onboarding:", error);
-        setShowFirstStep(false);
-      }
-    }}
-    onSkip={async () => {
-      try {
-        const setupData = {
-          skipped: true,
-          completedAt: new Date().toISOString(),
-        };
-
-        await fetch(`${API_BASE_URL}/api/profile`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            onboardingCompleted: true,
-            onboardingSkipped: true,
-            onboardingCompletedAt: new Date().toISOString(),
-            onboarding: setupData,
-          }),
-        });
-
-        localStorage.setItem("camelio_first_step_completed", "true");
-        localStorage.setItem(
-          "camelio_initial_setup",
-          JSON.stringify(setupData)
-        );
-
-        setShowFirstStep(false);
-      } catch (error) {
-        console.error("Erreur skip onboarding:", error);
-        setShowFirstStep(false);
-      }
-    }}
-  />
-) : null;
+  const firstStepPopup = showFirstStep ? (
+    <FirstStep
+      onComplete={async (setupData) => {
+        try {
+          await applyInitialSetup(setupData);
+        } catch (error) {
+          console.error("Erreur application onboarding:", error);
+          setShowFirstStep(false);
+        }
+      }}
+      onSkip={async (setupData) => {
+        try {
+          await applyInitialSetup(
+            setupData || {
+              skipped: true,
+              completedAt: new Date().toISOString(),
+              children: [],
+              selectedSections: defaultSectionOrder,
+              hiddenSections: [],
+            }
+          );
+        } catch (error) {
+          console.error("Erreur skip onboarding:", error);
+          setShowFirstStep(false);
+        }
+      }}
+    />
+  ) : null;
   if (activeSection !== "home") {
     return (
       <>

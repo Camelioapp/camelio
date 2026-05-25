@@ -50,12 +50,12 @@ const ALL_SECTIONS = [
   { id: "calendar", label: "Calendrier" },
   { id: "documents", label: "Documents" },
   { id: "photos", label: "Photos" },
-  { id: "medical", label: "Médical" },
+  { id: "sante", label: "Médical" },
   { id: "invoices", label: "Factures et reçus" },
   { id: "notes", label: "Notes" },
-  { id: "parentalPlan", label: "Plan parental" },
-  { id: "custodyCalculator", label: "Calculateur de journées" },
-  { id: "memorablePhrases", label: "Phrases mémorables" },
+  { id: "parental-plan", label: "Plan parental" },
+  { id: "calculator", label: "Calculateur de journées" },
+  { id: "memorable-phrases", label: "Phrases mémorables" },
 ];
 
 /*
@@ -66,7 +66,6 @@ const ALL_SECTIONS = [
   public/Profil/Fille/profil_01.png devient /Profil/Fille/profil_01.png
   public/Profil/Garcon/Garcon_01.png devient /Profil/Garcon/Garcon_01.png
 */
-
 const girlPresetPhotos = Array.from({ length: 15 }, (_, index) => {
   const number = String(index + 1).padStart(2, "0");
 
@@ -116,47 +115,51 @@ function getFallbackAvatar(index, gender = "") {
 function getRecommendedSectionIds(situation) {
   if (situation === "couple") {
     return [
+      "children",
       "calendar",
       "documents",
       "photos",
-      "medical",
+      "sante",
       "notes",
-      "memorablePhrases",
+      "memorable-phrases",
     ];
   }
 
   if (situation === "single_full") {
     return [
+      "children",
       "calendar",
       "documents",
       "photos",
-      "medical",
+      "sante",
       "notes",
-      "memorablePhrases",
+      "memorable-phrases",
     ];
   }
 
   if (situation === "solo_shared") {
     return [
+      "children",
       "calendar",
       "documents",
       "photos",
-      "medical",
+      "sante",
       "invoices",
       "notes",
-      "parentalPlan",
-      "custodyCalculator",
-      "memorablePhrases",
+      "parental-plan",
+      "calculator",
+      "memorable-phrases",
     ];
   }
 
   return [
+    "children",
     "calendar",
     "documents",
     "photos",
-    "medical",
+    "sante",
     "notes",
-    "memorablePhrases",
+    "memorable-phrases",
   ];
 }
 
@@ -387,18 +390,27 @@ export default function FirstStep({ onComplete, onSkip }) {
   };
 
   const skipAll = () => {
+    const setupData = {
+      skipped: true,
+      completedAt: new Date().toISOString(),
+      familySituation,
+      children: [],
+      selectedSections: getRecommendedSectionIds(familySituation),
+      hiddenSections: ALL_SECTIONS.filter(
+        (section) => !getRecommendedSectionIds(familySituation).includes(section.id)
+      ).map((section) => section.id),
+    };
+
     localStorage.setItem(STORAGE_KEY, "true");
+    localStorage.setItem(SETUP_DATA_KEY, JSON.stringify(setupData));
 
     if (typeof onSkip === "function") {
-      onSkip();
+      onSkip(setupData);
       return;
     }
 
     if (typeof onComplete === "function") {
-      onComplete({
-        skipped: true,
-        completedAt: new Date().toISOString(),
-      });
+      onComplete(setupData);
     }
   };
 
@@ -681,8 +693,7 @@ export default function FirstStep({ onComplete, onSkip }) {
                             </p>
 
                             <p className="mt-1 text-xs leading-5 text-[#5b6b8a]">
-                              Les photos affichées s’ajustent selon le sexe
-                              choisi.
+                              Les photos affichées s’ajustent selon le sexe choisi.
                             </p>
                           </div>
 
@@ -732,9 +743,7 @@ export default function FirstStep({ onComplete, onSkip }) {
                                 key={avatar.id}
                                 avatar={avatar}
                                 isSelected={isSelected}
-                                onClick={() =>
-                                  updateChildAvatar(index, avatar)
-                                }
+                                onClick={() => updateChildAvatar(index, avatar)}
                               />
                             );
                           })}
