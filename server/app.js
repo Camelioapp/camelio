@@ -580,6 +580,51 @@ function getOwnerId(req) {
   return req.session.user?.sub || "demo-user";
 }
 
+async function hydrateChildAvatarUrl(child, ownerId) {
+  if (!child?.avatarS3Key) {
+    return child;
+  }
+
+  if (!isSafeS3KeyForOwner(child.avatarS3Key, ownerId)) {
+    return {
+      ...child,
+      avatar: "",
+      photo: "",
+      image: "",
+      avatarBlocked: true,
+    };
+  }
+
+  try {
+    const downloadUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Key: child.avatarS3Key,
+      }),
+      { expiresIn: 3600 }
+    );
+
+    return {
+      ...child,
+      avatar: downloadUrl,
+      photo: downloadUrl,
+      image: downloadUrl,
+    };
+  } catch (error) {
+    console.error("Erreur génération URL avatar:", error);
+
+    return {
+      ...child,
+      avatar: "",
+      photo: "",
+      image: "",
+      avatarError: true,
+    };
+  }
+}
+
+
 function getReferralCode(req) {
   if (!req.session.referralCode) {
     const randomPart = generators
@@ -1168,30 +1213,46 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
   }
 });
 
-app.get("/api/children", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const result = await dynamo.send(
-      new QueryCommand({
-        TableName: DYNAMODB_TABLE,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": getUserPk(req),
-          ":sk": "CHILD#",
-        },
-      })
-    );
+app.get(
+  "/api/children",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const result = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": getUserPk(req),
+            ":sk": "CHILD#",
+          },
+        })
+      );
 
-    const children = (result.Items || []).sort((a, b) => {
-      return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
-    });
+      const ownerId = getOwnerId(req);
 
-    res.json({
-      children,
-    });
-  } catch (error) {
-    next(error);
+      const childrenWithFreshAvatars = await Promise.all(
+        (result.Items || []).map((child) =>
+          hydrateChildAvatarUrl(child, ownerId)
+        )
+      );
+
+      const children = childrenWithFreshAvatars.sort((a, b) => {
+        return String(a.createdAt || "").localeCompare(
+          String(b.createdAt || "")
+        );
+      });
+
+      res.json({
+        children,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {

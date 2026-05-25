@@ -526,10 +526,11 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        fileName: file.name,
-        fileType: file.type,
-        childId,
-      }),
+  fileName: file.name,
+  fileType: file.type,
+  fileSize: file.size,
+  childId,
+}),
     });
 
     const presignData = await presignResponse.json();
