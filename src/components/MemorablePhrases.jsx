@@ -468,39 +468,46 @@ async function createShareImageBlob({ phrase, options }) {
   }
 
   let topY = 135;
+let hasChildPhotoInShareImage = false;
 
-  if (options.includeChildPhoto && firstChild?.photo) {
-    const childImage = await loadImage(firstChild.photo);
+if (options.includeChildPhoto && firstChild?.photo) {
+  const childImage = await loadImage(firstChild.photo);
 
-    if (childImage) {
-      const photoSize = 185;
-      const photoRadius = photoSize / 2;
-      const photoX = 540 - photoRadius;
-      const photoY = topY - 10;
+  if (childImage) {
+    hasChildPhotoInShareImage = true;
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(540, photoY + photoRadius, photoRadius, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      drawImageCover(ctx, childImage, photoX, photoY, photoSize, photoSize);
-      ctx.restore();
+    const photoSize = 185;
+    const photoRadius = photoSize / 2;
+    const photoX = 540 - photoRadius;
+    const photoY = topY - 10;
 
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 12;
-      ctx.beginPath();
-      ctx.arc(540, photoY + photoRadius, photoRadius + 6, 0, Math.PI * 2);
-      ctx.stroke();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(540, photoY + photoRadius, photoRadius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    drawImageCover(ctx, childImage, photoX, photoY, photoSize, photoSize);
+    ctx.restore();
 
-      ctx.fillStyle = theme.text;
-      ctx.font = "bold 27px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(firstChild.name, 540, topY + photoSize + 28);
-      ctx.textAlign = "left";
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.arc(540, photoY + photoRadius, photoRadius + 6, 0, Math.PI * 2);
+    ctx.stroke();
 
-      topY += 235;
-    }
+    ctx.fillStyle = theme.text;
+    ctx.font = "bold 27px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(firstChild.name, 540, topY + photoSize + 28);
+    ctx.textAlign = "left";
+
+    topY += 235;
   }
+}
+
+if (!hasChildPhotoInShareImage) {
+  topY = 245;
+}
 
   ctx.fillStyle = theme.main;
   ctx.font = "bold 78px Georgia";
@@ -525,9 +532,15 @@ async function createShareImageBlob({ phrase, options }) {
   ctx.font = "bold 28px Arial";
   ctx.textAlign = "center";
 
-  const ageText = phrase.childAgeAtSituation
-    ? `Âge au moment : ${phrase.childAgeAtSituation}`
-    : "";
+  const childNameForAge =
+  firstChild?.name ||
+  firstChild?.nickname ||
+  firstChild?.firstName ||
+  "l’enfant";
+
+const ageText = phrase.childAgeAtSituation
+  ? `Âge de ${childNameForAge} au moment de cette phrase : ${phrase.childAgeAtSituation}`
+  : "";
 
   const dateText = formatDate(phrase.date);
 
@@ -949,10 +962,15 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
             <div className="text-center">
               <p className="text-xs font-bold text-[#746F64]">
                 {phrase.childAgeAtSituation
-                  ? `Âge au moment : ${phrase.childAgeAtSituation} · ${formatDate(
-                      phrase.date
-                    )}`
-                  : formatDate(phrase.date)}
+  ? `Âge de ${
+      firstChild?.name ||
+      firstChild?.nickname ||
+      firstChild?.firstName ||
+      "l’enfant"
+    } au moment de cette phrase : ${phrase.childAgeAtSituation} · ${formatDate(
+      phrase.date
+    )}`
+  : formatDate(phrase.date)}
               </p>
             </div>
 
@@ -1575,7 +1593,8 @@ export default function MemorablePhrases({ children = [], onBack }) {
 
                       {item.childAgeAtSituation ? (
                         <p className="mt-3 text-xs font-bold text-[#8A8378]">
-                          Âge au moment : {item.childAgeAtSituation}
+                          Âge de {item.children?.[0]?.name || "l’enfant"} au moment de cette phrase :{" "}
+{item.childAgeAtSituation}
                         </p>
                       ) : null}
                     </div>
