@@ -19,7 +19,7 @@ import { motion } from "framer-motion";
 import ProfileSharing from "./ProfileSharing.jsx";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+  import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
 const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
 const SECTION_THEME_STORAGE_KEY = "camelio-section-themes";
@@ -133,6 +133,48 @@ function formatChildFromServer(child) {
     photoZoom: child.photoZoom || 1,
     profileNote: child.notes || child.profileNote || "",
   };
+}
+
+
+function formatSharedChild(child = {}, index = 0) {
+  const name =
+    child.name ||
+    child.nickname ||
+    child.firstName ||
+    `Enfant ${index + 1}`;
+
+  return {
+    ...child,
+    id: child.id || `shared-child-${index}`,
+    name,
+    firstName: child.firstName || name,
+    lastName: child.lastName || "",
+    nickname: child.nickname || name,
+    birthDate: child.birthDate || "",
+    sex: child.gender || child.sex || "",
+    gender: child.gender || child.sex || "",
+    color: child.color || "sage",
+    age: child.birthDate ? getAgeFromBirthDate(child.birthDate) : "Accès partagé",
+    photo: child.avatar || child.photo || child.image || "",
+    image: child.image || child.photo || child.avatar || "",
+    avatar: child.avatar || child.photo || child.image || "",
+    photoPosition: normalizePhotoPosition(child.photoPosition),
+    photoZoom: child.photoZoom || 1,
+    profileNote: child.notes || child.profileNote || "",
+  };
+}
+
+function getSharedChildrenFromShares(shares = []) {
+  const childMap = new Map();
+
+  shares.forEach((share) => {
+    (share.children || []).forEach((child, index) => {
+      const formattedChild = formatSharedChild(child, index);
+      childMap.set(formattedChild.id || formattedChild.name, formattedChild);
+    });
+  });
+
+  return Array.from(childMap.values());
 }
 
 function getInitials(child) {
@@ -319,6 +361,11 @@ export default function Dashboard({
   const [viewMode, setViewMode] = useState("grid");
   const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false);
   const [showFirstStep, setShowFirstStep] = useState(false);
+  const [sharedAccess, setSharedAccess] = useState({
+    isLoading: true,
+    hasSharedAccess: false,
+    shares: [],
+  });
   const parentProfile = parentProfileFromApp;
 
   const setParentProfile = (updatedProfile) => {
@@ -344,52 +391,84 @@ export default function Dashboard({
   };
 
   useEffect(() => {
-  const checkSubscription = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/subscription`, {
-        method: "GET",
-        credentials: "include",
-      });
+    const checkAccessAndSubscription = async () => {
+      try {
+        const sharedResponse = await fetch(
+          `${API_BASE_URL}/api/profile-shares/imported`,
+          {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
 
-      const data = await response.json();
+        const sharedData = await sharedResponse.json().catch(() => ({}));
 
-      if (!response.ok) {
-        console.error("Erreur vérification abonnement:", data);
+        if (sharedResponse.ok && sharedData.hasSharedAccess) {
+          setSharedAccess({
+            isLoading: false,
+            hasSharedAccess: true,
+            shares: Array.isArray(sharedData.shares) ? sharedData.shares : [],
+          });
+          setShowSubscriptionPopup(false);
+          setShowFirstStep(false);
+          return;
+        }
+
+        setSharedAccess({
+          isLoading: false,
+          hasSharedAccess: false,
+          shares: [],
+        });
+
+        const response = await fetch(`${API_BASE_URL}/api/subscription`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error("Erreur vérification abonnement:", data);
+          setShowSubscriptionPopup(true);
+          return;
+        }
+
+        setShowSubscriptionPopup(!data.hasAccess);
+
+        if (!data.hasAccess) {
+          setShowFirstStep(false);
+          return;
+        }
+
+        const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        const profileData = await profileResponse.json();
+
+        if (!profileResponse.ok) {
+          console.error("Erreur vérification profil:", profileData);
+          return;
+        }
+
+        const onboardingCompleted =
+          profileData?.profile?.onboardingCompleted === true;
+
+        setShowFirstStep(!onboardingCompleted);
+      } catch (error) {
+        console.error("Erreur vérification accès ou abonnement:", error);
+        setSharedAccess((current) => ({
+          ...current,
+          isLoading: false,
+        }));
         setShowSubscriptionPopup(true);
-        return;
       }
+    };
 
-      setShowSubscriptionPopup(!data.hasAccess);
-
-      if (!data.hasAccess) {
-        setShowFirstStep(false);
-        return;
-      }
-
-      const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      const profileData = await profileResponse.json();
-
-      if (!profileResponse.ok) {
-        console.error("Erreur vérification profil:", profileData);
-        return;
-      }
-
-      const onboardingCompleted =
-        profileData?.profile?.onboardingCompleted === true;
-
-      setShowFirstStep(!onboardingCompleted);
-    } catch (error) {
-      console.error("Erreur vérification abonnement:", error);
-      setShowSubscriptionPopup(true);
-    }
-  };
-
-  checkSubscription();
-}, []);
+    checkAccessAndSubscription();
+  }, []);
 
   const defaultSectionOrder = useMemo(() => {
     return sections
@@ -456,6 +535,24 @@ export default function Dashboard({
       .filter(Boolean);
   }, [sectionOrderIds]);
 
+  const sharedSectionIds = useMemo(() => {
+    if (!sharedAccess.hasSharedAccess) return null;
+
+    return new Set(
+      sharedAccess.shares.flatMap((share) =>
+        Array.isArray(share.sectionIds) ? share.sectionIds : []
+      )
+    );
+  }, [sharedAccess.hasSharedAccess, sharedAccess.shares]);
+
+  const visibleSections = useMemo(() => {
+    if (!sharedAccess.hasSharedAccess || !sharedSectionIds) {
+      return orderedSections;
+    }
+
+    return orderedSections.filter((section) => sharedSectionIds.has(section.id));
+  }, [orderedSections, sharedAccess.hasSharedAccess, sharedSectionIds]);
+
   const [children, setChildren] = useState([]);
   const [isLoadingChildren, setIsLoadingChildren] = useState(true);
 
@@ -485,6 +582,30 @@ export default function Dashboard({
     const loadChildren = async () => {
       try {
         setIsLoadingChildren(true);
+
+        const sharedResponse = await fetch(
+          `${API_BASE_URL}/api/profile-shares/imported`,
+          {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
+
+        const sharedData = await sharedResponse.json().catch(() => ({}));
+
+        if (sharedResponse.ok && sharedData.hasSharedAccess) {
+          const shares = Array.isArray(sharedData.shares) ? sharedData.shares : [];
+
+          setSharedAccess({
+            isLoading: false,
+            hasSharedAccess: true,
+            shares,
+          });
+
+          setChildren(getSharedChildrenFromShares(shares));
+          return;
+        }
 
         const response = await fetch(`${API_BASE_URL}/api/children`, {
           method: "GET",
@@ -518,6 +639,14 @@ export default function Dashboard({
   }, [activeSection]);
 
   function openSection(sectionId) {
+    if (
+      sharedAccess.hasSharedAccess &&
+      sharedSectionIds &&
+      !sharedSectionIds.has(sectionId)
+    ) {
+      return;
+    }
+
     setActiveSection(sectionId);
   }
 
@@ -590,8 +719,10 @@ export default function Dashboard({
       case "memorable-phrases":
         return <MemorablePhrases children={children} onBack={goHome} />;
       case "profile-sharing":
+        if (sharedAccess.hasSharedAccess) return null;
         return <ProfileSharing children={children} onBack={goHome} />;
       case "settings":
+        if (sharedAccess.hasSharedAccess) return null;
         return (
           <SettingsView
             parentProfile={parentProfile}
@@ -806,73 +937,45 @@ export default function Dashboard({
     setShowFirstStep(false);
   }
 
-const subscriptionPopup =
-  showSubscriptionPopup &&
-  !sharedAccess.isLoading &&
-  !sharedAccess.hasSharedAccess ? (
-    <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
-  ) : null;
+  const subscriptionPopup =
+    showSubscriptionPopup &&
+    !sharedAccess.isLoading &&
+    !sharedAccess.hasSharedAccess ? (
+      <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
+    ) : null;
 
-const firstStepPopup =
-  showFirstStep &&
-  !sharedAccess.isLoading &&
-  !sharedAccess.hasSharedAccess ? (
-    <FirstStep
-      onComplete={async (setupData) => {
-        try {
-          await applyInitialSetup(setupData);
-        } catch (error) {
-          console.error("Erreur application onboarding:", error);
-          setShowFirstStep(false);
-        }
-      }}
-      onSkip={async (setupData) => {
-        try {
-          await applyInitialSetup(
-            setupData || {
-              skipped: true,
-              completedAt: new Date().toISOString(),
-              children: [],
-              selectedSections: defaultSectionOrder,
-              hiddenSections: [],
-            }
-          );
-        } catch (error) {
-          console.error("Erreur skip onboarding:", error);
-          setShowFirstStep(false);
-        }
-      }}
-    />
-  ) : null;
+  const firstStepPopup =
+    showFirstStep &&
+    !sharedAccess.isLoading &&
+    !sharedAccess.hasSharedAccess ? (
+      <FirstStep
+        onComplete={async (setupData) => {
+          try {
+            await applyInitialSetup(setupData);
+          } catch (error) {
+            console.error("Erreur application onboarding:", error);
+            setShowFirstStep(false);
+          }
+        }}
+        onSkip={async (setupData) => {
+          try {
+            await applyInitialSetup(
+              setupData || {
+                skipped: true,
+                completedAt: new Date().toISOString(),
+                children: [],
+                selectedSections: defaultSectionOrder,
+                hiddenSections: [],
+              }
+            );
+          } catch (error) {
+            console.error("Erreur skip onboarding:", error);
+            setShowFirstStep(false);
+          }
+        }}
+      />
+    ) : null;
 
-  const firstStepPopup = showFirstStep ? (
-    <FirstStep
-      onComplete={async (setupData) => {
-        try {
-          await applyInitialSetup(setupData);
-        } catch (error) {
-          console.error("Erreur application onboarding:", error);
-          setShowFirstStep(false);
-        }
-      }}
-      onSkip={async (setupData) => {
-        try {
-          await applyInitialSetup(
-            setupData || {
-              skipped: true,
-              completedAt: new Date().toISOString(),
-              children: [],
-              selectedSections: defaultSectionOrder,
-              hiddenSections: [],
-            }
-          );
-        } catch (error) {
-          console.error("Erreur skip onboarding:", error);
-          setShowFirstStep(false);
-        }
-      }}
-    />
-  ) : null;
   if (activeSection !== "home") {
     return (
       <>
@@ -930,18 +1033,20 @@ const firstStepPopup =
                 />
               </div>
 
-              <button
-                type="button"
-                onClick={() => openSection("settings")}
-                className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-[#eadfcf] bg-white shadow-sm transition hover:scale-105 hover:bg-[#faf4ec] sm:h-16 sm:w-16"
-                aria-label="Paramètres"
-              >
-                <img
-                  src="https://studiocameleon.ca/wp-content/uploads/2026/05/pere_2_enfants_filles.png"
-                  alt="Profil"
-                  className="h-full w-full object-cover"
-                />
-              </button>
+              {!sharedAccess.hasSharedAccess ? (
+                <button
+                  type="button"
+                  onClick={() => openSection("settings")}
+                  className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-[#eadfcf] bg-white shadow-sm transition hover:scale-105 hover:bg-[#faf4ec] sm:h-16 sm:w-16"
+                  aria-label="Paramètres"
+                >
+                  <img
+                    src="https://studiocameleon.ca/wp-content/uploads/2026/05/pere_2_enfants_filles.png"
+                    alt="Profil"
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ) : null}
             </header>
 
             <main className="p-4 md:p-8">
@@ -960,14 +1065,18 @@ const firstStepPopup =
                       </h2>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => openSection("children")}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
-                      aria-label="Ajouter un enfant"
-                    >
-                      <Plus size={22} strokeWidth={1.8} />
-                    </button>
+                    {!sharedAccess.hasSharedAccess ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                        if (!sharedAccess.hasSharedAccess) openSection("children");
+                      }}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
+                        aria-label="Ajouter un enfant"
+                      >
+                        <Plus size={22} strokeWidth={1.8} />
+                      </button>
+                    ) : null}
                   </div>
 
                   {isLoadingChildren ? (
@@ -987,11 +1096,15 @@ const firstStepPopup =
                       </div>
 
                       <p className="mt-4 text-lg font-semibold text-[#4f4a45]">
-                        Ajouter votre enfant
+                        {sharedAccess.hasSharedAccess
+                          ? "Aucun profil partagé"
+                          : "Ajouter votre enfant"}
                       </p>
 
                       <p className="mt-1 text-sm text-[#8b8278]">
-                        Créez un premier profil pour commencer.
+                        {sharedAccess.hasSharedAccess
+                          ? "Le partage ne contient pas encore de profil enfant."
+                          : "Créez un premier profil pour commencer."}
                       </p>
                     </button>
                   ) : (
@@ -1077,7 +1190,7 @@ const firstStepPopup =
                     </h2>
 
                     <p className="text-sm text-[#8b8278]">
-                      {orderedSections.length} sections disponibles
+                      {visibleSections.length} sections disponibles
                     </p>
                   </div>
 
@@ -1121,7 +1234,7 @@ const firstStepPopup =
                       : "grid grid-cols-2 gap-3 md:gap-4"
                   }
                 >
-                  {orderedSections.map((section) => {
+                  {visibleSections.map((section) => {
                     const Icon = section.icon;
                     const theme = getSectionTheme(
                       section,
