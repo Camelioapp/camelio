@@ -212,37 +212,43 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   }, [children, selectedChildIds]);
 
   const automaticMessage = useMemo(() => {
-    const personName = inviteeName.trim() || "Bonjour";
-    const childNames = selectedChildren.map((child) => displayName(child));
-    const childText =
-      childNames.length > 0 ? formatList(childNames) : "l’enfant sélectionné";
+  const personName = inviteeName.trim();
+  const greeting = personName ? `Salut ${personName} 😊,` : "Salut 😊,";
 
-    const sectionDetails = selectedSectionIds
-      .map((sectionId) => {
-        const section = sections.find((item) => item.id === sectionId);
-        if (!section) return null;
+  const childNames = selectedChildren.map((child) => displayName(child));
+  const childText =
+    childNames.length > 0 ? formatList(childNames) : "mes cocos précieux";
 
-        return `${section.title} (${getPermissionLabel(
-          sectionPermissions[sectionId] || "read"
-        ).toLowerCase()})`;
-      })
-      .filter(Boolean);
+  const sectionDetails = selectedSectionIds
+    .map((sectionId) => {
+      const section = sections.find((item) => item.id === sectionId);
+      if (!section) return null;
 
-    const sectionText =
-      sectionDetails.length > 0
-        ? formatList(sectionDetails)
-        : "les sections sélectionnées";
+      return `${section.title} (${getPermissionLabel(
+        sectionPermissions[sectionId] || "read"
+      ).toLowerCase()})`;
+    })
+    .filter(Boolean);
 
-    return `${personName},
+  const sectionText =
+    sectionDetails.length > 0
+      ? formatList(sectionDetails)
+      : "les sections sélectionnées";
 
-Je vous partage un accès Camelio pour le profil de ${childText}.
+  return `${greeting}
 
-Vous aurez accès aux sections suivantes : ${sectionText}.
+Je te partage un accès Camelio pour mes cocos précieux, ${childText}.
 
-Vous recevrez une invitation par courriel pour créer votre accès ou vous connecter à Camelio.
+Je t’ai préparé un accès personnalisé pour que tu puisses consulter facilement ce qui est important 😊
 
-Merci.`;
-  }, [inviteeName, selectedChildren, selectedSectionIds, sectionPermissions]);
+Tu auras accès aux sections suivantes : ${sectionText}.
+
+Camelio nous permet de garder au même endroit les informations importantes, les souvenirs, les documents et les suivis liés aux enfants.
+
+Tu vas recevoir une invitation par courriel pour créer ton accès ou te connecter à ton compte Camelio.
+
+Au plaisir de partager cet espace avec toi 😊`;
+}, [inviteeName, selectedChildren, selectedSectionIds, sectionPermissions]);
 
   const canSubmit =
     isValidEmail(inviteeEmail) &&
@@ -354,79 +360,78 @@ Merci.`;
   }
 
   async function handleSubmit(event) {
-    event.preventDefault();
+  event.preventDefault();
 
-    if (!canSubmit) {
-      setMessage(
-        "Ajoute un courriel valide, au moins un enfant et au moins une section."
-      );
-      return;
-    }
-
-    const now = new Date().toISOString();
-
-    const cleanSectionPermissions = selectedSectionIds.reduce(
-      (accumulator, sectionId) => {
-        accumulator[sectionId] = sectionPermissions[sectionId] || "read";
-        return accumulator;
-      },
-      {}
+  if (!canSubmit) {
+    setMessage(
+      "Ajoute un courriel valide, au moins un enfant et au moins une section."
     );
-
-    const payload = {
-      id: createShareId(),
-      inviteeName: inviteeName.trim(),
-      inviteeEmail: inviteeEmail.trim().toLowerCase(),
-      childIds: selectedChildIds,
-      children: selectedChildren.map((child) => ({
-        id: child.id,
-        name: displayName(child),
-      })),
-      sectionIds: selectedSectionIds,
-      sectionPermissions: cleanSectionPermissions,
-      permission: getHighestPermission(cleanSectionPermissions),
-      note: note.trim(),
-      status: "pending",
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    try {
-      setIsSaving(true);
-      setMessage("");
-
-      const response = await fetch(`${API_BASE_URL}/api/profile-shares`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Impossible de créer le partage.");
-      }
-
-      const createdShare = data.share || payload;
-
-      setShares((current) => [createdShare, ...current]);
-      setShowForm(false);
-      resetForm();
-    } catch (error) {
-      console.warn("Sauvegarde locale du partage:", error);
-
-      const nextShares = [payload, ...shares];
-      saveLocalShares(nextShares);
-
-      setShowForm(false);
-      resetForm();
-    } finally {
-      setIsSaving(false);
-    }
+    return;
   }
+
+  const now = new Date().toISOString();
+
+  const cleanSectionPermissions = selectedSectionIds.reduce(
+    (accumulator, sectionId) => {
+      accumulator[sectionId] = sectionPermissions[sectionId] || "read";
+      return accumulator;
+    },
+    {}
+  );
+
+  const payload = {
+    id: createShareId(),
+    inviteeName: inviteeName.trim(),
+    inviteeEmail: inviteeEmail.trim().toLowerCase(),
+    childIds: selectedChildIds,
+    children: selectedChildren.map((child) => ({
+      id: child.id,
+      name: displayName(child),
+    })),
+    sectionIds: selectedSectionIds,
+    sectionPermissions: cleanSectionPermissions,
+    permission: getHighestPermission(cleanSectionPermissions),
+    note: note.trim(),
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  try {
+    setIsSaving(true);
+    setMessage("");
+
+    const response = await fetch(`${API_BASE_URL}/api/profile-shares`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Impossible de créer le partage.");
+    }
+
+    const createdShare = data.share || payload;
+
+    setShares((current) => [createdShare, ...current]);
+    setShowForm(false);
+    resetForm();
+  } catch (error) {
+    console.error("Erreur création du partage:", error);
+
+    setMessage(
+      error?.message ||
+        "Impossible d’envoyer l’invitation. Vérifie la connexion ou la configuration du backend."
+    );
+  } finally {
+    setIsSaving(false);
+  }
+}
 
   function removeShare(shareId) {
     const nextShares = shares.filter((share) => share.id !== shareId);
@@ -684,16 +689,16 @@ Merci.`;
                 </div>
 
                 <button
-                  type="button"
-                  onClick={() => {
-                    setUseAutomaticMessage(true);
-                    setNote(automaticMessage);
-                  }}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2 text-xs font-bold text-[#7D756E] transition hover:bg-[#FAF4EC]"
-                >
-                  <Sparkles className="h-4 w-4 text-[#B5A7C8]" />
-                  Utiliser le message automatique
-                </button>
+  type="button"
+  onClick={() => {
+    setUseAutomaticMessage(true);
+    setNote(automaticMessage);
+  }}
+  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+>
+  <Sparkles className="h-5 w-5" />
+  Générer un message automatiquement
+</button>
               </div>
 
               <textarea

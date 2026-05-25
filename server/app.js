@@ -9,6 +9,7 @@ const cors = require("cors");
 const { Issuer, generators } = require("openid-client");
 const { randomUUID } = require("crypto");
 const Stripe = require("stripe");
+const nodemailer = require("nodemailer");
 
 const {
   PutCommand,
@@ -50,7 +51,16 @@ const APP_URL =
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
 
-const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
+const mailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: process.env.SMTP_SECURE === "true",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+    const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
 
 const COGNITO_ISSUER = process.env.COGNITO_ISSUER;
@@ -1238,6 +1248,136 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
     next(error);
   }
 });
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatPermissionLabel(permission) {
+  if (permission === "delete") return "Modifier et supprimer";
+  if (permission === "edit") return "Modifier";
+  return "Lecture seule";
+}
+
+function formatInvitationSections(sectionIds = [], sectionPermissions = {}) {
+  if (!Array.isArray(sectionIds) || sectionIds.length === 0) {
+    return "<li>Aucune section précisée</li>";
+  }
+
+  return sectionIds
+    .map((sectionId) => {
+      const permission = sectionPermissions[sectionId] || "read";
+
+      return `<li>
+        <strong>${escapeHtml(sectionId)}</strong> : ${escapeHtml(
+        formatPermissionLabel(permission)
+      )}
+      </li>`;
+    })
+    .join("");
+}
+
+async function sendProfileShareInvitationEmail(share) {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    throw new Error(
+      "Configuration SMTP manquante. Vérifie SMTP_HOST, SMTP_USER et SMTP_PASS dans Render."
+    );
+  }
+
+  const inviteUrl = `${APP_URL}/login?invite=${share.invitationToken}`;
+
+  const childrenNames = (share.children || [])
+    .map((child) => child.name)
+    .filter(Boolean)
+    .join(", ");
+
+  const sectionsHtml = formatInvitationSections(
+    share.sectionIds,
+    share.sectionPermissions
+  );
+
+  const noteHtml = share.note
+    ? `
+      <div style="margin: 20px 0; padding: 16px; background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 18px;">
+        <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #8F9874; font-weight: bold;">
+          Message
+        </p>
+        <p style="margin: 0; white-space: pre-line;">${escapeHtml(share.note)}</p>
+      </div>
+    `
+    : "";
+
+  await mailTransporter.sendMail({
+    from: `"Camelio" <info@camelio.ca>`,
+    to: share.inviteeEmail,
+    subject: "Tu as reçu une invitation Camelio 😊",
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
+        <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
+          <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">
+            Camelio
+          </p>
+
+          <h2 style="margin: 0 0 16px; color: #4F4A45;">
+            Tu as reçu une invitation Camelio 😊
+          </h2>
+
+          <p>
+            ${escapeHtml(
+              share.ownerName || "Un utilisateur Camelio"
+            )} souhaite te partager un accès à Camelio.
+          </p>
+
+          <p>
+            <strong>Enfant(s) partagé(s) :</strong><br />
+            ${escapeHtml(childrenNames || "Non précisé")}
+          </p>
+
+          <p>
+            <strong>Sections accessibles :</strong>
+          </p>
+
+          <ul>
+            ${sectionsHtml}
+          </ul>
+
+          ${noteHtml}
+
+          <p>
+            Clique sur le bouton ci-dessous pour accepter l’invitation :
+          </p>
+
+          <p style="margin: 24px 0;">
+            <a
+              href="${inviteUrl}"
+              style="
+                display: inline-block;
+                background: #A8B193;
+                color: white;
+                padding: 12px 18px;
+                border-radius: 999px;
+                text-decoration: none;
+                font-weight: bold;
+              "
+            >
+              Accepter l’invitation
+            </a>
+          </p>
+
+          <p style="font-size: 12px; color: #8B8278;">
+            Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur :<br />
+            ${escapeHtml(inviteUrl)}
+          </p>
+        </div>
+      </div>
+    `,
+  });
+}
+
 function cleanProfileSharePayload(body = {}) {
   const inviteeEmail = String(body.inviteeEmail || "")
     .trim()
@@ -1248,18 +1388,149 @@ function cleanProfileSharePayload(body = {}) {
 
   const allowedPermissions = ["read", "edit", "delete"];
 
+  const rawSectionPermissions =
+    body.sectionPermissions && typeof body.sectionPermissions === "object"
+      ? body.sectionPermissions
+      : {};
+
+  const sectionPermissions = sectionIds.reduce((accumulator, sectionId) => {
+    const permission = rawSectionPermissions[sectionId];
+
+    accumulator[sectionId] = allowedPermissions.includes(permission)
+      ? permission
+      : "read";
+
+    return accumulator;
+  }, {});
+
+  const highestPermission = Object.values(sectionPermissions).includes("delete")
+    ? "delete"
+    : Object.values(sectionPermissions).includes("edit")
+      ? "edit"
+      : "read";
+
   return {
     inviteeName: String(body.inviteeName || "").trim(),
     inviteeEmail,
     childIds,
     children: Array.isArray(body.children) ? body.children : [],
     sectionIds,
-    permission: allowedPermissions.includes(body.permission)
-      ? body.permission
-      : "read",
+    sectionPermissions,
+    permission: highestPermission,
     note: String(body.note || "").trim(),
   };
 }
+
+app.get(
+  "/api/profile-shares",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const result = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": getUserPk(req),
+            ":sk": "SHARE#",
+          },
+        })
+      );
+
+      const shares = (result.Items || []).sort((a, b) => {
+        return String(b.createdAt || "").localeCompare(
+          String(a.createdAt || "")
+        );
+      });
+
+      res.json({
+        success: true,
+        shares,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/profile-shares",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const payload = cleanProfileSharePayload(req.body || {});
+
+      if (!payload.inviteeEmail || !payload.inviteeEmail.includes("@")) {
+        return res.status(400).json({
+          error: "invalid_email",
+          message: "Le courriel d’invitation est invalide.",
+        });
+      }
+
+      if (payload.childIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_children",
+          message: "Sélectionnez au moins un enfant à partager.",
+        });
+      }
+
+      if (payload.sectionIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_sections",
+          message: "Sélectionnez au moins une section à partager.",
+        });
+      }
+
+      const now = new Date().toISOString();
+      const shareId = req.body.id || randomUUID();
+
+      const share = {
+        PK: getUserPk(req),
+        SK: `SHARE#${shareId}`,
+        id: shareId,
+        type: "profileShare",
+        ownerUserId: req.session.user.sub,
+        ownerEmail: req.session.user.email || "",
+        ownerName:
+          req.session.user.name ||
+          req.session.user.given_name ||
+          req.session.user.email ||
+          "",
+        ...payload,
+        status: "pending",
+        invitationToken: randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: share,
+        })
+      );
+
+      await sendProfileShareInvitationEmail(share);
+
+      res.status(201).json({
+        success: true,
+        share,
+        message: "L’invitation a été créée et envoyée par courriel.",
+      });
+    } catch (error) {
+      console.error("Erreur création ou envoi invitation Camelio:", error);
+
+      return res.status(500).json({
+        error: "profile_share_invitation_failed",
+        message:
+          error?.message ||
+          "L’invitation a été créée, mais le courriel n’a pas pu être envoyé.",
+      });
+    }
+  }
+);
 
 app.get(
   "/api/profile-shares",
