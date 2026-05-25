@@ -4,12 +4,12 @@ import { Sparkles, CheckCircle2 } from "lucide-react";
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 export default function SubscriptionPopup() {
-  const [loading, setLoading] = useState(false);
+  const [loadingType, setLoadingType] = useState("");
   const [error, setError] = useState("");
 
-  const startCheckout = async () => {
+  const startCheckout = async (trial) => {
     try {
-      setLoading(true);
+      setLoadingType(trial ? "trial" : "paid");
       setError("");
 
       const response = await fetch(`${API_URL}/create-checkout-session`, {
@@ -20,7 +20,7 @@ export default function SubscriptionPopup() {
         credentials: "include",
         body: JSON.stringify({
           lookup_key: "camelio_monthly_595",
-          trial: false,
+          trial,
         }),
       });
 
@@ -36,12 +36,12 @@ export default function SubscriptionPopup() {
         throw new Error(
           data.message ||
             data.error ||
-            "Impossible de créer la session de paiement Stripe."
+            "Impossible de créer la session Stripe."
         );
       }
 
       if (!data.url) {
-        throw new Error("Aucune URL Stripe reçue du serveur.");
+        throw new Error("Aucune URL Stripe reçue.");
       }
 
       window.location.assign(data.url);
@@ -49,7 +49,7 @@ export default function SubscriptionPopup() {
       console.error("Erreur Stripe Checkout:", err);
       setError(err.message || "Une erreur est survenue.");
     } finally {
-      setLoading(false);
+      setLoadingType("");
     }
   };
 
@@ -65,8 +65,9 @@ export default function SubscriptionPopup() {
         </h2>
 
         <p className="mt-3 text-[0.95rem] leading-6 text-[#6B6258]">
-          Pour continuer, activez votre abonnement Camelio. Votre espace sécurisé
-          restera accessible tant que l’abonnement est actif.
+          Pour continuer, choisissez votre option d’abonnement. Vous pouvez
+          commencer avec un essai gratuit de 1 mois ou passer directement à la
+          version payante.
         </p>
 
         <div className="mt-5 rounded-2xl bg-[#F8F3EA] p-4">
@@ -104,16 +105,27 @@ export default function SubscriptionPopup() {
           </p>
         )}
 
-        <div className="mt-5">
+        <div className="mt-5 space-y-3">
           <button
             type="button"
-            onClick={startCheckout}
-            disabled={loading}
+            onClick={() => startCheckout(true)}
+            disabled={Boolean(loadingType)}
             className="w-full rounded-2xl bg-[#8FA173] px-5 py-3.5 text-[0.98rem] font-bold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading
+            {loadingType === "trial"
               ? "Redirection vers Stripe..."
-              : "Activer mon abonnement"}
+              : "Commencer mon essai gratuit de 1 mois"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => startCheckout(false)}
+            disabled={Boolean(loadingType)}
+            className="w-full rounded-2xl border border-[#8FA173]/40 bg-white px-5 py-3.5 text-[0.98rem] font-bold text-[#7A8B69] shadow-sm transition hover:bg-[#F4F7EF] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingType === "paid"
+              ? "Redirection vers Stripe..."
+              : "Passer à la version payante"}
           </button>
         </div>
 
