@@ -133,11 +133,15 @@ export default function Invitation() {
         throw new Error(data?.message || "Impossible d’accepter l’invitation.");
       }
 
-      setMessage("L’accès partagé a été ajouté à votre compte.");
+      setMessage("L’accès partagé a été ajouté à votre compte. Redirection vers votre espace partagé...");
       setInvitation((current) => ({
         ...current,
         status: "accepted",
       }));
+
+      window.setTimeout(() => {
+        window.location.href = "/";
+      }, 900);
     } catch (error) {
       setMessage(error?.message || "Impossible d’accepter l’invitation.");
     } finally {

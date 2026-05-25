@@ -3,6 +3,7 @@ import WelcomeScreen from "./components/WelcomeScreen.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import Billing from "./components/billing.jsx";
 import LandingPage from "./LandingPage.jsx";
+import Invitation from "./pages/Invitation.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
@@ -92,6 +93,10 @@ export default function App() {
       mounted = false;
     };
   }, []);
+
+  if (currentPath === "/invitation") {
+    return <Invitation />;
+  }
 
   /*
     Route publique de la landing page.
