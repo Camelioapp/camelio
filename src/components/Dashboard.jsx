@@ -615,12 +615,10 @@ const firstStepPopup = showFirstStep ? (
   <FirstStep
     isOpen={showFirstStep}
     onClose={() => {
-      localStorage.setItem("camelio_onboarding_completed", "true");
       setShowFirstStep(false);
     }}
     onComplete={(data) => {
       console.log("Configuration initiale complétée:", data);
-      localStorage.setItem("camelio_onboarding_completed", "true");
       setShowFirstStep(false);
     }}
   />

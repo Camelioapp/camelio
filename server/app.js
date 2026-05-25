@@ -293,10 +293,6 @@ app.use(validateTrustedOrigin);
 
 app.set("trust proxy", 1);
 
-app.use(validateTrustedOrigin);
-
-app.set("trust proxy", 1);
-
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -682,6 +678,22 @@ function cleanEventPayload(body = {}) {
   };
 }
 
+function cleanDocumentPayload(body = {}) {
+  const fileName = body.fileName || "";
+  const fileType = inferDocumentFileType(fileName, body.fileType);
+
+  return {
+    fileName,
+    fileType,
+    fileSize: Number(body.fileSize) || 0,
+    childId: body.childId || "",
+    childName: body.childName || "",
+    category: body.category || body.type || "Document",
+    title: body.title || fileName || "Document",
+    note: body.note || "",
+  };
+}
+
 function inferDocumentFileType(fileName = "", fileType = "") {
   const normalizedType = String(fileType || "").trim();
 
@@ -1044,12 +1056,13 @@ app.post("/api/referral-code", requireAuth, (req, res) => {
   });
 });
 
-app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
+app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
     const now = new Date().toISOString();
     const userPk = getUserPk(req);
+    const cleanedProfile = cleanProfilePayload(req.body || {});
 
-    const result = await dynamo.send(
+    const existingResult = await dynamo.send(
       new GetCommand({
         TableName: DYNAMODB_TABLE,
         Key: {
@@ -1059,56 +1072,66 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       })
     );
 
-    const existingUserId = result.Item?.userId
-      ? String(result.Item.userId).replace(/\D/g, "").slice(0, 7)
+    const existingProfile = existingResult.Item || {};
+
+    const existingUserId = existingProfile.userId
+      ? String(existingProfile.userId).replace(/\D/g, "").slice(0, 7)
       : "";
 
-    const hasValidSevenDigitUserId = /^\d{7}$/.test(existingUserId);
+    const userId = /^\d{7}$/.test(existingUserId)
+      ? existingUserId
+      : await generateUniqueSevenDigitUserId();
 
-    let userId = existingUserId;
-
-    if (!hasValidSevenDigitUserId) {
-      userId = await generateUniqueSevenDigitUserId();
-
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: {
-            PK: `USERID#${userId}`,
-            SK: "LOOKUP",
-            type: "userIdLookup",
-            userPk,
-            cognitoSub: req.session.user.sub,
-            email: req.session.user.email || "",
-            createdAt: now,
-          },
-        })
-      );
-    }
+    const hasOnboardingUpdate =
+      Object.prototype.hasOwnProperty.call(req.body || {}, "onboardingCompleted") ||
+      Object.prototype.hasOwnProperty.call(req.body || {}, "onboarding");
 
     const profile = {
-      ...(result.Item || {}),
+      ...existingProfile,
       PK: userPk,
       SK: "PROFILE",
       type: "profile",
       userId,
       cognitoSub: req.session.user.sub,
-      email: result.Item?.email || req.session.user.email || "",
+      email: req.session.user.email || existingProfile.email || "",
+
       name:
-        result.Item?.name ||
-        result.Item?.displayName ||
-        req.session.user.name ||
-        req.session.user.given_name ||
+        req.body?.name ||
+        cleanedProfile.displayName ||
+        existingProfile.name ||
+        existingProfile.displayName ||
         "",
+
       displayName:
-        result.Item?.displayName ||
-        result.Item?.name ||
-        req.session.user.name ||
-        req.session.user.given_name ||
+        cleanedProfile.displayName ||
+        req.body?.name ||
+        existingProfile.displayName ||
+        existingProfile.name ||
         "",
-      phone: result.Item?.phone || "",
-      preferredLanguage: result.Item?.preferredLanguage || "fr",
-      createdAt: result.Item?.createdAt || now,
+
+      phone: cleanedProfile.phone || existingProfile.phone || "",
+      preferredLanguage:
+        cleanedProfile.preferredLanguage ||
+        existingProfile.preferredLanguage ||
+        "fr",
+
+      onboardingCompleted: hasOnboardingUpdate
+        ? req.body?.onboardingCompleted === true
+        : Boolean(existingProfile.onboardingCompleted),
+
+      onboardingSkipped: hasOnboardingUpdate
+        ? req.body?.onboardingSkipped === true
+        : Boolean(existingProfile.onboardingSkipped),
+
+      onboardingCompletedAt: hasOnboardingUpdate
+        ? req.body?.onboardingCompletedAt || now
+        : existingProfile.onboardingCompletedAt || null,
+
+      onboarding: hasOnboardingUpdate
+        ? req.body?.onboarding || {}
+        : existingProfile.onboarding || {},
+
+      createdAt: existingProfile.createdAt || now,
       updatedAt: now,
     };
 
@@ -1120,67 +1143,13 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
     );
 
     return res.json({
+      success: true,
       profile,
     });
   } catch (error) {
     next(error);
   }
 });
-
-const hasOnboardingUpdate =
-  Object.prototype.hasOwnProperty.call(req.body, "onboardingCompleted") ||
-  Object.prototype.hasOwnProperty.call(req.body, "onboarding");
-
-const existingProfile = existingResult.Item || {};
-
-const profile = {
-  ...existingProfile,
-  PK: userPk,
-  SK: "PROFILE",
-  type: "profile",
-  userId,
-  cognitoSub: req.session.user.sub,
-  email: req.session.user.email || existingProfile.email || "",
-
-  name:
-    req.body.name ||
-    cleanedProfile.displayName ||
-    existingProfile.name ||
-    existingProfile.displayName ||
-    "",
-
-  displayName:
-    cleanedProfile.displayName ||
-    req.body.name ||
-    existingProfile.displayName ||
-    existingProfile.name ||
-    "",
-
-  phone: cleanedProfile.phone || existingProfile.phone || "",
-  preferredLanguage:
-    cleanedProfile.preferredLanguage ||
-    existingProfile.preferredLanguage ||
-    "fr",
-
-  onboardingCompleted: hasOnboardingUpdate
-    ? req.body.onboardingCompleted === true
-    : Boolean(existingProfile.onboardingCompleted),
-
-  onboardingSkipped: hasOnboardingUpdate
-    ? req.body.onboardingSkipped === true
-    : Boolean(existingProfile.onboardingSkipped),
-
-  onboardingCompletedAt: hasOnboardingUpdate
-    ? req.body.onboardingCompletedAt || now
-    : existingProfile.onboardingCompletedAt || null,
-
-  onboarding: hasOnboardingUpdate
-    ? req.body.onboarding || {}
-    : existingProfile.onboarding || {},
-
-  createdAt: existingProfile.createdAt || now,
-  updatedAt: now,
-};
 
 app.get(
   "/api/children",
@@ -1620,6 +1589,98 @@ app.post(
         });
       }
 
+      const checkoutSession = await stripe.checkout.sessions.retrieve(
+        session_id,
+        {
+          expand: ["subscription"],
+        }
+      );
+
+      if (checkoutSession.metadata?.userId !== req.session.user.sub) {
+        return res.status(403).json({
+          error: "forbidden_checkout_session",
+          message: "Cette session Stripe n’appartient pas à cet utilisateur.",
+        });
+      }
+
+      const stripeSubscription = checkoutSession.subscription;
+
+      if (!stripeSubscription) {
+        return res.status(400).json({
+          error: "missing_subscription",
+          message: "Aucun abonnement Stripe trouvé pour cette session.",
+        });
+      }
+
+      if (stripeSubscription.metadata?.userId !== req.session.user.sub) {
+        return res.status(403).json({
+          error: "forbidden_subscription",
+          message: "Cet abonnement Stripe n’appartient pas à cet utilisateur.",
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      const trialEnd = stripeSubscription.trial_end
+        ? new Date(stripeSubscription.trial_end * 1000).toISOString()
+        : null;
+
+      const currentPeriodEnd = stripeSubscription.current_period_end
+        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+        : null;
+
+      const subscriptionItem = {
+        PK: getUserPk(req),
+        SK: "SUBSCRIPTION",
+        type: "subscription",
+        userId: req.session.user.sub,
+        email: req.session.user.email || "",
+        status: stripeSubscription.status,
+        plan:
+          stripeSubscription.metadata?.plan ||
+          checkoutSession.metadata?.plan ||
+          STRIPE_PRICE_LOOKUP_KEY,
+        storageGb:
+          Number(stripeSubscription.metadata?.storageGb) ||
+          Number(checkoutSession.metadata?.storageGb) ||
+          Number(STRIPE_STORAGE_GB) ||
+          5,
+        stripeCustomerId: checkoutSession.customer || "",
+        stripeSubscriptionId: stripeSubscription.id,
+        stripeCheckoutSessionId: checkoutSession.id,
+        trialEnd,
+        trialEndsAt: trialEnd,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
+        updatedAt: now,
+        createdAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: subscriptionItem,
+        })
+      );
+
+      return res.json({
+        success: true,
+        hasAccess: ["trialing", "active"].includes(subscriptionItem.status),
+        status: subscriptionItem.status,
+        plan: subscriptionItem.plan,
+        storageGb: subscriptionItem.storageGb,
+        trialEnd: subscriptionItem.trialEnd,
+        trialEndsAt: subscriptionItem.trialEndsAt,
+        currentPeriodEnd: subscriptionItem.currentPeriodEnd,
+        cancelAtPeriodEnd: subscriptionItem.cancelAtPeriodEnd,
+        subscription: subscriptionItem,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 app.post(
   "/api/subscription/activate-code",
   requireAuth,
@@ -1659,7 +1720,6 @@ app.post(
       };
 
       const codeOwner = codeOwners[submittedCode] || "Non défini";
-
       let stripeCustomerId = "";
 
       try {
@@ -1760,206 +1820,6 @@ app.post(
   }
 );
 
-app.post(
-  "/api/subscription/sync-checkout",
-  requireAuth,
-  validateStripeConfig,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const { session_id } = req.body;
-
-      if (!session_id) {
-        return res.status(400).json({
-          error: "missing_session_id",
-          message: "session_id est requis.",
-        });
-      }
-
-      const checkoutSession = await stripe.checkout.sessions.retrieve(
-        session_id,
-        {
-          expand: ["subscription"],
-        }
-      );
-
-      if (checkoutSession.metadata?.userId !== req.session.user.sub) {
-        return res.status(403).json({
-          error: "forbidden_checkout_session",
-          message: "Cette session Stripe n’appartient pas à cet utilisateur.",
-        });
-      }
-
-      const stripeSubscription = checkoutSession.subscription;
-
-      if (!stripeSubscription) {
-        return res.status(400).json({
-          error: "missing_subscription",
-          message: "Aucun abonnement Stripe trouvé pour cette session.",
-        });
-      }
-
-      if (stripeSubscription.metadata?.userId !== req.session.user.sub) {
-        return res.status(403).json({
-          error: "forbidden_subscription",
-          message: "Cet abonnement Stripe n’appartient pas à cet utilisateur.",
-        });
-      }
-
-      const now = new Date().toISOString();
-
-      const trialEnd = stripeSubscription.trial_end
-        ? new Date(stripeSubscription.trial_end * 1000).toISOString()
-        : null;
-
-      const currentPeriodEnd = stripeSubscription.current_period_end
-        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
-        : null;
-
-      const subscriptionItem = {
-        PK: getUserPk(req),
-        SK: "SUBSCRIPTION",
-        type: "subscription",
-        userId: req.session.user.sub,
-        email: req.session.user.email || "",
-        status: stripeSubscription.status,
-        plan:
-          stripeSubscription.metadata?.plan ||
-          checkoutSession.metadata?.plan ||
-          STRIPE_PRICE_LOOKUP_KEY,
-        storageGb:
-          Number(stripeSubscription.metadata?.storageGb) ||
-          Number(checkoutSession.metadata?.storageGb) ||
-          Number(STRIPE_STORAGE_GB) ||
-          5,
-        stripeCustomerId: checkoutSession.customer || "",
-        stripeSubscriptionId: stripeSubscription.id,
-        stripeCheckoutSessionId: checkoutSession.id,
-        trialEnd,
-        trialEndsAt: trialEnd,
-        currentPeriodEnd,
-        cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
-        updatedAt: now,
-        createdAt: now,
-      };
-
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: subscriptionItem,
-        })
-      );
-
-      return res.json({
-        success: true,
-        hasAccess: ["trialing", "active"].includes(subscriptionItem.status),
-        status: subscriptionItem.status,
-        plan: subscriptionItem.plan,
-        storageGb: subscriptionItem.storageGb,
-        trialEnd: subscriptionItem.trialEnd,
-        trialEndsAt: subscriptionItem.trialEndsAt,
-        currentPeriodEnd: subscriptionItem.currentPeriodEnd,
-        cancelAtPeriodEnd: subscriptionItem.cancelAtPeriodEnd,
-        subscription: subscriptionItem,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-      const checkoutSession = await stripe.checkout.sessions.retrieve(
-        session_id,
-        {
-          expand: ["subscription"],
-        }
-      );
-
-      if (checkoutSession.metadata?.userId !== req.session.user.sub) {
-        return res.status(403).json({
-          error: "forbidden_checkout_session",
-          message: "Cette session Stripe n’appartient pas à cet utilisateur.",
-        });
-      }
-
-      const stripeSubscription = checkoutSession.subscription;
-
-      if (!stripeSubscription) {
-        return res.status(400).json({
-          error: "missing_subscription",
-          message: "Aucun abonnement Stripe trouvé pour cette session.",
-        });
-      }
-
-      if (stripeSubscription.metadata?.userId !== req.session.user.sub) {
-        return res.status(403).json({
-          error: "forbidden_subscription",
-          message: "Cet abonnement Stripe n’appartient pas à cet utilisateur.",
-        });
-      }
-
-      const now = new Date().toISOString();
-
-      const trialEnd = stripeSubscription.trial_end
-        ? new Date(stripeSubscription.trial_end * 1000).toISOString()
-        : null;
-
-      const currentPeriodEnd = stripeSubscription.current_period_end
-        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
-        : null;
-
-      const subscriptionItem = {
-        PK: getUserPk(req),
-        SK: "SUBSCRIPTION",
-        type: "subscription",
-        userId: req.session.user.sub,
-        email: req.session.user.email || "",
-        status: stripeSubscription.status,
-        plan:
-          stripeSubscription.metadata?.plan ||
-          checkoutSession.metadata?.plan ||
-          STRIPE_PRICE_LOOKUP_KEY,
-        storageGb:
-          Number(stripeSubscription.metadata?.storageGb) ||
-          Number(checkoutSession.metadata?.storageGb) ||
-          Number(STRIPE_STORAGE_GB) ||
-          5,
-        stripeCustomerId: checkoutSession.customer || "",
-        stripeSubscriptionId: stripeSubscription.id,
-        stripeCheckoutSessionId: checkoutSession.id,
-        trialEnd,
-        trialEndsAt: trialEnd,
-        currentPeriodEnd,
-        cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
-        updatedAt: now,
-        createdAt: now,
-      };
-
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: subscriptionItem,
-        })
-      );
-
-      return res.json({
-        success: true,
-        hasAccess: ["trialing", "active"].includes(subscriptionItem.status),
-        status: subscriptionItem.status,
-        plan: subscriptionItem.plan,
-        storageGb: subscriptionItem.storageGb,
-        trialEnd: subscriptionItem.trialEnd,
-        trialEndsAt: subscriptionItem.trialEndsAt,
-        currentPeriodEnd: subscriptionItem.currentPeriodEnd,
-        cancelAtPeriodEnd: subscriptionItem.cancelAtPeriodEnd,
-        subscription: subscriptionItem,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
 /* =========================
    Documents
    ========================= */
@@ -1971,21 +1831,7 @@ app.post(
   validateS3Config,
   async (req, res, next) => {
     try {
-      function cleanDocumentPayload(body = {}) {
-  const fileName = body.fileName || "";
-  const fileType = inferDocumentFileType(fileName, body.fileType);
-
-  return {
-    fileName,
-    fileType,
-    fileSize: Number(body.fileSize) || 0,
-    childId: body.childId || "",
-    childName: body.childName || "",
-    category: body.category || body.type || "Document",
-    title: body.title || fileName || "Document",
-    note: body.note || "",
-  };
-}
+      const payload = cleanDocumentPayload(req.body || {});
 
       if (!isAllowedDocumentType(payload.fileType)) {
         return res.status(400).json({
@@ -2724,8 +2570,7 @@ app.delete(
 
         return res.json({
           success: true,
-          redirectUrl: "https://camelio.app",
-          message: "Compte supprimé avec succès.",
+          message: "Compte supprimé.",
         });
       });
     } catch (error) {
@@ -2734,60 +2579,16 @@ app.delete(
   }
 );
 
-app.use((error, req, res, next) => {
-  console.error(error);
+/* =========================
+   Diagnostics
+   ========================= */
 
-  if (error.message && error.message.includes("CORS blocked for origin")) {
-    return res.status(403).json({
-      error: "cors_blocked",
-      message: "Origine non autorisée.",
-    });
-  }
+app.use((err, req, res, next) => {
+  console.error("ERREUR SERVEUR:", err);
 
-  if (error.message && error.message.includes("Could not load credentials")) {
-    return res.status(500).json({
-      error: "aws_credentials_missing",
-      message: "AWS ne trouve pas les identifiants.",
-    });
-  }
-
-  if (error.message && error.message.includes("checks.state argument is missing")) {
-    return res.status(400).json({
-      error: "auth_state_missing",
-      message:
-        "La session de connexion Cognito est incomplète. Va sur /logout, puis reconnecte-toi depuis l’application.",
-    });
-  }
-
-  if (error.name === "AccessDenied" || error.name === "AccessDeniedException") {
-    return res.status(403).json({
-      error: "aws_access_denied",
-      message:
-        "Les clés AWS sont présentes, mais elles n'ont pas les permissions nécessaires.",
-      details: IS_PRODUCTION ? undefined : error.message,
-    });
-  }
-
-  if (error.name === "NoSuchBucket") {
-    return res.status(404).json({
-      error: "s3_bucket_not_found",
-      message: "Le bucket S3 est introuvable.",
-      details: IS_PRODUCTION ? undefined : error.message,
-    });
-  }
-
-  if (error.name === "ResourceNotFoundException") {
-    return res.status(404).json({
-      error: "dynamodb_table_not_found",
-      message: "La table DynamoDB est introuvable.",
-    });
-  }
-
-  res.status(500).json({
+  return res.status(500).json({
     error: "server_error",
-    message: IS_PRODUCTION
-      ? "Erreur serveur."
-      : error.message || "Erreur serveur.",
+    message: IS_PRODUCTION ? "Erreur serveur." : err.message,
   });
 });
 
