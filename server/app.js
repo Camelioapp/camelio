@@ -1378,6 +1378,42 @@ async function sendProfileShareInvitationEmail(share) {
   });
 }
 
+console.log("SMTP CONFIG CHECK:", {
+  hasSmtpHost: Boolean(process.env.SMTP_HOST),
+  hasSmtpUser: Boolean(process.env.SMTP_USER),
+  hasSmtpPass: Boolean(process.env.SMTP_PASS),
+  smtpHost: process.env.SMTP_HOST || null,
+  smtpPort: process.env.SMTP_PORT || null,
+  smtpSecure: process.env.SMTP_SECURE || null,
+  smtpUser: process.env.SMTP_USER || null,
+});
+
+app.get("/api/test-email", async (req, res) => {
+  try {
+    await mailTransporter.sendMail({
+      from: `"Camelio" <${process.env.SMTP_USER}>`,
+      to: process.env.SMTP_USER,
+      subject: "Test SMTP Camelio",
+      text: "Si tu reçois ce courriel, SMTP fonctionne.",
+    });
+
+    return res.json({
+      success: true,
+      message: "Courriel de test envoyé.",
+    });
+  } catch (error) {
+    console.error("Erreur test SMTP:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+      code: error.code || null,
+      command: error.command || null,
+      response: error.response || null,
+    });
+  }
+});
+
 function cleanProfileSharePayload(body = {}) {
   const inviteeEmail = String(body.inviteeEmail || "")
     .trim()
