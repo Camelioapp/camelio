@@ -1288,7 +1288,15 @@ async function sendProfileShareInvitationEmail(share) {
     );
   }
 
-  const inviteUrl = `${APP_URL}/login?invite=${share.invitationToken}`;
+  const inviteLink = new URL("/login", APP_URL);
+
+  inviteLink.searchParams.set("invite", share.invitationToken);
+
+  if (share.importAccessKey) {
+    inviteLink.searchParams.set("accessKey", share.importAccessKey);
+  }
+
+  const inviteUrl = inviteLink.toString();
 
   const childrenNames = (share.children || [])
     .map((child) => child.name)
@@ -1378,41 +1386,16 @@ async function sendProfileShareInvitationEmail(share) {
   });
 }
 
-console.log("SMTP CONFIG CHECK:", {
-  hasSmtpHost: Boolean(process.env.SMTP_HOST),
-  hasSmtpUser: Boolean(process.env.SMTP_USER),
-  hasSmtpPass: Boolean(process.env.SMTP_PASS),
-  smtpHost: process.env.SMTP_HOST || null,
-  smtpPort: process.env.SMTP_PORT || null,
-  smtpSecure: process.env.SMTP_SECURE || null,
-  smtpUser: process.env.SMTP_USER || null,
-});
+function cleanImportAccessKey(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]/g, "")
+    .slice(0, 80);
+}
 
-app.get("/api/test-email", async (req, res) => {
-  try {
-    await mailTransporter.sendMail({
-      from: `"Camelio" <${process.env.SMTP_USER}>`,
-      to: process.env.SMTP_USER,
-      subject: "Test SMTP Camelio",
-      text: "Si tu reçois ce courriel, SMTP fonctionne.",
-    });
-
-    return res.json({
-      success: true,
-      message: "Courriel de test envoyé.",
-    });
-  } catch (error) {
-    console.error("Erreur test SMTP:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-      code: error.code || null,
-      command: error.command || null,
-      response: error.response || null,
-    });
-  }
-});
+function createInvitationAccessKey() {
+  return randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase();
+}
 
 function cleanProfileSharePayload(body = {}) {
   const inviteeEmail = String(body.inviteeEmail || "")
@@ -1448,6 +1431,7 @@ function cleanProfileSharePayload(body = {}) {
   return {
     inviteeName: String(body.inviteeName || "").trim(),
     inviteeEmail,
+    importAccessKey: cleanImportAccessKey(body.importAccessKey),
     childIds,
     children: Array.isArray(body.children) ? body.children : [],
     sectionIds,
@@ -1494,7 +1478,9 @@ app.post(
   "/api/profile-shares",
   requireAuth,
   validateAwsConfig,
-  async (req, res, next) => {
+  async (req, res) => {
+    let share = null;
+
     try {
       const payload = cleanProfileSharePayload(req.body || {});
 
@@ -1522,7 +1508,7 @@ app.post(
       const now = new Date().toISOString();
       const shareId = req.body.id || randomUUID();
 
-      const share = {
+      share = {
         PK: getUserPk(req),
         SK: `SHARE#${shareId}`,
         id: shareId,
@@ -1537,6 +1523,7 @@ app.post(
         ...payload,
         status: "pending",
         invitationToken: randomUUID(),
+        importAccessKey: payload.importAccessKey || createInvitationAccessKey(),
         createdAt: now,
         updatedAt: now,
       };
@@ -1550,7 +1537,7 @@ app.post(
 
       await sendProfileShareInvitationEmail(share);
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         share,
         message: "L’invitation a été créée et envoyée par courriel.",
@@ -1560,9 +1547,13 @@ app.post(
 
       return res.status(500).json({
         error: "profile_share_invitation_failed",
+        shareCreated: Boolean(share),
+        share,
         message:
-          error?.message ||
-          "L’invitation a été créée, mais le courriel n’a pas pu être envoyé.",
+          share
+            ? "L’invitation a été créée, mais le courriel n’a pas pu être envoyé."
+            : error?.message || "L’invitation n’a pas pu être créée.",
+        details: error?.message || null,
       });
     }
   }

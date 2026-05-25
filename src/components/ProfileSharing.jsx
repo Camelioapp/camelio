@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   Eye,
+  KeyRound,
   Mail,
   Pencil,
   ShieldCheck,
@@ -16,8 +17,7 @@ import {
 import { SectionTitle } from "./shared.jsx";
 import { displayName, sections } from "./sectionsData.js";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://api.camelio.app";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
 const LOCAL_STORAGE_KEY = "camelio_profile_shares";
 
@@ -33,7 +33,8 @@ const permissionOptions = [
     id: "edit",
     title: "Modifier",
     shortTitle: "Modifier",
-    description: "La personne peut consulter et modifier les informations partagées.",
+    description:
+      "La personne peut consulter et modifier les informations partagées.",
     icon: Pencil,
   },
   {
@@ -69,6 +70,13 @@ function createShareId() {
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
+
+function cleanImportAccessKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]/g, "")
+    .slice(0, 80);
 }
 
 function getChildInitials(child) {
@@ -188,6 +196,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [showForm, setShowForm] = useState(false);
   const [inviteeName, setInviteeName] = useState("");
   const [inviteeEmail, setInviteeEmail] = useState("");
+  const [importAccessKey, setImportAccessKey] = useState("");
   const [selectedChildIds, setSelectedChildIds] = useState([]);
   const [selectedSectionIds, setSelectedSectionIds] = useState([
     "children",
@@ -212,32 +221,32 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   }, [children, selectedChildIds]);
 
   const automaticMessage = useMemo(() => {
-  const personName = inviteeName.trim();
-  const greeting = personName ? `Salut ${personName} 😊,` : "Salut 😊,";
+    const personName = inviteeName.trim();
+    const greeting = personName ? `Salut ${personName} 😊,` : "Salut 😊,";
 
-  const childNames = selectedChildren.map((child) => displayName(child));
-  const childText =
-    childNames.length > 0 ? formatList(childNames) : "mes cocos précieux";
+    const childNames = selectedChildren.map((child) => displayName(child));
+    const childText =
+      childNames.length > 0 ? formatList(childNames) : "mes cocos précieux";
 
-  const sectionDetails = selectedSectionIds
-    .map((sectionId) => {
-      const section = sections.find((item) => item.id === sectionId);
-      if (!section) return null;
+    const sectionDetails = selectedSectionIds
+      .map((sectionId) => {
+        const section = sections.find((item) => item.id === sectionId);
+        if (!section) return null;
 
-      return `${section.title} (${getPermissionLabel(
-        sectionPermissions[sectionId] || "read"
-      ).toLowerCase()})`;
-    })
-    .filter(Boolean);
+        return `${section.title} (${getPermissionLabel(
+          sectionPermissions[sectionId] || "read"
+        ).toLowerCase()})`;
+      })
+      .filter(Boolean);
 
-  const sectionText =
-    sectionDetails.length > 0
-      ? formatList(sectionDetails)
-      : "les sections sélectionnées";
+    const sectionText =
+      sectionDetails.length > 0
+        ? formatList(sectionDetails)
+        : "les sections sélectionnées";
 
-  return `${greeting}
+    return `${greeting}
 
-Je te partage un accès Camelio pour mes cocos précieux, ${childText}.
+Je te partage un accès Camelio pour ${childText}.
 
 Je t’ai préparé un accès personnalisé pour que tu puisses consulter facilement ce qui est important 😊
 
@@ -245,10 +254,10 @@ Tu auras accès aux sections suivantes : ${sectionText}.
 
 Camelio nous permet de garder au même endroit les informations importantes, les souvenirs, les documents et les suivis liés aux enfants.
 
-Tu vas recevoir une invitation par courriel pour créer ton accès ou te connecter à ton compte Camelio.
+Tu vas recevoir une invitation par courriel avec un lien sécurisé pour créer ton accès ou te connecter à ton compte Camelio.
 
 Au plaisir de partager cet espace avec toi 😊`;
-}, [inviteeName, selectedChildren, selectedSectionIds, sectionPermissions]);
+  }, [inviteeName, selectedChildren, selectedSectionIds, sectionPermissions]);
 
   const canSubmit =
     isValidEmail(inviteeEmail) &&
@@ -347,6 +356,7 @@ Au plaisir de partager cet espace avec toi 😊`;
   function resetForm() {
     setInviteeName("");
     setInviteeEmail("");
+    setImportAccessKey("");
     setSelectedChildIds([]);
     setSelectedSectionIds(["children", "calendar", "documents"]);
     setSectionPermissions({
@@ -360,78 +370,79 @@ Au plaisir de partager cet espace avec toi 😊`;
   }
 
   async function handleSubmit(event) {
-  event.preventDefault();
+    event.preventDefault();
 
-  if (!canSubmit) {
-    setMessage(
-      "Ajoute un courriel valide, au moins un enfant et au moins une section."
-    );
-    return;
-  }
-
-  const now = new Date().toISOString();
-
-  const cleanSectionPermissions = selectedSectionIds.reduce(
-    (accumulator, sectionId) => {
-      accumulator[sectionId] = sectionPermissions[sectionId] || "read";
-      return accumulator;
-    },
-    {}
-  );
-
-  const payload = {
-    id: createShareId(),
-    inviteeName: inviteeName.trim(),
-    inviteeEmail: inviteeEmail.trim().toLowerCase(),
-    childIds: selectedChildIds,
-    children: selectedChildren.map((child) => ({
-      id: child.id,
-      name: displayName(child),
-    })),
-    sectionIds: selectedSectionIds,
-    sectionPermissions: cleanSectionPermissions,
-    permission: getHighestPermission(cleanSectionPermissions),
-    note: note.trim(),
-    status: "pending",
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    setIsSaving(true);
-    setMessage("");
-
-    const response = await fetch(`${API_BASE_URL}/api/profile-shares`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data?.message || "Impossible de créer le partage.");
+    if (!canSubmit) {
+      setMessage(
+        "Ajoute un courriel valide, au moins un enfant et au moins une section."
+      );
+      return;
     }
 
-    const createdShare = data.share || payload;
+    const now = new Date().toISOString();
 
-    setShares((current) => [createdShare, ...current]);
-    setShowForm(false);
-    resetForm();
-  } catch (error) {
-    console.error("Erreur création du partage:", error);
-
-    setMessage(
-      error?.message ||
-        "Impossible d’envoyer l’invitation. Vérifie la connexion ou la configuration du backend."
+    const cleanSectionPermissions = selectedSectionIds.reduce(
+      (accumulator, sectionId) => {
+        accumulator[sectionId] = sectionPermissions[sectionId] || "read";
+        return accumulator;
+      },
+      {}
     );
-  } finally {
-    setIsSaving(false);
+
+    const payload = {
+      id: createShareId(),
+      inviteeName: inviteeName.trim(),
+      inviteeEmail: inviteeEmail.trim().toLowerCase(),
+      importAccessKey: cleanImportAccessKey(importAccessKey),
+      childIds: selectedChildIds,
+      children: selectedChildren.map((child) => ({
+        id: child.id,
+        name: displayName(child),
+      })),
+      sectionIds: selectedSectionIds,
+      sectionPermissions: cleanSectionPermissions,
+      permission: getHighestPermission(cleanSectionPermissions),
+      note: note.trim(),
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    try {
+      setIsSaving(true);
+      setMessage("");
+
+      const response = await fetch(`${API_BASE_URL}/api/profile-shares`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Impossible de créer le partage.");
+      }
+
+      const createdShare = data.share || payload;
+
+      setShares((current) => [createdShare, ...current]);
+      setShowForm(false);
+      resetForm();
+    } catch (error) {
+      console.error("Erreur création du partage:", error);
+
+      setMessage(
+        error?.message ||
+          "Impossible d’envoyer l’invitation. Vérifie la connexion ou la configuration du backend."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
-}
 
   function removeShare(shareId) {
     const nextShares = shares.filter((share) => share.id !== shareId);
@@ -545,6 +556,31 @@ Au plaisir de partager cet espace avec toi 😊`;
                   onChange={(event) => setInviteeEmail(event.target.value)}
                   placeholder="exemple@email.com"
                 />
+              </label>
+
+              <label className="block w-full md:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-[#4F4A45]">
+                  Clé d’importation ou d’accès
+                </span>
+
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#B8AA9A]" />
+
+                  <input
+                    className="w-full rounded-3xl border border-[#EADFCF] bg-white px-11 py-3 text-sm text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
+                    value={importAccessKey}
+                    onChange={(event) =>
+                      setImportAccessKey(cleanImportAccessKey(event.target.value))
+                    }
+                    placeholder="Ex. ACCES-MARIE-2026"
+                  />
+                </div>
+
+                <p className="mt-2 text-xs leading-5 text-[#8B8278]">
+                  Cette clé sera ajoutée au lien sécurisé envoyé par courriel.
+                  Si le champ est vide, le serveur pourra générer une clé
+                  automatiquement.
+                </p>
               </label>
             </div>
 
@@ -689,16 +725,16 @@ Au plaisir de partager cet espace avec toi 😊`;
                 </div>
 
                 <button
-  type="button"
-  onClick={() => {
-    setUseAutomaticMessage(true);
-    setNote(automaticMessage);
-  }}
-  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
->
-  <Sparkles className="h-5 w-5" />
-  Générer un message automatiquement
-</button>
+                  type="button"
+                  onClick={() => {
+                    setUseAutomaticMessage(true);
+                    setNote(automaticMessage);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                >
+                  <Sparkles className="h-5 w-5" />
+                  Générer un message automatiquement
+                </button>
               </div>
 
               <textarea
@@ -811,6 +847,13 @@ Au plaisir de partager cet espace avec toi 😊`;
                       <p className="mt-1 text-sm text-[#7D756E]">
                         {share.inviteeEmail}
                       </p>
+
+                      {share.importAccessKey ? (
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#EADFCF] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B625A]">
+                          <KeyRound className="h-3.5 w-3.5 text-[#A8B193]" />
+                          Clé d’accès : {share.importAccessKey}
+                        </div>
+                      ) : null}
 
                       <p className="mt-3 text-sm leading-6 text-[#5F5A52]">
                         <strong>Enfants :</strong>{" "}
