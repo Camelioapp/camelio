@@ -17,6 +17,7 @@ const {
   UpdateCommand,
   DeleteCommand,
   BatchWriteCommand,
+  ScanCommand,
 } = require("@aws-sdk/lib-dynamodb");
 
 const {
@@ -887,8 +888,8 @@ app.get("/health", (req, res) => {
 app.get("/api/version", (req, res) => {
   res.json({
     success: true,
-    version: "resend-email-no-access-key-2026-05-25",
-    message: "Cette version utilise Resend pour les courriels, sans clé d’accès.",
+    version: "profile-sharing-keys-2026-05-25",
+    message: "Cette version utilise Resend et les clés de sécurité de partage.",
   });
 });
 
@@ -1366,6 +1367,7 @@ async function sendProfileShareInvitationEmail(share) {
 
   inviteLink.searchParams.set("invite", share.invitationToken);
 
+
   const inviteUrl = inviteLink.toString();
 
   const childrenNames = (share.children || [])
@@ -1458,6 +1460,24 @@ async function sendProfileShareInvitationEmail(share) {
   });
 }
 
+function createSecurityCode() {
+  return String(Math.floor(1000000 + Math.random() * 9000000));
+}
+
+function cleanSecurityCode(value = "") {
+  return String(value || "").replace(/\D/g, "").slice(0, 7);
+}
+
+function createInvitationExpiry() {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+}
+
+function isExpiredIsoDate(value) {
+  if (!value) return true;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return true;
+  return date.getTime() < Date.now();
+}
 
 function cleanProfileSharePayload(body = {}) {
   const inviteeEmail = String(body.inviteeEmail || "")
@@ -1584,6 +1604,11 @@ app.post(
         ...payload,
         status: "pending",
         invitationToken: randomUUID(),
+        invitationExpiresAt: createInvitationExpiry(),
+        securityCode: createSecurityCode(),
+        importedByUserId: "",
+        importedByEmail: "",
+        importedAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -1615,6 +1640,240 @@ app.post(
             : error?.message || "L’invitation n’a pas pu être créée.",
         details: error?.message || null,
       });
+    }
+  }
+);
+
+app.put(
+  "/api/profile-shares/:shareId",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { shareId } = req.params;
+      const payload = cleanProfileSharePayload(req.body || {});
+
+      if (!payload.inviteeEmail || !payload.inviteeEmail.includes("@")) {
+        return res.status(400).json({
+          error: "invalid_email",
+          message: "Le courriel d’invitation est invalide.",
+        });
+      }
+
+      if (payload.childIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_children",
+          message: "Sélectionnez au moins un enfant à partager.",
+        });
+      }
+
+      if (payload.sectionIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_sections",
+          message: "Sélectionnez au moins une section à partager.",
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      const result = await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `SHARE#${shareId}`,
+          },
+          UpdateExpression:
+            "SET inviteeName = :inviteeName, inviteeEmail = :inviteeEmail, childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, permission = :permission, note = :note, updatedAt = :updatedAt",
+          ExpressionAttributeValues: {
+            ":inviteeName": payload.inviteeName,
+            ":inviteeEmail": payload.inviteeEmail,
+            ":childIds": payload.childIds,
+            ":children": payload.children,
+            ":sectionIds": payload.sectionIds,
+            ":sectionPermissions": payload.sectionPermissions,
+            ":permission": payload.permission,
+            ":note": payload.note,
+            ":updatedAt": now,
+          },
+          ReturnValues: "ALL_NEW",
+        })
+      );
+
+      return res.json({
+        success: true,
+        share: result.Attributes,
+        message: "L’accès a été modifié.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.delete(
+  "/api/profile-shares/:shareId",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { shareId } = req.params;
+
+      await dynamo.send(
+        new DeleteCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `SHARE#${shareId}`,
+          },
+        })
+      );
+
+      return res.json({
+        success: true,
+        deletedId: shareId,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/profile-shares/:shareId/regenerate-link",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { shareId } = req.params;
+      const now = new Date().toISOString();
+
+      const result = await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `SHARE#${shareId}`,
+          },
+          UpdateExpression:
+            "SET invitationToken = :invitationToken, invitationExpiresAt = :invitationExpiresAt, securityCode = :securityCode, #status = :status, importedByUserId = :empty, importedByEmail = :empty, importedAt = :nullValue, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":invitationToken": randomUUID(),
+            ":invitationExpiresAt": createInvitationExpiry(),
+            ":securityCode": createSecurityCode(),
+            ":status": "pending",
+            ":empty": "",
+            ":nullValue": null,
+            ":updatedAt": now,
+          },
+          ReturnValues: "ALL_NEW",
+        })
+      );
+
+      await sendProfileShareInvitationEmail(result.Attributes);
+
+      return res.json({
+        success: true,
+        share: result.Attributes,
+        message: "Un nouveau lien sécurisé a été généré et envoyé.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/profile-shares/import-key",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const securityCode = cleanSecurityCode(req.body?.securityCode);
+      const invitationToken = String(req.body?.invitationToken || req.body?.invite || "").trim();
+
+      if (!/^\d{7}$/.test(securityCode)) {
+        return res.status(400).json({
+          error: "invalid_security_code",
+          message: "La clé de sécurité doit contenir 7 chiffres.",
+        });
+      }
+
+      if (!invitationToken) {
+        return res.status(400).json({
+          error: "missing_invitation_token",
+          message: "Le lien d’invitation est requis pour importer la clé.",
+        });
+      }
+
+      const scanResult = await dynamo.send(
+        new ScanCommand({
+          TableName: DYNAMODB_TABLE,
+          FilterExpression:
+            "#type = :type AND invitationToken = :invitationToken AND securityCode = :securityCode",
+          ExpressionAttributeNames: {
+            "#type": "type",
+          },
+          ExpressionAttributeValues: {
+            ":type": "profileShare",
+            ":invitationToken": invitationToken,
+            ":securityCode": securityCode,
+          },
+          Limit: 1,
+        })
+      );
+
+      const share = (scanResult.Items || [])[0];
+
+      if (!share) {
+        return res.status(404).json({
+          error: "share_not_found",
+          message: "Aucune invitation ne correspond à cette clé.",
+        });
+      }
+
+      if (isExpiredIsoDate(share.invitationExpiresAt)) {
+        return res.status(410).json({
+          error: "invitation_expired",
+          message: "Le lien sécurisé est expiré. Demandez un nouveau lien.",
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      const result = await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: share.PK,
+            SK: share.SK,
+          },
+          UpdateExpression:
+            "SET #status = :status, importedByUserId = :importedByUserId, importedByEmail = :importedByEmail, importedAt = :importedAt, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":status": "accepted",
+            ":importedByUserId": req.session.user.sub,
+            ":importedByEmail": req.session.user.email || "",
+            ":importedAt": now,
+            ":updatedAt": now,
+          },
+          ReturnValues: "ALL_NEW",
+        })
+      );
+
+      return res.json({
+        success: true,
+        share: result.Attributes,
+        message: "La clé a été importée avec succès.",
+      });
+    } catch (error) {
+      next(error);
     }
   }
 );

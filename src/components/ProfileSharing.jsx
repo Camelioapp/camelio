@@ -2,9 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Check,
   ChevronDown,
+  ChevronUp,
+  Copy,
   Eye,
+  KeyRound,
   Mail,
   Pencil,
+  RefreshCcw,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -17,7 +21,6 @@ import { SectionTitle } from "./shared.jsx";
 import { displayName, sections } from "./sectionsData.js";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
-
 const LOCAL_STORAGE_KEY = "camelio_profile_shares";
 
 const permissionOptions = [
@@ -25,23 +28,18 @@ const permissionOptions = [
     id: "read",
     title: "Lecture seule",
     shortTitle: "Lecture",
-    description: "La personne peut consulter les informations partagées.",
     icon: Eye,
   },
   {
     id: "edit",
     title: "Modifier",
     shortTitle: "Modifier",
-    description:
-      "La personne peut consulter et modifier les informations partagées.",
     icon: Pencil,
   },
   {
     id: "delete",
     title: "Modifier et supprimer",
     shortTitle: "Supprimer",
-    description:
-      "La personne peut consulter, modifier et supprimer les informations partagées.",
     icon: Trash2,
   },
 ];
@@ -71,6 +69,9 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
 }
 
+function cleanSecurityCode(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 7);
+}
 
 function getChildInitials(child) {
   const first =
@@ -89,16 +90,30 @@ function getChildPhoto(child) {
 }
 
 function formatDate(value) {
-  if (!value) return "À l’instant";
+  if (!value) return "Non précisé";
 
   const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "À l’instant";
+  if (Number.isNaN(date.getTime())) return "Non précisé";
 
   return date.toLocaleDateString("fr-CA", {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+}
+
+function formatDateTime(value) {
+  if (!value) return "Non précisé";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Non précisé";
+
+  return date.toLocaleString("fr-CA", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -121,13 +136,25 @@ function getHighestPermission(sectionPermissions = {}) {
 function formatList(items = []) {
   const cleanItems = items.filter(Boolean);
 
-  if (cleanItems.length === 0) return "";
+  if (cleanItems.length === 0) return "Non précisé";
   if (cleanItems.length === 1) return cleanItems[0];
   if (cleanItems.length === 2) return `${cleanItems[0]} et ${cleanItems[1]}`;
 
   return `${cleanItems.slice(0, -1).join(", ")} et ${
     cleanItems[cleanItems.length - 1]
   }`;
+}
+
+function getStatusLabel(status) {
+  if (status === "accepted") return "Importé";
+  if (status === "revoked") return "Retiré";
+  return "En attente";
+}
+
+function getStatusClasses(status) {
+  if (status === "accepted") return "bg-[#EEF7F0] text-[#5C8A64]";
+  if (status === "revoked") return "bg-[#FFF0EF] text-[#B9544A]";
+  return "bg-[#F3F6ED] text-[#6F785F]";
 }
 
 function ChildAvatar({ child, selected }) {
@@ -185,8 +212,10 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [shares, setShares] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedShareId, setExpandedShareId] = useState("");
 
   const [showForm, setShowForm] = useState(false);
+  const [editingShare, setEditingShare] = useState(null);
   const [inviteeName, setInviteeName] = useState("");
   const [inviteeEmail, setInviteeEmail] = useState("");
   const [selectedChildIds, setSelectedChildIds] = useState([]);
@@ -203,6 +232,19 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [note, setNote] = useState("");
   const [useAutomaticMessage, setUseAutomaticMessage] = useState(false);
   const [message, setMessage] = useState("");
+
+  const [showImportKey, setShowImportKey] = useState(false);
+  const [securityCodeToImport, setSecurityCodeToImport] = useState("");
+  const [importMessage, setImportMessage] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+
+  const invitationTokenFromUrl = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("invite") || "";
+    } catch {
+      return "";
+    }
+  }, []);
 
   const shareableSections = useMemo(() => {
     return sections.filter((section) => shareableSectionIds.includes(section.id));
@@ -236,19 +278,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
         ? formatList(sectionDetails)
         : "les sections sélectionnées";
 
-    return `${greeting}
-
-Je te partage un accès Camelio pour ${childText}.
-
-Je t’ai préparé un accès personnalisé pour que tu puisses consulter facilement ce qui est important 😊
-
-Tu auras accès aux sections suivantes : ${sectionText}.
-
-Camelio nous permet de garder au même endroit les informations importantes, les souvenirs, les documents et les suivis liés aux enfants.
-
-Tu vas recevoir une invitation par courriel avec un lien sécurisé pour créer ton accès ou te connecter à ton compte Camelio.
-
-Au plaisir de partager cet espace avec toi 😊`;
+    return `${greeting}\n\nJe te partage un accès Camelio pour ${childText}.\n\nTu auras accès aux sections suivantes : ${sectionText}.\n\nTu vas recevoir une invitation par courriel avec un lien sécurisé. Je te transmettrai aussi une clé de sécurité à 7 chiffres à inscrire dans Camelio.`;
   }, [inviteeName, selectedChildren, selectedSectionIds, sectionPermissions]);
 
   const canSubmit =
@@ -259,6 +289,12 @@ Au plaisir de partager cet espace avec toi 😊`;
   useEffect(() => {
     loadShares();
   }, []);
+
+  useEffect(() => {
+    if (invitationTokenFromUrl) {
+      setShowImportKey(true);
+    }
+  }, [invitationTokenFromUrl]);
 
   useEffect(() => {
     if (useAutomaticMessage) {
@@ -281,7 +317,9 @@ Au plaisir de partager cet espace avec toi 😊`;
         throw new Error(data?.message || "Impossible de charger les partages.");
       }
 
-      setShares(Array.isArray(data.shares) ? data.shares : []);
+      const nextShares = Array.isArray(data.shares) ? data.shares : [];
+      setShares(nextShares);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(nextShares));
     } catch (error) {
       console.warn("Chargement local des partages:", error);
 
@@ -296,9 +334,47 @@ Au plaisir de partager cet espace avec toi 😊`;
     }
   }
 
-  function saveLocalShares(nextShares) {
+  function updateSharesLocally(nextShares) {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(nextShares));
     setShares(nextShares);
+  }
+
+  function resetForm() {
+    setEditingShare(null);
+    setInviteeName("");
+    setInviteeEmail("");
+    setSelectedChildIds([]);
+    setSelectedSectionIds(["children", "calendar", "documents"]);
+    setSectionPermissions({
+      children: "read",
+      calendar: "read",
+      documents: "read",
+    });
+    setNote("");
+    setUseAutomaticMessage(false);
+    setMessage("");
+  }
+
+  function openCreateForm() {
+    resetForm();
+    setShowForm(true);
+  }
+
+  function openEditForm(share) {
+    setEditingShare(share);
+    setInviteeName(share.inviteeName || "");
+    setInviteeEmail(share.inviteeEmail || "");
+    setSelectedChildIds(Array.isArray(share.childIds) ? share.childIds : []);
+    setSelectedSectionIds(
+      Array.isArray(share.sectionIds) && share.sectionIds.length > 0
+        ? share.sectionIds
+        : ["children", "calendar", "documents"]
+    );
+    setSectionPermissions(share.sectionPermissions || {});
+    setNote(share.note || "");
+    setUseAutomaticMessage(false);
+    setMessage("");
+    setShowForm(true);
   }
 
   function toggleChild(childId) {
@@ -314,15 +390,13 @@ Au plaisir de partager cet espace avec toi 😊`;
       const alreadySelected = current.includes(sectionId);
 
       if (alreadySelected) {
-        const nextSectionIds = current.filter((id) => id !== sectionId);
-
         setSectionPermissions((currentPermissions) => {
           const nextPermissions = { ...currentPermissions };
           delete nextPermissions[sectionId];
           return nextPermissions;
         });
 
-        return nextSectionIds;
+        return current.filter((id) => id !== sectionId);
       }
 
       setSectionPermissions((currentPermissions) => ({
@@ -345,19 +419,29 @@ Au plaisir de partager cet espace avec toi 😊`;
     }));
   }
 
-  function resetForm() {
-    setInviteeName("");
-    setInviteeEmail("");
-    setSelectedChildIds([]);
-    setSelectedSectionIds(["children", "calendar", "documents"]);
-    setSectionPermissions({
-      children: "read",
-      calendar: "read",
-      documents: "read",
-    });
-    setNote("");
-    setUseAutomaticMessage(false);
-    setMessage("");
+  function buildPayload() {
+    const cleanSectionPermissions = selectedSectionIds.reduce(
+      (accumulator, sectionId) => {
+        accumulator[sectionId] = sectionPermissions[sectionId] || "read";
+        return accumulator;
+      },
+      {}
+    );
+
+    return {
+      id: editingShare?.id || createShareId(),
+      inviteeName: inviteeName.trim(),
+      inviteeEmail: inviteeEmail.trim().toLowerCase(),
+      childIds: selectedChildIds,
+      children: selectedChildren.map((child) => ({
+        id: child.id,
+        name: displayName(child),
+      })),
+      sectionIds: selectedSectionIds,
+      sectionPermissions: cleanSectionPermissions,
+      permission: getHighestPermission(cleanSectionPermissions),
+      note: note.trim(),
+    };
   }
 
   async function handleSubmit(event) {
@@ -370,40 +454,18 @@ Au plaisir de partager cet espace avec toi 😊`;
       return;
     }
 
-    const now = new Date().toISOString();
-
-    const cleanSectionPermissions = selectedSectionIds.reduce(
-      (accumulator, sectionId) => {
-        accumulator[sectionId] = sectionPermissions[sectionId] || "read";
-        return accumulator;
-      },
-      {}
-    );
-
-    const payload = {
-      id: createShareId(),
-      inviteeName: inviteeName.trim(),
-      inviteeEmail: inviteeEmail.trim().toLowerCase(),
-      childIds: selectedChildIds,
-      children: selectedChildren.map((child) => ({
-        id: child.id,
-        name: displayName(child),
-      })),
-      sectionIds: selectedSectionIds,
-      sectionPermissions: cleanSectionPermissions,
-      permission: getHighestPermission(cleanSectionPermissions),
-      note: note.trim(),
-      status: "pending",
-      createdAt: now,
-      updatedAt: now,
-    };
+    const payload = buildPayload();
+    const isEditing = Boolean(editingShare?.id);
+    const url = isEditing
+      ? `${API_BASE_URL}/api/profile-shares/${editingShare.id}`
+      : `${API_BASE_URL}/api/profile-shares`;
 
     try {
       setIsSaving(true);
       setMessage("");
 
-      const response = await fetch(`${API_BASE_URL}/api/profile-shares`, {
-        method: "POST",
+      const response = await fetch(url, {
+        method: isEditing ? "PUT" : "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -411,32 +473,136 @@ Au plaisir de partager cet espace avec toi 😊`;
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data?.message || "Impossible de créer le partage.");
+        if (data?.share) {
+          const createdOrUpdatedShare = data.share;
+          setShares((current) => {
+            const exists = current.some((share) => share.id === createdOrUpdatedShare.id);
+            return exists
+              ? current.map((share) =>
+                  share.id === createdOrUpdatedShare.id ? createdOrUpdatedShare : share
+                )
+              : [createdOrUpdatedShare, ...current];
+          });
+        }
+
+        throw new Error(data?.details || data?.message || "Impossible de créer le partage.");
       }
 
-      const createdShare = data.share || payload;
+      const savedShare = data.share || payload;
 
-      setShares((current) => [createdShare, ...current]);
+      setShares((current) => {
+        const exists = current.some((share) => share.id === savedShare.id);
+        return exists
+          ? current.map((share) => (share.id === savedShare.id ? savedShare : share))
+          : [savedShare, ...current];
+      });
+
+      setExpandedShareId(savedShare.id);
       setShowForm(false);
       resetForm();
     } catch (error) {
-      console.error("Erreur création du partage:", error);
-
+      console.error("Erreur création ou modification du partage:", error);
       setMessage(
         error?.message ||
-          "Impossible d’envoyer l’invitation. Vérifie la connexion ou la configuration du backend."
+          "Impossible d’envoyer l’invitation. Vérifie Resend ou la configuration du backend."
       );
     } finally {
       setIsSaving(false);
     }
   }
 
-  function removeShare(shareId) {
+  async function removeShare(shareId) {
+    try {
+      await fetch(`${API_BASE_URL}/api/profile-shares/${shareId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.warn("Suppression distante impossible, suppression locale:", error);
+    }
+
     const nextShares = shares.filter((share) => share.id !== shareId);
-    saveLocalShares(nextShares);
+    updateSharesLocally(nextShares);
+  }
+
+  async function regenerateShare(shareId) {
+    try {
+      setMessage("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile-shares/${shareId}/regenerate-link`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Impossible de recréer le lien.");
+      }
+
+      setShares((current) =>
+        current.map((share) => (share.id === shareId ? data.share : share))
+      );
+      setExpandedShareId(shareId);
+      setMessage("Nouveau lien sécurisé envoyé. La nouvelle clé est affichée dans l’accès.");
+    } catch (error) {
+      console.error("Erreur recréation du lien:", error);
+      setMessage(error?.message || "Impossible de recréer le lien sécurisé.");
+    }
+  }
+
+  async function importSecurityKey(event) {
+    event.preventDefault();
+
+    const securityCode = cleanSecurityCode(securityCodeToImport);
+
+    if (!/^\d{7}$/.test(securityCode)) {
+      setImportMessage("La clé doit contenir 7 chiffres.");
+      return;
+    }
+
+    if (!invitationTokenFromUrl) {
+      setImportMessage("Le lien d’invitation est manquant ou expiré.");
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      setImportMessage("");
+
+      const response = await fetch(`${API_BASE_URL}/api/profile-shares/import-key`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          invitationToken: invitationTokenFromUrl,
+          securityCode,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Impossible d’importer la clé.");
+      }
+
+      setImportMessage("La clé a été importée avec succès.");
+      setSecurityCodeToImport("");
+      await loadShares();
+    } catch (error) {
+      console.error("Erreur importation clé:", error);
+      setImportMessage(error?.message || "Impossible d’importer la clé.");
+    } finally {
+      setIsImporting(false);
+    }
   }
 
   function getShareSectionDetails(share) {
@@ -454,6 +620,17 @@ Au plaisir de partager cet espace avec toi 😊`;
         };
       })
       .filter(Boolean);
+  }
+
+  function getShareChildrenText(share) {
+    return formatList((share.children || []).map((child) => child.name));
+  }
+
+  function copySecurityCode(code) {
+    if (!code) return;
+
+    navigator.clipboard?.writeText(code).catch(() => {});
+    setMessage("Clé copiée.");
   }
 
   return (
@@ -474,35 +651,95 @@ Au plaisir de partager cet espace avec toi 😊`;
               Gérer les accès partagés
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#7D756E]">
-              Choisissez les enfants, les sections et le niveau d’autorisation
-              pour chaque section. La personne invitée recevra une invitation
-              pour créer son accès ou se connecter à Camelio.
+              Le lien sécurisé est valide 1 journée. La clé de sécurité à 7 chiffres
+              est visible seulement ici, sur la plateforme.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setShowForm(true);
-              setMessage("");
-            }}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
-          >
-            <UserPlus className="h-4 w-4" />
-            Nouveau partage
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setShowImportKey(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#6B625A] shadow-sm transition hover:bg-[#FAF4EC]"
+            >
+              <KeyRound className="h-4 w-4" />
+              Inscrire une clé
+            </button>
+
+            <button
+              type="button"
+              onClick={openCreateForm}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+            >
+              <UserPlus className="h-4 w-4" />
+              Nouveau partage
+            </button>
+          </div>
         </div>
       </div>
+
+      {showImportKey ? (
+        <div className="rounded-[30px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-sm">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
+                Importation
+              </p>
+              <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
+                Inscrire une clé de sécurité
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-[#7D756E]">
+                Ouvrez le lien sécurisé reçu par courriel, puis inscrivez la clé
+                de 7 chiffres transmise par la personne qui partage l’accès.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowImportKey(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm"
+              aria-label="Fermer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={importSecurityKey} className="flex flex-col gap-3 md:flex-row">
+            <input
+              className="w-full rounded-3xl border border-[#EADFCF] bg-white px-4 py-3 text-sm text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
+              value={securityCodeToImport}
+              onChange={(event) => setSecurityCodeToImport(cleanSecurityCode(event.target.value))}
+              placeholder="Clé de 7 chiffres"
+              inputMode="numeric"
+            />
+
+            <button
+              type="submit"
+              disabled={isImporting}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:opacity-50"
+            >
+              <KeyRound className="h-4 w-4" />
+              {isImporting ? "Importation..." : "Importer"}
+            </button>
+          </form>
+
+          {importMessage ? (
+            <p className="mt-3 rounded-2xl border border-[#EADFCF] bg-white p-3 text-sm font-semibold text-[#6B625A]">
+              {importMessage}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {showForm ? (
         <div className="rounded-[30px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-sm">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
-                Invitation
+                {editingShare ? "Modification" : "Invitation"}
               </p>
               <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
-                Créer un accès partagé
+                {editingShare ? "Modifier l’accès" : "Créer un accès partagé"}
               </h3>
             </div>
 
@@ -582,9 +819,7 @@ Au plaisir de partager cet espace avec toi 😊`;
                           <p className="truncate font-bold text-[#4F4A45]">
                             {displayName(child)}
                           </p>
-                          <p className="text-xs text-[#8B8278]">
-                            Profil enfant
-                          </p>
+                          <p className="text-xs text-[#8B8278]">Profil enfant</p>
                         </div>
                       </button>
                     );
@@ -608,8 +843,7 @@ Au plaisir de partager cet espace avec toi 😊`;
                 {shareableSections.map((section) => {
                   const Icon = section.icon;
                   const selected = selectedSectionIds.includes(section.id);
-                  const currentPermission =
-                    sectionPermissions[section.id] || "read";
+                  const currentPermission = sectionPermissions[section.id] || "read";
 
                   return (
                     <div
@@ -663,9 +897,7 @@ Au plaisir de partager cet espace avec toi 😊`;
                                 key={option.id}
                                 option={option}
                                 selected={currentPermission === option.id}
-                                onClick={() =>
-                                  updateSectionPermission(section.id, option.id)
-                                }
+                                onClick={() => updateSectionPermission(section.id, option.id)}
                               />
                             ))}
                           </div>
@@ -684,8 +916,7 @@ Au plaisir de partager cet espace avec toi 😊`;
                     Message optionnel
                   </span>
                   <p className="mt-1 text-xs text-[#8B8278]">
-                    Vous pouvez écrire votre propre message ou utiliser le
-                    message automatique.
+                    Ce message sera inclus dans le courriel d’invitation.
                   </p>
                 </div>
 
@@ -698,12 +929,12 @@ Au plaisir de partager cet espace avec toi 😊`;
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
                 >
                   <Sparkles className="h-5 w-5" />
-                  Générer un message automatiquement
+                  Générer un message
                 </button>
               </div>
 
               <textarea
-                className="min-h-[160px] w-full resize-none rounded-3xl border border-[#EADFCF] bg-white px-4 py-4 text-sm leading-6 text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
+                className="min-h-[130px] w-full resize-none rounded-3xl border border-[#EADFCF] bg-white px-4 py-4 text-sm leading-6 text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
                 value={note}
                 onChange={(event) => {
                   setNote(event.target.value);
@@ -711,13 +942,6 @@ Au plaisir de partager cet espace avec toi 😊`;
                 }}
                 placeholder="Ex. Voici l’accès au profil de Léo pour consulter le calendrier et les documents."
               />
-
-              {useAutomaticMessage ? (
-                <p className="mt-2 text-xs font-semibold text-[#8F9874]">
-                  Le message automatique se mettra à jour selon la personne, les
-                  enfants, les sections et les permissions choisies.
-                </p>
-              ) : null}
             </div>
 
             {message ? (
@@ -744,10 +968,20 @@ Au plaisir de partager cet espace avec toi 😊`;
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Mail className="h-4 w-4" />
-                {isSaving ? "Création..." : "Envoyer l’invitation"}
+                {isSaving
+                  ? "Enregistrement..."
+                  : editingShare
+                    ? "Modifier l’accès"
+                    : "Envoyer l’invitation"}
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {message && !showForm ? (
+        <div className="rounded-2xl border border-[#EEC988] bg-[#FFF8E8] p-3 text-sm font-semibold text-[#8A6F34]">
+          {message}
         </div>
       ) : null}
 
@@ -777,10 +1011,7 @@ Au plaisir de partager cet espace avec toi 😊`;
               <ShieldCheck className="h-7 w-7" />
             </div>
 
-            <p className="mt-3 font-bold text-[#4F4A45]">
-              Aucun profil partagé
-            </p>
-
+            <p className="mt-3 font-bold text-[#4F4A45]">Aucun profil partagé</p>
             <p className="mt-1 text-sm text-[#7D756E]">
               Les invitations créées apparaîtront ici.
             </p>
@@ -789,23 +1020,33 @@ Au plaisir de partager cet espace avec toi 😊`;
           <div className="space-y-3">
             {shares.map((share) => {
               const sectionDetails = getShareSectionDetails(share);
+              const expanded = expandedShareId === share.id;
+              const highestPermission = getPermissionLabel(
+                getHighestPermission(share.sectionPermissions || {})
+              );
 
               return (
                 <div
                   key={share.id}
                   className="rounded-3xl border border-[#EADFCF] bg-[#FFFDF8] p-4"
                 >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedShareId(expanded ? "" : share.id)}
+                    className="flex w-full flex-col gap-3 text-left md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-bold text-[#4F4A45]">
                           {share.inviteeName || "Invitation"}
                         </p>
 
-                        <span className="rounded-full bg-[#F3F6ED] px-3 py-1 text-xs font-bold text-[#6F785F]">
-                          {share.status === "accepted"
-                            ? "Accepté"
-                            : "En attente"}
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusClasses(
+                            share.status
+                          )}`}
+                        >
+                          {getStatusLabel(share.status)}
                         </span>
                       </div>
 
@@ -813,16 +1054,87 @@ Au plaisir de partager cet espace avec toi 😊`;
                         {share.inviteeEmail}
                       </p>
 
-                      <p className="mt-3 text-sm leading-6 text-[#5F5A52]">
-                        <strong>Enfants :</strong>{" "}
-                        {(share.children || [])
-                          .map((child) => child.name)
-                          .join(", ") || "Non précisé"}
+                      <p className="mt-2 text-sm font-semibold text-[#5F5A52]">
+                        Enfant partagé : {getShareChildrenText(share)}
                       </p>
+                    </div>
 
-                      <div className="mt-3">
+                    <div className="flex items-center gap-2 text-sm font-bold text-[#8B8278]">
+                      {expanded ? "Masquer" : "Voir l’accès"}
+                      {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </div>
+                  </button>
+
+                  {expanded ? (
+                    <div className="mt-4 border-t border-[#EADFCF] pt-4">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-2xl border border-[#EADFCF] bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+                            Courriel
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-[#4F4A45]">
+                            {share.inviteeEmail || "Non précisé"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-[#EADFCF] bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+                            Type de permission
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-[#4F4A45]">
+                            {highestPermission}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-[#EADFCF] bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+                            Date de création
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-[#4F4A45]">
+                            {formatDate(share.createdAt)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-[#EADFCF] bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+                            Lien sécurisé
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-[#4F4A45]">
+                            Expire le {formatDateTime(share.invitationExpiresAt)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-2xl border border-[#EADFCF] bg-white p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+                          Clé de sécurité
+                        </p>
+                        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div className="inline-flex w-fit items-center gap-3 rounded-2xl bg-[#F8F3EA] px-4 py-3">
+                            <KeyRound className="h-5 w-5 text-[#A8B193]" />
+                            <span className="font-mono text-2xl font-black tracking-[0.25em] text-[#4F4A45]">
+                              {share.securityCode || "-------"}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => copySecurityCode(share.securityCode)}
+                            className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2 text-xs font-bold text-[#6B625A] transition hover:bg-[#FAF4EC]"
+                          >
+                            <Copy className="h-4 w-4" />
+                            Copier
+                          </button>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-[#8B8278]">
+                          Cette clé ne devrait pas être envoyée dans le courriel. Elle peut être
+                          partagée séparément avec la personne invitée.
+                        </p>
+                      </div>
+
+                      <div className="mt-4">
                         <p className="text-sm font-bold text-[#5F5A52]">
-                          Sections et permissions :
+                          Sections et permissions
                         </p>
 
                         {sectionDetails.length > 0 ? (
@@ -832,43 +1144,61 @@ Au plaisir de partager cet espace avec toi 😊`;
                                 key={detail.id}
                                 className="rounded-full border border-[#EADFCF] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B625A]"
                               >
-                                {detail.title} ·{" "}
-                                {getPermissionLabel(detail.permission)}
+                                {detail.title} · {getPermissionLabel(detail.permission)}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <p className="mt-1 text-sm text-[#7D756E]">
-                            Non précisé
-                          </p>
+                          <p className="mt-1 text-sm text-[#7D756E]">Non précisé</p>
                         )}
                       </div>
 
-                      {share.note ? (
-                        <div className="mt-3 rounded-2xl border border-[#EADFCF] bg-white p-3">
+                      {share.importedAt ? (
+                        <div className="mt-4 rounded-2xl border border-[#EADFCF] bg-white p-4">
                           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
-                            Message
+                            Importation
                           </p>
-                          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#6B625A]">
-                            {share.note}
+                          <p className="mt-2 text-sm font-semibold text-[#4F4A45]">
+                            Importé le {formatDateTime(share.importedAt)}
                           </p>
+                          {share.importedByEmail ? (
+                            <p className="mt-1 text-sm text-[#7D756E]">
+                              Par {share.importedByEmail}
+                            </p>
+                          ) : null}
                         </div>
                       ) : null}
 
-                      <p className="mt-3 text-xs text-[#9A8D7C]">
-                        Créé le {formatDate(share.createdAt)}
-                      </p>
-                    </div>
+                      <div className="mt-4 flex flex-col gap-2 md:flex-row md:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openEditForm(share)}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2 text-xs font-bold text-[#6B625A] transition hover:bg-[#FAF4EC]"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Modifier l’accès
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => removeShare(share.id)}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-[#F1C9C9] bg-white px-4 py-2 text-xs font-bold text-[#B9544A] transition hover:bg-[#FFF0EF]"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Retirer
-                    </button>
-                  </div>
+                        <button
+                          type="button"
+                          onClick={() => regenerateShare(share.id)}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2 text-xs font-bold text-[#6B625A] transition hover:bg-[#FAF4EC]"
+                        >
+                          <RefreshCcw className="h-4 w-4" />
+                          Recréer le lien
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => removeShare(share.id)}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#F1C9C9] bg-white px-4 py-2 text-xs font-bold text-[#B9544A] transition hover:bg-[#FFF0EF]"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Retirer l’accès
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
