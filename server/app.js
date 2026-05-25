@@ -904,27 +904,43 @@ app.get("/api/version", (req, res) => {
   });
 });
 
+function withTimeout(promise, timeoutMs, label = "operation") {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`${label}_timeout_after_${timeoutMs}ms`));
+      }, timeoutMs);
+    }),
+  ]);
+}
+
 app.get("/api/test-email", async (req, res) => {
   try {
     console.log("TEST EMAIL START", {
       smtpHost: process.env.SMTP_HOST || null,
       smtpPort: process.env.SMTP_PORT || null,
       smtpSecure: process.env.SMTP_SECURE || null,
+      smtpRequireTls: process.env.SMTP_REQUIRE_TLS || null,
       smtpUser: process.env.SMTP_USER || null,
       hasPassword: Boolean(process.env.SMTP_PASS),
     });
 
-    await mailTransporter.verify();
+    await withTimeout(mailTransporter.verify(), 12000, "smtp_verify");
 
     console.log("SMTP VERIFY OK");
 
-    await mailTransporter.sendMail({
-      from: `"Camelio" <${process.env.SMTP_USER}>`,
-      replyTo: process.env.MAIL_REPLY_TO || process.env.SMTP_USER,
-      to: process.env.SMTP_USER,
-      subject: "Test SMTP Camelio",
-      text: "Si tu reçois ce courriel, SMTP fonctionne.",
-    });
+    await withTimeout(
+      mailTransporter.sendMail({
+        from: `"Camelio" <${process.env.SMTP_USER}>`,
+        replyTo: process.env.MAIL_REPLY_TO || process.env.SMTP_USER,
+        to: process.env.SMTP_USER,
+        subject: "Test SMTP Camelio",
+        text: "Si tu reçois ce courriel, SMTP fonctionne.",
+      }),
+      12000,
+      "smtp_send"
+    );
 
     console.log("TEST EMAIL SENT");
 
