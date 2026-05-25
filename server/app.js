@@ -888,8 +888,9 @@ app.get("/health", (req, res) => {
 app.get("/api/version", (req, res) => {
   res.json({
     success: true,
-    version: "profile-sharing-keys-2026-05-25",
-    message: "Cette version utilise Resend et les clés de sécurité de partage.",
+    version: "profile-sharing-token-import-2026-05-25",
+    message:
+      "Cette version utilise token + courriel connecté pour les invitations.",
   });
 });
 
