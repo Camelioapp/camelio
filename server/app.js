@@ -1238,7 +1238,140 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
     next(error);
   }
 });
+function cleanProfileSharePayload(body = {}) {
+  const inviteeEmail = String(body.inviteeEmail || "")
+    .trim()
+    .toLowerCase();
 
+  const childIds = Array.isArray(body.childIds) ? body.childIds : [];
+  const sectionIds = Array.isArray(body.sectionIds) ? body.sectionIds : [];
+
+  const allowedPermissions = ["read", "edit", "delete"];
+
+  return {
+    inviteeName: String(body.inviteeName || "").trim(),
+    inviteeEmail,
+    childIds,
+    children: Array.isArray(body.children) ? body.children : [],
+    sectionIds,
+    permission: allowedPermissions.includes(body.permission)
+      ? body.permission
+      : "read",
+    note: String(body.note || "").trim(),
+  };
+}
+
+app.get(
+  "/api/profile-shares",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const result = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": getUserPk(req),
+            ":sk": "SHARE#",
+          },
+        })
+      );
+
+      const shares = (result.Items || []).sort((a, b) => {
+        return String(b.createdAt || "").localeCompare(
+          String(a.createdAt || "")
+        );
+      });
+
+      res.json({
+        success: true,
+        shares,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/profile-shares",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const payload = cleanProfileSharePayload(req.body || {});
+
+      if (!payload.inviteeEmail || !payload.inviteeEmail.includes("@")) {
+        return res.status(400).json({
+          error: "invalid_email",
+          message: "Le courriel d’invitation est invalide.",
+        });
+      }
+
+      if (payload.childIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_children",
+          message: "Sélectionnez au moins un enfant à partager.",
+        });
+      }
+
+      if (payload.sectionIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_sections",
+          message: "Sélectionnez au moins une section à partager.",
+        });
+      }
+
+      const now = new Date().toISOString();
+      const shareId = req.body.id || randomUUID();
+
+      const share = {
+        PK: getUserPk(req),
+        SK: `SHARE#${shareId}`,
+        id: shareId,
+        type: "profileShare",
+        ownerUserId: req.session.user.sub,
+        ownerEmail: req.session.user.email || "",
+        ownerName:
+          req.session.user.name ||
+          req.session.user.given_name ||
+          req.session.user.email ||
+          "",
+        ...payload,
+        status: "pending",
+        invitationToken: randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: share,
+        })
+      );
+
+      console.log("Invitation Camelio à envoyer:", {
+        to: share.inviteeEmail,
+        inviteeName: share.inviteeName,
+        children: share.children,
+        sectionIds: share.sectionIds,
+        permission: share.permission,
+        invitationUrl: `${APP_URL}/login?invite=${share.invitationToken}`,
+      });
+
+      res.status(201).json({
+        success: true,
+        share,
+        message:
+          "L’invitation a été créée. Le branchement courriel doit être configuré côté serveur pour l’envoi réel.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 app.get(
   "/api/children",
   requireAuth,

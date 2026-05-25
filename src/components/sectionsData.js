@@ -10,6 +10,7 @@ import {
   FileText,
   StickyNote,
   Settings,
+  Share2,
 } from "lucide-react";
 
 export const sectionThemes = {
@@ -163,12 +164,20 @@ export const sections = [
     icon: StickyNote,
     defaultTheme: "yellow",
   },
+    {
+    id: "profile-sharing",
+    title: "Partage de profil",
+    description: "Accès famille et permissions.",
+    icon: Share2,
+    defaultTheme: "mint",
+  },
+
   {
     id: "settings",
     title: "Paramètres",
-    description: "Compte et accès.",
+    description: "Préférences et configuration.",
     icon: Settings,
-    defaultTheme: "gray",
+    defaultTheme: "sand",
   },
 ];
 
