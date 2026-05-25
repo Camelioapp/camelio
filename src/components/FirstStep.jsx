@@ -415,56 +415,58 @@ export default function FirstStep({ onComplete, onSkip }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/40 px-4 py-6">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-[#f8f3ed] via-[#fbf3f6] to-[#f3f6fb] px-6 py-5 md:px-8">
-          <div className="flex items-start justify-between gap-5">
-            <div>
-              <p className="text-sm font-semibold text-[#5b6b8a]">
-                Configuration initiale de votre espace Camelio
-              </p>
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/40 px-3 py-4 sm:px-4 sm:py-6">
+    <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-[#f8f3ed] via-[#fbf3f6] to-[#f3f6fb] px-5 py-5 sm:px-6 md:px-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold leading-5 text-[#5b6b8a] sm:text-sm">
+              Configuration initiale de votre espace Camelio
+            </p>
 
-              <h2 className="mt-2 text-2xl font-bold text-slate-950">
-                Bienvenue dans Camelio
-              </h2>
+            <h2 className="mt-2 text-3xl font-bold leading-tight text-slate-950 sm:text-2xl md:text-3xl">
+              Bienvenue dans Camelio
+            </h2>
 
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[#465a78]">
-                Avant de commencer, prenons quelques minutes pour bien configurer
-                l’application comme premier pas. Ces informations permettront à
-                Camelio de mieux organiser votre calendrier, vos documents, vos
-                souvenirs et les informations importantes liées à vos enfants.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={skipAll}
-              className="rounded-2xl px-4 py-2 text-sm font-semibold text-[#5b6b8a] transition hover:bg-white/70"
-            >
-              Configurer plus tard
-            </button>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#465a78]">
+              Avant de commencer, prenons quelques minutes pour bien configurer
+              l’application comme premier pas. Ces informations permettront à
+              Camelio de mieux organiser votre calendrier, vos documents, vos
+              souvenirs et les informations importantes liées à vos enfants.
+            </p>
           </div>
 
-          <div className="mt-6">
-            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-[#5b6b8a]">
-              <span>Étape {step} de 3</span>
-              <span>
-                {step === 1 && "Votre situation"}
-                {step === 2 && "Vos enfants"}
-                {step === 3 && "Vos premières sections"}
-              </span>
-            </div>
-
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-[#a8b193] transition-all duration-300"
-                style={{ width: progressWidth }}
-              />
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={skipAll}
+            className="self-start rounded-2xl bg-white/70 px-4 py-2 text-sm font-semibold text-[#5b6b8a] shadow-sm transition hover:bg-white sm:self-auto"
+          >
+            Configurer plus tard
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-7 md:px-8">
+        <div className="mt-6">
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold text-[#5b6b8a]">
+            <span>Étape {step} de 3</span>
+
+            <span className="text-right">
+              {step === 1 && "Votre situation"}
+              {step === 2 && "Vos enfants"}
+              {step === 3 && "Vos premières sections"}
+            </span>
+          </div>
+
+          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-[#a8b193] transition-all duration-300"
+              style={{ width: progressWidth }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-6 md:px-8 md:py-7">
+          
           {step === 1 && (
             <section>
               <h3 className="text-2xl font-bold text-slate-950">
