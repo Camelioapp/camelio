@@ -2261,6 +2261,38 @@ app.post(
 );
 
 app.get(
+  "/api/profile-shares/imported",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const result = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": getUserPk(req),
+            ":sk": "IMPORTED_SHARE#",
+          },
+        })
+      );
+
+      const importedShares = (result.Items || []).filter(
+        (share) => share.status !== "revoked"
+      );
+
+      return res.json({
+        success: true,
+        hasSharedAccess: importedShares.length > 0,
+        shares: importedShares,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.get(
   "/api/children",
   requireAuth,
   validateAwsConfig,

@@ -19,7 +19,7 @@ import { motion } from "framer-motion";
 import ProfileSharing from "./ProfileSharing.jsx";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+  import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
 const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
 const SECTION_THEME_STORAGE_KEY = "camelio-section-themes";
@@ -920,9 +920,13 @@ export default function Dashboard({
     setShowFirstStep(false);
   }
 
-  const subscriptionPopup = showSubscriptionPopup && !sharedAccess.hasSharedAccess ? (
-    <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
-  ) : null;
+  const shouldBlockSubscriptionPopup =
+    sharedAccess.isLoading || sharedAccess.hasSharedAccess;
+
+  const subscriptionPopup =
+    showSubscriptionPopup && !shouldBlockSubscriptionPopup ? (
+      <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
+    ) : null;
 
   const firstStepPopup = showFirstStep && !sharedAccess.hasSharedAccess ? (
     <FirstStep
