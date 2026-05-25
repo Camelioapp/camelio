@@ -2292,6 +2292,21 @@ app.get(
   }
 );
 
+      const importedShares = (result.Items || []).filter(
+        (share) => share.status !== "revoked"
+      );
+
+      return res.json({
+        success: true,
+        hasSharedAccess: importedShares.length > 0,
+        shares: importedShares,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 app.get(
   "/api/children",
   requireAuth,
