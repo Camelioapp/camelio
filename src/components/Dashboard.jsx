@@ -343,39 +343,52 @@ export default function Dashboard({
   };
 
   useEffect(() => {
-    const checkSubscription = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/subscription`, {
-          method: "GET",
-          credentials: "include",
-        });
+  const checkSubscription = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/subscription`, {
+        method: "GET",
+        credentials: "include",
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (!response.ok) {
-          console.error("Erreur vérification abonnement:", data);
-          setShowSubscriptionPopup(true);
-          return;
-        }
-
-        setShowSubscriptionPopup(!data.hasAccess);
-
-        const onboardingAlreadyCompleted =
-        localStorage.getItem("camelio_onboarding_completed") === "true";
-
-        if (data.hasAccess && !onboardingAlreadyCompleted) {
-         setShowFirstStep(true);
-        }
-      } catch (error) {
-        console.error("Erreur vérification abonnement:", error);
+      if (!response.ok) {
+        console.error("Erreur vérification abonnement:", data);
         setShowSubscriptionPopup(true);
+        return;
       }
-    };
 
-    
+      setShowSubscriptionPopup(!data.hasAccess);
 
-    checkSubscription();
-  }, []);
+      if (!data.hasAccess) {
+        setShowFirstStep(false);
+        return;
+      }
+
+      const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      const profileData = await profileResponse.json();
+
+      if (!profileResponse.ok) {
+        console.error("Erreur vérification profil:", profileData);
+        return;
+      }
+
+      const onboardingCompleted =
+        profileData?.profile?.onboardingCompleted === true;
+
+      setShowFirstStep(!onboardingCompleted);
+    } catch (error) {
+      console.error("Erreur vérification abonnement:", error);
+      setShowSubscriptionPopup(true);
+    }
+  };
+
+  checkSubscription();
+}, []);
 
   const defaultSectionOrder = useMemo(() => {
     return sections

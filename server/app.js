@@ -1127,91 +1127,60 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
   }
 });
 
-app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const now = new Date().toISOString();
-    const userPk = getUserPk(req);
+const hasOnboardingUpdate =
+  Object.prototype.hasOwnProperty.call(req.body, "onboardingCompleted") ||
+  Object.prototype.hasOwnProperty.call(req.body, "onboarding");
 
-    const existingResult = await dynamo.send(
-      new GetCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: userPk,
-          SK: "PROFILE",
-        },
-      })
-    );
+const existingProfile = existingResult.Item || {};
 
-    const existingUserId = existingResult.Item?.userId
-      ? String(existingResult.Item.userId).replace(/\D/g, "").slice(0, 7)
-      : "";
+const profile = {
+  ...existingProfile,
+  PK: userPk,
+  SK: "PROFILE",
+  type: "profile",
+  userId,
+  cognitoSub: req.session.user.sub,
+  email: req.session.user.email || existingProfile.email || "",
 
-    const hasValidSevenDigitUserId = /^\d{7}$/.test(existingUserId);
+  name:
+    req.body.name ||
+    cleanedProfile.displayName ||
+    existingProfile.name ||
+    existingProfile.displayName ||
+    "",
 
-    let userId = existingUserId;
+  displayName:
+    cleanedProfile.displayName ||
+    req.body.name ||
+    existingProfile.displayName ||
+    existingProfile.name ||
+    "",
 
-    if (!hasValidSevenDigitUserId) {
-      userId = await generateUniqueSevenDigitUserId();
+  phone: cleanedProfile.phone || existingProfile.phone || "",
+  preferredLanguage:
+    cleanedProfile.preferredLanguage ||
+    existingProfile.preferredLanguage ||
+    "fr",
 
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: {
-            PK: `USERID#${userId}`,
-            SK: "LOOKUP",
-            type: "userIdLookup",
-            userPk,
-            cognitoSub: req.session.user.sub,
-            email: req.session.user.email || "",
-            createdAt: now,
-          },
-        })
-      );
-    }
+  onboardingCompleted: hasOnboardingUpdate
+    ? req.body.onboardingCompleted === true
+    : Boolean(existingProfile.onboardingCompleted),
 
-    const cleanedProfile = cleanProfilePayload(req.body);
+  onboardingSkipped: hasOnboardingUpdate
+    ? req.body.onboardingSkipped === true
+    : Boolean(existingProfile.onboardingSkipped),
 
-    const profile = {
-      ...(existingResult.Item || {}),
-      PK: userPk,
-      SK: "PROFILE",
-      type: "profile",
-      userId,
-      cognitoSub: req.session.user.sub,
-      email: req.session.user.email || existingResult.Item?.email || "",
-      name:
-        req.body.name ||
-        cleanedProfile.displayName ||
-        existingResult.Item?.name ||
-        existingResult.Item?.displayName ||
-        "",
-      displayName:
-        cleanedProfile.displayName ||
-        req.body.name ||
-        existingResult.Item?.displayName ||
-        existingResult.Item?.name ||
-        "",
-      phone: cleanedProfile.phone || "",
-      preferredLanguage: cleanedProfile.preferredLanguage || "fr",
-      createdAt: existingResult.Item?.createdAt || now,
-      updatedAt: now,
-    };
+  onboardingCompletedAt: hasOnboardingUpdate
+    ? req.body.onboardingCompletedAt || now
+    : existingProfile.onboardingCompletedAt || null,
 
-    await dynamo.send(
-      new PutCommand({
-        TableName: DYNAMODB_TABLE,
-        Item: profile,
-      })
-    );
+  onboarding: hasOnboardingUpdate
+    ? req.body.onboarding || {}
+    : existingProfile.onboarding || {},
 
-    res.json({
-      success: true,
-      profile,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+  createdAt: existingProfile.createdAt || now,
+  updatedAt: now,
+};
 
 app.get(
   "/api/children",
