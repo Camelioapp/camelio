@@ -886,6 +886,42 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/api/version", (req, res) => {
+  res.json({
+    success: true,
+    version: "email-debug-2026-05-25",
+    message: "Cette version contient les routes de test email.",
+  });
+});
+
+app.get("/api/test-email", async (req, res) => {
+  try {
+    await mailTransporter.sendMail({
+      from: `"Camelio" <${process.env.SMTP_USER}>`,
+      replyTo: process.env.MAIL_REPLY_TO || process.env.SMTP_USER,
+      to: process.env.SMTP_USER,
+      subject: "Test SMTP Camelio",
+      text: "Si tu reçois ce courriel, SMTP fonctionne.",
+    });
+
+    return res.json({
+      success: true,
+      message: "Courriel de test envoyé.",
+    });
+  } catch (error) {
+    console.error("Erreur test SMTP:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+      code: error.code || null,
+      command: error.command || null,
+      response: error.response || null,
+      responseCode: error.responseCode || null,
+    });
+  }
+});
+
 app.get("/aws-check", (req, res) => {
   if (IS_PRODUCTION) {
     return res.status(403).json({
