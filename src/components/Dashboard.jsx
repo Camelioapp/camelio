@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Plus, ArrowLeft, Grid2X2, List, UserRound } from "lucide-react";
 
 import SubscriptionPopup from "./SubscriptionPopup";
+import FirstStep from "./FirstStep.jsx";
 import Children from "./Children.jsx";
 import ParentalPlan from "./ParentalPlan.jsx";
 import CalendarView from "./CalendarView.jsx";
@@ -316,7 +317,7 @@ export default function Dashboard({
   const [activeSection, setActiveSection] = useState("home");
   const [viewMode, setViewMode] = useState("grid");
   const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false);
-
+  const [showFirstStep, setShowFirstStep] = useState(false);
   const parentProfile = parentProfileFromApp;
 
   const setParentProfile = (updatedProfile) => {
@@ -358,11 +359,20 @@ export default function Dashboard({
         }
 
         setShowSubscriptionPopup(!data.hasAccess);
+
+        const onboardingAlreadyCompleted =
+        localStorage.getItem("camelio_onboarding_completed") === "true";
+
+        if (data.hasAccess && !onboardingAlreadyCompleted) {
+         setShowFirstStep(true);
+        }
       } catch (error) {
         console.error("Erreur vérification abonnement:", error);
         setShowSubscriptionPopup(true);
       }
     };
+
+    
 
     checkSubscription();
   }, []);
@@ -588,12 +598,25 @@ export default function Dashboard({
   const subscriptionPopup = showSubscriptionPopup ? (
     <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
   ) : null;
-
+const firstStepPopup = showFirstStep ? (
+  <FirstStep
+    isOpen={showFirstStep}
+    onClose={() => {
+      localStorage.setItem("camelio_onboarding_completed", "true");
+      setShowFirstStep(false);
+    }}
+    onComplete={(data) => {
+      console.log("Configuration initiale complétée:", data);
+      localStorage.setItem("camelio_onboarding_completed", "true");
+      setShowFirstStep(false);
+    }}
+  />
+) : null;
   if (activeSection !== "home") {
     return (
       <>
         {subscriptionPopup}
-
+        {firstStepPopup}
         <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
           <div className="mx-auto max-w-6xl p-3 md:p-6">
             <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
@@ -629,7 +652,7 @@ export default function Dashboard({
   return (
     <>
       {subscriptionPopup}
-
+      {firstStepPopup}
       <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
         <div className="mx-auto max-w-6xl p-3 md:p-6">
           <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
