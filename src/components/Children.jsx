@@ -31,21 +31,21 @@ function createChildId() {
 }
 
 const childColorOptions = [
-  { id: "sage", label: "Sauge", dot: "#A8B193" },
-  { id: "rose", label: "Rose", dot: "#E99AAA" },
-  { id: "blue", label: "Bleu doux", dot: "#8FB8DE" },
-  { id: "mauve", label: "Mauve", dot: "#AA90C8" },
-  { id: "gold", label: "Doré", dot: "#D4A85F" },
-  { id: "peach", label: "Pêche", dot: "#E8A07E" },
-  { id: "mint", label: "Menthe", dot: "#7CBFA2" },
-  { id: "lavender", label: "Lavande", dot: "#C7B3E5" },
-  { id: "mustard", label: "Moutarde", dot: "#D9BF5E" },
-  { id: "olive", label: "Olive", dot: "#8E9A72" },
-  { id: "coral", label: "Corail", dot: "#E8786D" },
-  { id: "teal", label: "Sarcelle", dot: "#5BAEAA" },
-  { id: "sky", label: "Ciel", dot: "#76BFE3" },
-  { id: "grape", label: "Raisin", dot: "#8F78B8" },
-  { id: "sand", label: "Sable", dot: "#D8C49A" },
+  { id: "sage", label: "Sauge", dot: "#A8B193", soft: "#EEF4E8", text: "#6F7E5C", border: "#D8DDCB" },
+  { id: "rose", label: "Rose", dot: "#E99AAA", soft: "#FFF1F4", text: "#B96B77", border: "#F3CDD3" },
+  { id: "blue", label: "Bleu doux", dot: "#8FB8DE", soft: "#EEF5FB", text: "#657F9F", border: "#C9DCEB" },
+  { id: "mauve", label: "Mauve", dot: "#AA90C8", soft: "#F3EAFB", text: "#8C76A8", border: "#DED2EA" },
+  { id: "gold", label: "Doré", dot: "#D4A85F", soft: "#FFF8EC", text: "#9A7A43", border: "#EAD7B8" },
+  { id: "peach", label: "Pêche", dot: "#E8A07E", soft: "#FFF0E8", text: "#A76547", border: "#F1C9B4" },
+  { id: "mint", label: "Menthe", dot: "#7CBFA2", soft: "#EAF8F1", text: "#4F8D74", border: "#C4E4D6" },
+  { id: "lavender", label: "Lavande", dot: "#C7B3E5", soft: "#F4EEFF", text: "#8971B0", border: "#DFD2F2" },
+  { id: "mustard", label: "Moutarde", dot: "#D9BF5E", soft: "#FFF8D9", text: "#9C852F", border: "#E9DA92" },
+  { id: "olive", label: "Olive", dot: "#8E9A72", soft: "#F0F3E8", text: "#68724F", border: "#D1D8C0" },
+  { id: "coral", label: "Corail", dot: "#E8786D", soft: "#FFEDEA", text: "#B9544A", border: "#F2BDB7" },
+  { id: "teal", label: "Sarcelle", dot: "#5BAEAA", soft: "#E8F7F6", text: "#3E7D7A", border: "#B8DEDC" },
+  { id: "sky", label: "Ciel", dot: "#76BFE3", soft: "#EAF7FF", text: "#4B87A8", border: "#BFE4F6" },
+  { id: "grape", label: "Raisin", dot: "#8F78B8", soft: "#F0ECFA", text: "#6E5798", border: "#D3C8EA" },
+  { id: "sand", label: "Sable", dot: "#D8C49A", soft: "#FBF4E7", text: "#927D54", border: "#E8D9BA" },
 ];
 
 const girlPresetPhotos = Array.from({ length: 15 }, (_, index) => {
@@ -93,6 +93,40 @@ function normalizePhotoPosition(position) {
 function getObjectPosition(position) {
   const clean = normalizePhotoPosition(position);
   return `${clean.x}% ${clean.y}%`;
+}
+
+function getColorTheme(colorId) {
+  return (
+    childColorOptions.find((color) => color.id === colorId) ||
+    childColorOptions[0]
+  );
+}
+
+function calculateChildAge(birthDate) {
+  if (!birthDate || birthDate === "À compléter") return "";
+
+  const birth = new Date(`${birthDate}T00:00:00`);
+  const today = new Date();
+
+  if (Number.isNaN(birth.getTime()) || birth > today) return "";
+
+  let years = today.getFullYear() - birth.getFullYear();
+  let months = today.getMonth() - birth.getMonth();
+
+  if (today.getDate() < birth.getDate()) {
+    months -= 1;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  if (years <= 0) {
+    return `${months} mois`;
+  }
+
+  return `${years} an${years > 1 ? "s" : ""} et ${months} mois`;
 }
 
 function PhotoImage({ src, alt, position, zoom = 1, className = "" }) {
@@ -450,19 +484,19 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const [newChild, setNewChild] = useState({
-  id: createChildId(),
-  firstName: "",
-  lastName: "",
-  nickname: "",
-  birthDate: "",
-  sex: "Garçon",
-  color: "sage",
-  photo: "",
-  avatar: "",
-  avatarS3Key: "",
-  photoPosition: defaultPhotoPosition,
-  photoZoom: 1,
-});
+    id: createChildId(),
+    firstName: "",
+    lastName: "",
+    nickname: "",
+    birthDate: "",
+    sex: "Garçon",
+    color: "sage",
+    photo: "",
+    avatar: "",
+    avatarS3Key: "",
+    photoPosition: defaultPhotoPosition,
+    photoZoom: 1,
+  });
 
   const inputClass =
     "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
@@ -522,25 +556,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     };
   };
 
-  const getAgeFromBirthDate = (birthDate) => {
-    if (!birthDate || birthDate === "À compléter") return "À compléter";
-
-    const birth = new Date(`${birthDate}T00:00:00`);
-    if (Number.isNaN(birth.getTime())) return "À compléter";
-
-    const today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-
-    const birthdayPassed =
-      today.getMonth() > birth.getMonth() ||
-      (today.getMonth() === birth.getMonth() &&
-        today.getDate() >= birth.getDate());
-
-    if (!birthdayPassed) age -= 1;
-
-    return `${age} ans`;
-  };
-
   const formatChildFromServer = (child) => {
     const firstName = child.firstName || "";
     const nickname = child.nickname || firstName || "Enfant";
@@ -548,7 +563,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
     return {
       ...child,
-      id: child.id || child.SK?.replace("CHILD#", "") || "",
+      id: child.id || child.SK?.replace("CHILD#", "") || createChildId(),
       name: nickname,
       firstName,
       lastName: child.lastName || "",
@@ -557,7 +572,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       sex: child.gender || child.sex || "",
       gender: child.gender || child.sex || "",
       color: child.color || "sage",
-      age: getAgeFromBirthDate(child.birthDate),
+      age: calculateChildAge(child.birthDate),
       photo,
       image: photo,
       avatar: photo,
@@ -708,24 +723,24 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   };
 
   const resetForm = () => {
-  setNewChild({
-    id: createChildId(),
-    firstName: "",
-    lastName: "",
-    nickname: "",
-    birthDate: "",
-    sex: "Garçon",
-    color: "sage",
-    photo: "",
-    avatar: "",
-    avatarS3Key: "",
-    photoPosition: defaultPhotoPosition,
-    photoZoom: 1,
-  });
+    setNewChild({
+      id: createChildId(),
+      firstName: "",
+      lastName: "",
+      nickname: "",
+      birthDate: "",
+      sex: "Garçon",
+      color: "sage",
+      photo: "",
+      avatar: "",
+      avatarS3Key: "",
+      photoPosition: defaultPhotoPosition,
+      photoZoom: 1,
+    });
 
-  setPreviewPhoto("");
-  setShowAddForm(false);
-};
+    setPreviewPhoto("");
+    setShowAddForm(false);
+  };
 
   const addChild = async (event) => {
     event.preventDefault();
@@ -778,16 +793,16 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       setChildren((current) => [
         ...current,
         formatChildFromServer({
-  ...data.child,
-  id: data.child?.id || newChild.id,
-  nickname,
-  avatar: newChild.photo || "",
-  photo: newChild.photo || "",
-  image: newChild.photo || "",
-  avatarS3Key: newChild.avatarS3Key || "",
-  photoPosition: newChild.photoPosition || defaultPhotoPosition,
-  photoZoom: newChild.photoZoom || 1,
-}),
+          ...data.child,
+          id: data.child?.id || newChild.id,
+          nickname,
+          avatar: newChild.photo || "",
+          photo: newChild.photo || "",
+          image: newChild.photo || "",
+          avatarS3Key: newChild.avatarS3Key || "",
+          photoPosition: newChild.photoPosition || defaultPhotoPosition,
+          photoZoom: newChild.photoZoom || 1,
+        }),
       ]);
 
       resetForm();
@@ -866,6 +881,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
           child.id === selectedChild.id
             ? formatChildFromServer({
                 ...data.child,
+                id: selectedChild.id,
                 nickname,
                 avatar: payload.avatar,
                 photo: payload.photo,
@@ -1009,7 +1025,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             />
 
             <div className="w-full min-w-0 space-y-6">
-            
               <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
                 <FormField label="Prénom">
                   <input
@@ -1086,7 +1101,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                 </FormField>
               </div>
 
-              <FormField label="Couleur du calendrier">
+              <FormField
+                label="Couleur de l’enfant"
+                helpText="Cette couleur personnalise le profil de l’enfant et sera notamment utilisée dans le calendrier."
+              >
                 <ColorPicker
                   value={newChild.color}
                   options={availableColors}
@@ -1125,18 +1143,32 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
         <div className="grid gap-5 md:grid-cols-2">
           {children.map((child) => {
             const photo = child.photo || child.image || child.avatar || "";
+            const theme = getColorTheme(child.color);
+            const ageLabel = calculateChildAge(child.birthDate);
 
             return (
               <article
                 key={child.id}
-                className="overflow-hidden rounded-[2rem] border border-[#EFE4D6] bg-white shadow-sm"
+                className="overflow-hidden rounded-[2rem] border bg-white shadow-sm"
+                style={{
+                  borderColor: theme.border,
+                }}
               >
-                <div className="relative bg-[#FFFDF8] p-5">
+                <div
+                  className="relative p-5"
+                  style={{
+                    backgroundColor: theme.soft,
+                  }}
+                >
                   <div className="flex items-start gap-4">
                     <button
                       type="button"
                       onClick={() => openProfile(child)}
-                      className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[#EEF0E7] text-2xl font-bold text-[#8F9874] shadow-sm"
+                      className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white text-2xl font-bold shadow-sm"
+                      style={{
+                        backgroundColor: theme.soft,
+                        color: theme.text,
+                      }}
                     >
                       {photo ? (
                         <PhotoImage
@@ -1161,13 +1193,29 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                       </p>
 
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="inline-flex rounded-full bg-[#EEF0E7] px-3 py-1 text-xs font-bold text-[#6F785F] ring-1 ring-[#D8DDCB]">
-                          {child.sex || child.gender || "À compléter"}
+                        <span
+                          className="rounded-full px-3 py-1 text-xs font-bold"
+                          style={{
+                            backgroundColor: "#FFFFFF",
+                            color: theme.text,
+                            boxShadow: `0 0 0 1px ${theme.border}`,
+                          }}
+                        >
+                          {child.gender || child.sex || "Enfant"}
                         </span>
 
-                        <span className="inline-flex rounded-full bg-[#F4F0FA] px-3 py-1 text-xs font-bold text-[#8475A5] ring-1 ring-[#DED6EF]">
-                          {child.age || getAgeFromBirthDate(child.birthDate)}
-                        </span>
+                        {ageLabel ? (
+                          <span
+                            className="rounded-full px-3 py-1 text-xs font-bold"
+                            style={{
+                              backgroundColor: "#FFFFFF",
+                              color: theme.text,
+                              boxShadow: `0 0 0 1px ${theme.border}`,
+                            }}
+                          >
+                            {ageLabel}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1177,7 +1225,12 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   <button
                     type="button"
                     onClick={() => openProfile(child)}
-                    className="flex min-h-[82px] flex-col items-center justify-center rounded-2xl bg-[#EEF0E7] px-2 py-3 text-center text-xs font-bold text-[#6F785F] ring-1 ring-[#D8DDCB]"
+                    className="flex min-h-[82px] flex-col items-center justify-center rounded-2xl px-2 py-3 text-center text-xs font-bold ring-1"
+                    style={{
+                      backgroundColor: theme.soft,
+                      color: theme.text,
+                      boxShadow: `0 0 0 1px ${theme.border}`,
+                    }}
                   >
                     <ScrollText className="mb-2 h-5 w-5" />
                     Profil
@@ -1220,35 +1273,35 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
         >
           <div className="w-full min-w-0 space-y-5">
             <PhotoPicker
-  photo={selectedChild.photo || selectedChild.image}
-  position={selectedChild.photoPosition || defaultPhotoPosition}
-  zoom={selectedChild.photoZoom || 1}
-  fallback={getInitials(selectedChild)}
-  onChoosePreset={(url) =>
-    setSelectedChild((current) => ({
-      ...current,
-      photo: url,
-      image: url,
-      avatar: url,
-      avatarS3Key: "",
-      photoPosition: defaultPhotoPosition,
-      photoZoom: 1,
-    }))
-  }
-  onUpload={(event) => handlePhotoChange(selectedChild.id, event)}
-  onPositionChange={(position) =>
-    setSelectedChild((current) => ({
-      ...current,
-      photoPosition: position,
-    }))
-  }
-  onZoomChange={(zoom) =>
-    setSelectedChild((current) => ({
-      ...current,
-      photoZoom: zoom,
-    }))
-  }
-/>
+              photo={selectedChild.photo || selectedChild.image}
+              position={selectedChild.photoPosition || defaultPhotoPosition}
+              zoom={selectedChild.photoZoom || 1}
+              fallback={getInitials(selectedChild)}
+              onChoosePreset={(url) =>
+                setSelectedChild((current) => ({
+                  ...current,
+                  photo: url,
+                  image: url,
+                  avatar: url,
+                  avatarS3Key: "",
+                  photoPosition: defaultPhotoPosition,
+                  photoZoom: 1,
+                }))
+              }
+              onUpload={(event) => handlePhotoChange(selectedChild.id, event)}
+              onPositionChange={(position) =>
+                setSelectedChild((current) => ({
+                  ...current,
+                  photoPosition: position,
+                }))
+              }
+              onZoomChange={(zoom) =>
+                setSelectedChild((current) => ({
+                  ...current,
+                  photoZoom: zoom,
+                }))
+              }
+            />
 
             <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
               <FormField label="Prénom">
@@ -1323,14 +1376,17 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                     setSelectedChild((current) => ({
                       ...current,
                       birthDate: event.target.value,
-                      age: getAgeFromBirthDate(event.target.value),
+                      age: calculateChildAge(event.target.value),
                     }))
                   }
                 />
               </FormField>
             </div>
 
-            <FormField label="Couleur du calendrier">
+            <FormField
+              label="Couleur de l’enfant"
+              helpText="Cette couleur personnalise le profil de l’enfant et sera notamment utilisée dans le calendrier."
+            >
               <ColorPicker
                 value={selectedChild.color || "sage"}
                 options={childColorOptions}
@@ -1344,42 +1400,43 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             </FormField>
 
             <FormField label="Note du profil">
-  <textarea
-    className={textareaClass}
-    rows={5}
-    value={selectedChild.profileNote || ""}
-    onChange={(event) =>
-      setSelectedChild((current) => ({
-        ...current,
-        profileNote: event.target.value,
-      }))
-    }
-    placeholder="Habitudes, préférences, informations utiles..."
-  />
-</FormField>
-<div className="rounded-2xl border border-[#EFE4D6] bg-white/60 px-4 py-3">
-  <div className="flex items-center justify-between gap-3">
-    <div className="min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#A8B193]">
-        ID enfant
-      </p>
+              <textarea
+                className={textareaClass}
+                rows={5}
+                value={selectedChild.profileNote || ""}
+                onChange={(event) =>
+                  setSelectedChild((current) => ({
+                    ...current,
+                    profileNote: event.target.value,
+                  }))
+                }
+                placeholder="Habitudes, préférences, informations utiles..."
+              />
+            </FormField>
 
-      <code className="mt-1 block max-w-[260px] truncate text-[11px] font-semibold text-[#9A8D7C] sm:max-w-none">
-        {selectedChild.id || "ID non disponible"}
-      </code>
-    </div>
+            <div className="rounded-2xl border border-[#EFE4D6] bg-white/60 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#A8B193]">
+                    ID enfant
+                  </p>
 
-    {selectedChild.id && (
-      <button
-        type="button"
-        onClick={() => navigator.clipboard?.writeText(selectedChild.id)}
-        className="shrink-0 rounded-full border border-[#EFE4D6] bg-[#FFFDF8] px-3 py-1.5 text-[11px] font-bold text-[#8F9874] transition hover:bg-[#F7F1E8]"
-      >
-        Copier
-      </button>
-    )}
-  </div>
-</div>
+                  <code className="mt-1 block max-w-[260px] truncate text-[11px] font-semibold text-[#9A8D7C] sm:max-w-none">
+                    {selectedChild.id || "ID non disponible"}
+                  </code>
+                </div>
+
+                {selectedChild.id && (
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(selectedChild.id)}
+                    className="shrink-0 rounded-full border border-[#EFE4D6] bg-[#FFFDF8] px-3 py-1.5 text-[11px] font-bold text-[#8F9874] transition hover:bg-[#F7F1E8]"
+                  >
+                    Copier
+                  </button>
+                )}
+              </div>
+            </div>
 
             {confirmRemove && (
               <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm leading-6 text-[#B96B77] ring-1 ring-[#F3CDD3]">
@@ -1424,10 +1481,21 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   );
 }
 
-function FormField({ label, children }) {
+function FormField({ label, helpText, children }) {
   return (
     <div className="w-full min-w-0 space-y-2.5">
-      <label className="block text-sm font-bold text-[#4F4A45]">{label}</label>
+      <div>
+        <label className="block text-sm font-bold text-[#4F4A45]">
+          {label}
+        </label>
+
+        {helpText ? (
+          <p className="mt-1 text-xs font-semibold leading-5 text-[#8B7D6B]">
+            {helpText}
+          </p>
+        ) : null}
+      </div>
+
       <div className="w-full min-w-0">{children}</div>
     </div>
   );
