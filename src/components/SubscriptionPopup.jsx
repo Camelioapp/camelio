@@ -4,12 +4,12 @@ import { Sparkles, CheckCircle2 } from "lucide-react";
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 export default function SubscriptionPopup() {
-  const [loadingType, setLoadingType] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const startCheckout = async (trial) => {
+  const startCheckout = async () => {
     try {
-      setLoadingType(trial ? "trial" : "paid");
+      setLoading(true);
       setError("");
 
       const response = await fetch(`${API_URL}/create-checkout-session`, {
@@ -20,27 +20,36 @@ export default function SubscriptionPopup() {
         credentials: "include",
         body: JSON.stringify({
           lookup_key: "camelio_monthly_595",
-          trial,
+          trial: false,
         }),
       });
 
-      const data = await response.json();
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
 
       if (!response.ok) {
         throw new Error(
-          data.message || data.error || "Impossible de créer la session Stripe."
+          data.message ||
+            data.error ||
+            "Impossible de créer la session de paiement Stripe."
         );
       }
 
       if (!data.url) {
-        throw new Error("Aucune URL Stripe reçue.");
+        throw new Error("Aucune URL Stripe reçue du serveur.");
       }
 
-      window.location.href = data.url;
+      window.location.assign(data.url);
     } catch (err) {
+      console.error("Erreur Stripe Checkout:", err);
       setError(err.message || "Une erreur est survenue.");
     } finally {
-      setLoadingType("");
+      setLoading(false);
     }
   };
 
@@ -56,9 +65,8 @@ export default function SubscriptionPopup() {
         </h2>
 
         <p className="mt-3 text-[0.95rem] leading-6 text-[#6B6258]">
-          Pour continuer, choisissez votre option d’abonnement. Vous pouvez
-          commencer avec un essai gratuit de 1 mois ou passer directement à la
-          version payante.
+          Pour continuer, activez votre abonnement Camelio. Votre espace sécurisé
+          restera accessible tant que l’abonnement est actif.
         </p>
 
         <div className="mt-5 rounded-2xl bg-[#F8F3EA] p-4">
@@ -85,7 +93,7 @@ export default function SubscriptionPopup() {
 
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-[#8FA173]" />
-              <span>Accès sécurisé à votre espace familial</span>
+              <span>Espace sécurisé accessible en tout temps</span>
             </div>
           </div>
         </div>
@@ -96,29 +104,22 @@ export default function SubscriptionPopup() {
           </p>
         )}
 
-        <div className="mt-5 space-y-3">
+        <div className="mt-5">
           <button
             type="button"
-            onClick={() => startCheckout(true)}
-            disabled={Boolean(loadingType)}
+            onClick={startCheckout}
+            disabled={loading}
             className="w-full rounded-2xl bg-[#8FA173] px-5 py-3.5 text-[0.98rem] font-bold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loadingType === "trial"
+            {loading
               ? "Redirection vers Stripe..."
-              : "Commencer mon essai gratuit de 1 mois"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => startCheckout(false)}
-            disabled={Boolean(loadingType)}
-            className="w-full rounded-2xl border border-[#8FA173]/40 bg-white px-5 py-3.5 text-[0.98rem] font-bold text-[#7A8B69] shadow-sm transition hover:bg-[#F4F7EF] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loadingType === "paid"
-              ? "Redirection vers Stripe..."
-              : "Passer à la version payante"}
+              : "Activer mon abonnement"}
           </button>
         </div>
+
+        <p className="mt-4 text-center text-xs leading-5 text-[#8A8178]">
+          Le paiement est traité de façon sécurisée par Stripe.
+        </p>
       </div>
     </div>
   );

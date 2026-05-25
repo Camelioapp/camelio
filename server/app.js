@@ -2124,10 +2124,13 @@ app.post(
   "/create-checkout-session",
   requireAuth,
   validateStripeConfig,
-  async (req, res, next) => {
+  async (req, res) => {
     try {
       const lookupKey = req.body?.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
-      const wantsTrial = req.body?.trial !== false;
+
+      // Important : par défaut, on NE met PAS d'essai gratuit.
+      // L'essai est activé seulement si le frontend envoie explicitement trial: true.
+      const wantsTrial = req.body?.trial === true;
 
       const prices = await stripe.prices.list({
         lookup_keys: [lookupKey],
@@ -2144,6 +2147,20 @@ app.post(
 
       const price = prices.data[0];
 
+      const subscriptionData = {
+        metadata: {
+          userId: req.session.user.sub,
+          userEmail: req.session.user.email || "",
+          plan: lookupKey,
+          storageGb: STRIPE_STORAGE_GB,
+          trial: wantsTrial ? "true" : "false",
+        },
+      };
+
+      if (wantsTrial) {
+        subscriptionData.trial_period_days = 30;
+      }
+
       const checkoutSession = await stripe.checkout.sessions.create({
         mode: "subscription",
         customer_email: req.session.user.email || undefined,
@@ -2153,10 +2170,16 @@ app.post(
             quantity: 1,
           },
         ],
+
         success_url: `${APP_URL}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${APP_URL}/billing?canceled=true`,
+
         allow_promotion_codes: true,
         billing_address_collection: "auto",
+
+        // Important : Stripe demandera une méthode de paiement.
+        payment_method_collection: "always",
+
         metadata: {
           userId: req.session.user.sub,
           userEmail: req.session.user.email || "",
@@ -2164,16 +2187,8 @@ app.post(
           storageGb: STRIPE_STORAGE_GB,
           trial: wantsTrial ? "true" : "false",
         },
-        subscription_data: {
-          ...(wantsTrial ? { trial_period_days: 30 } : {}),
-          metadata: {
-            userId: req.session.user.sub,
-            userEmail: req.session.user.email || "",
-            plan: lookupKey,
-            storageGb: STRIPE_STORAGE_GB,
-            trial: wantsTrial ? "true" : "false",
-          },
-        },
+
+        subscription_data: subscriptionData,
       });
 
       return res.json({
@@ -2181,7 +2196,14 @@ app.post(
         url: checkoutSession.url,
       });
     } catch (error) {
-      next(error);
+      console.error("STRIPE CHECKOUT ERROR:", error);
+
+      return res.status(500).json({
+        error: "stripe_checkout_error",
+        message:
+          error.message ||
+          "Impossible de créer la session de paiement Stripe.",
+      });
     }
   }
 );
