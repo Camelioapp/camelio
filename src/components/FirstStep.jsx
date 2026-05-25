@@ -3,14 +3,45 @@ import React, { useMemo, useState } from "react";
 const STORAGE_KEY = "camelio_first_step_completed";
 const SETUP_DATA_KEY = "camelio_initial_setup";
 
-const CHILD_COLORS = ["#a8b193", "#eaa5af", "#b5a7c8", "#eec988", "#a2badf"];
+const CHILD_COLORS = [
+  { id: "sage", label: "Sauge", value: "#A8B193" },
+  { id: "rose", label: "Rose", value: "#E99AAA" },
+  { id: "blue", label: "Bleu doux", value: "#8FB8DE" },
+  { id: "mauve", label: "Mauve", value: "#AA90C8" },
+  { id: "gold", label: "Doré", value: "#D4A85F" },
+  { id: "peach", label: "Pêche", value: "#E8A07E" },
+  { id: "mint", label: "Menthe", value: "#7CBFA2" },
+  { id: "lavender", label: "Lavande", value: "#C7B3E5" },
+  { id: "mustard", label: "Moutarde", value: "#D9BF5E" },
+  { id: "olive", label: "Olive", value: "#8E9A72" },
+  { id: "coral", label: "Corail", value: "#E8786D" },
+  { id: "teal", label: "Sarcelle", value: "#5BAEAA" },
+  { id: "sky", label: "Ciel", value: "#76BFE3" },
+  { id: "grape", label: "Raisin", value: "#8F78B8" },
+  { id: "sand", label: "Sable", value: "#D8C49A" },
+];
 
 const FAMILY_SITUATIONS = [
-  { id: "separated", label: "Parent séparé" },
-  { id: "shared_custody", label: "Garde partagée" },
-  { id: "single_parent", label: "Parent monoparental" },
-  { id: "couple", label: "Parent en couple" },
-  { id: "other", label: "Autre situation" },
+  {
+    id: "couple",
+    label: "En couple",
+    description: "Deux parents dans le même foyer ou une organisation familiale commune.",
+  },
+  {
+    id: "single_full",
+    label: "Monoparental, garde complète",
+    description: "Un parent principal avec garde complète.",
+  },
+  {
+    id: "solo_shared",
+    label: "Soloparental, garde partagée ou non partagée",
+    description: "Un parent qui souhaite organiser la garde, les documents et les suivis.",
+  },
+  {
+    id: "other",
+    label: "Autre situation",
+    description: "Une autre réalité familiale ou une configuration particulière.",
+  },
 ];
 
 const ALL_SECTIONS = [
@@ -25,66 +56,81 @@ const ALL_SECTIONS = [
   { id: "memorablePhrases", label: "Phrases mémorables" },
 ];
 
-const AVATAR_PRESETS = [
+const PUBLIC_AVATARS = [
   {
-    id: "bear",
-    label: "Ours",
-    background: "#f3eadf",
-    icon: "🐻",
+    id: "fille-1",
+    label: "Profil fille 1",
+    src: "/Profil/Fille/fille-1.png",
   },
   {
-    id: "cat",
-    label: "Chat",
-    background: "#f8dfe6",
-    icon: "🐱",
+    id: "fille-2",
+    label: "Profil fille 2",
+    src: "/Profil/Fille/fille-2.png",
   },
   {
-    id: "fox",
-    label: "Renard",
-    background: "#f4d6b8",
-    icon: "🦊",
+    id: "fille-3",
+    label: "Profil fille 3",
+    src: "/Profil/Fille/fille-3.png",
   },
   {
-    id: "rabbit",
-    label: "Lapin",
-    background: "#e9e0f3",
-    icon: "🐰",
+    id: "fille-4",
+    label: "Profil fille 4",
+    src: "/Profil/Fille/fille-4.png",
   },
   {
-    id: "panda",
-    label: "Panda",
-    background: "#dce8f7",
-    icon: "🐼",
+    id: "garcon-1",
+    label: "Profil garçon 1",
+    src: "/Profil/Garcon/garcon-1.png",
+  },
+  {
+    id: "garcon-2",
+    label: "Profil garçon 2",
+    src: "/Profil/Garcon/garcon-2.png",
+  },
+  {
+    id: "garcon-3",
+    label: "Profil garçon 3",
+    src: "/Profil/Garcon/garcon-3.png",
+  },
+  {
+    id: "garcon-4",
+    label: "Profil garçon 4",
+    src: "/Profil/Garcon/garcon-4.png",
   },
 ];
 
-function createAvatarDataUrl(avatar) {
-  const svg = `
-    <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="240" height="240" rx="120" fill="${avatar.background}" />
-      <circle cx="120" cy="120" r="86" fill="white" opacity="0.55" />
-      <text x="120" y="142" text-anchor="middle" font-size="82" font-family="Arial, sans-serif">${avatar.icon}</text>
-    </svg>
-  `;
+function getFallbackAvatar(index) {
+  return PUBLIC_AVATARS[index % PUBLIC_AVATARS.length]?.src || "";
+}
 
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+function getDefaultColor(index) {
+  return CHILD_COLORS[index % CHILD_COLORS.length];
 }
 
 function getRecommendedSectionIds(situation) {
-  const baseSections = [
-    "calendar",
-    "documents",
-    "photos",
-    "medical",
-    "notes",
-    "memorablePhrases",
-  ];
-
-  if (situation === "couple" || situation === "single_parent") {
-    return baseSections;
+  if (situation === "couple") {
+    return [
+      "calendar",
+      "documents",
+      "photos",
+      "medical",
+      "notes",
+      "memorablePhrases",
+    ];
   }
 
-  if (situation === "separated" || situation === "shared_custody") {
+  if (situation === "single_full") {
+    return [
+      "calendar",
+      "documents",
+      "photos",
+      "medical",
+      "notes",
+      "memorablePhrases",
+    ];
+  }
+
+  if (situation === "solo_shared") {
     return [
       "calendar",
       "documents",
@@ -98,10 +144,17 @@ function getRecommendedSectionIds(situation) {
     ];
   }
 
-  return baseSections;
+  return [
+    "calendar",
+    "documents",
+    "photos",
+    "medical",
+    "notes",
+    "memorablePhrases",
+  ];
 }
 
-function getRemovedSectionLabels(situation) {
+function getDisabledSectionLabels(situation) {
   const recommended = getRecommendedSectionIds(situation);
 
   return ALL_SECTIONS.filter((section) => !recommended.includes(section.id)).map(
@@ -110,7 +163,8 @@ function getRemovedSectionLabels(situation) {
 }
 
 function buildEmptyChild(index) {
-  const avatar = AVATAR_PRESETS[index % AVATAR_PRESETS.length];
+  const color = getDefaultColor(index);
+  const avatar = PUBLIC_AVATARS[index % PUBLIC_AVATARS.length];
 
   return {
     id:
@@ -121,25 +175,26 @@ function buildEmptyChild(index) {
     lastName: "",
     nickname: "",
     birthDate: "",
-    color: CHILD_COLORS[index % CHILD_COLORS.length],
-    photo: createAvatarDataUrl(avatar),
-    image: createAvatarDataUrl(avatar),
-    avatar: createAvatarDataUrl(avatar),
-    defaultAvatarId: avatar.id,
+    color: color.id,
+    colorHex: color.value,
+    photo: avatar?.src || "",
+    image: avatar?.src || "",
+    avatar: avatar?.src || "",
+    defaultAvatarId: avatar?.id || "",
   };
 }
 
 export default function FirstStep({ onComplete, onSkip }) {
   const [step, setStep] = useState(1);
-  const [familySituation, setFamilySituation] = useState("separated");
+  const [familySituation, setFamilySituation] = useState("couple");
   const [childrenCount, setChildrenCount] = useState(1);
   const [children, setChildren] = useState([buildEmptyChild(0)]);
   const [selectedSections, setSelectedSections] = useState(
-    getRecommendedSectionIds("separated")
+    getRecommendedSectionIds("couple")
   );
 
-  const removedSections = useMemo(() => {
-    return getRemovedSectionLabels(familySituation);
+  const disabledSections = useMemo(() => {
+    return getDisabledSectionLabels(familySituation);
   }, [familySituation]);
 
   const progressWidth = `${(step / 3) * 100}%`;
@@ -177,17 +232,29 @@ export default function FirstStep({ onComplete, onSkip }) {
     );
   };
 
-  const updateChildAvatar = (index, avatar) => {
-    const avatarUrl = createAvatarDataUrl(avatar);
-
+  const updateChildColor = (index, color) => {
     setChildren((current) =>
       current.map((child, childIndex) =>
         childIndex === index
           ? {
               ...child,
-              photo: avatarUrl,
-              image: avatarUrl,
-              avatar: avatarUrl,
+              color: color.id,
+              colorHex: color.value,
+            }
+          : child
+      )
+    );
+  };
+
+  const updateChildAvatar = (index, avatar) => {
+    setChildren((current) =>
+      current.map((child, childIndex) =>
+        childIndex === index
+          ? {
+              ...child,
+              photo: avatar.src,
+              image: avatar.src,
+              avatar: avatar.src,
               defaultAvatarId: avatar.id,
             }
           : child
@@ -308,8 +375,7 @@ export default function FirstStep({ onComplete, onSkip }) {
               </h3>
 
               <p className="mt-2 text-sm text-[#5b6b8a]">
-                Cette étape nous aide à adapter Camelio à votre réalité
-                familiale.
+                Cette étape nous aide à adapter Camelio à votre réalité familiale.
               </p>
 
               <div className="mt-4 rounded-2xl bg-slate-50 px-5 py-4 text-sm text-[#5b6b8a]">
@@ -331,26 +397,35 @@ export default function FirstStep({ onComplete, onSkip }) {
                         key={situation.id}
                         type="button"
                         onClick={() => updateFamilySituation(situation.id)}
-                        className={`rounded-2xl border px-5 py-4 text-left text-sm font-semibold transition ${
+                        className={`rounded-2xl border px-5 py-4 text-left transition ${
                           isSelected
                             ? "border-[#a8b193] bg-[#f3f6ef] text-slate-950 shadow-sm"
                             : "border-slate-200 bg-white text-[#465a78] hover:border-[#a8b193]"
                         }`}
                       >
-                        {situation.label}
+                        <span className="block text-sm font-bold">
+                          {situation.label}
+                        </span>
+
+                        <span className="mt-1 block text-xs leading-5 text-[#5b6b8a]">
+                          {situation.description}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {removedSections.length > 0 && (
-                <div className="mt-6 rounded-2xl bg-[#f6f0e6] px-5 py-4 text-sm leading-6 text-[#465a78]">
-                  Selon votre réponse, certaines sections seront masquées par
+              {disabledSections.length > 0 && (
+                <div className="mt-6 rounded-2xl bg-[#fff4f6] px-5 py-4 text-sm leading-6 text-[#465a78]">
+                  Selon votre réponse, certaines sections seront désactivées par
                   défaut, car Camelio estime que vous utiliserez davantage le
-                  profil de l’enfant et les sections essentielles. Par exemple :
-                  {` ${removedSections.join(", ")}.`} Vous pourrez toutefois
-                  les activer au besoin dans les paramètres.
+                  profil de l’enfant et les sections essentielles. Sections
+                  désactivées :{" "}
+                  <span className="font-bold text-[#eaa5af]">
+                    {disabledSections.join(", ")}
+                  </span>
+                  . Vous pourrez toutefois les activer au besoin dans les paramètres.
                 </div>
               )}
             </section>
@@ -400,7 +475,7 @@ export default function FirstStep({ onComplete, onSkip }) {
 
                       <div
                         className="h-10 w-10 rounded-full border-4 border-white shadow"
-                        style={{ backgroundColor: child.color }}
+                        style={{ backgroundColor: child.colorHex }}
                       />
                     </div>
 
@@ -471,8 +546,7 @@ export default function FirstStep({ onComplete, onSkip }) {
                       </p>
 
                       <div className="flex flex-wrap gap-3">
-                        {AVATAR_PRESETS.map((avatar) => {
-                          const avatarUrl = createAvatarDataUrl(avatar);
+                        {PUBLIC_AVATARS.map((avatar) => {
                           const isSelected = child.defaultAvatarId === avatar.id;
 
                           return (
@@ -488,9 +562,12 @@ export default function FirstStep({ onComplete, onSkip }) {
                               title={avatar.label}
                             >
                               <img
-                                src={avatarUrl}
+                                src={avatar.src}
                                 alt={avatar.label}
                                 className="h-full w-full object-cover"
+                                onError={(event) => {
+                                  event.currentTarget.src = getFallbackAvatar(0);
+                                }}
                               />
                             </button>
                           );
@@ -498,6 +575,7 @@ export default function FirstStep({ onComplete, onSkip }) {
                       </div>
 
                       <p className="mt-2 text-xs leading-5 text-[#5b6b8a]">
+                        Ces images proviennent du dossier public de Camelio.
                         Cette photo sera utilisée par défaut dans le profil de
                         l’enfant et pourra être modifiée plus tard.
                       </p>
@@ -510,20 +588,19 @@ export default function FirstStep({ onComplete, onSkip }) {
 
                       <div className="flex flex-wrap gap-3">
                         {CHILD_COLORS.map((color) => {
-                          const isSelected = child.color === color;
+                          const isSelected = child.color === color.id;
 
                           return (
                             <button
-                              key={color}
+                              key={color.id}
                               type="button"
-                              onClick={() => updateChild(index, "color", color)}
-                              className={`h-9 w-9 rounded-full border-4 transition ${
-                                isSelected
-                                  ? "border-slate-950"
-                                  : "border-white"
+                              onClick={() => updateChildColor(index, color)}
+                              className={`flex h-10 w-10 items-center justify-center rounded-full border-4 transition ${
+                                isSelected ? "border-slate-950" : "border-white"
                               } shadow`}
-                              style={{ backgroundColor: color }}
-                              aria-label={`Choisir la couleur ${color}`}
+                              style={{ backgroundColor: color.value }}
+                              title={color.label}
+                              aria-label={`Choisir la couleur ${color.label}`}
                             />
                           );
                         })}
@@ -549,7 +626,8 @@ export default function FirstStep({ onComplete, onSkip }) {
 
               <p className="mt-2 text-sm text-[#5b6b8a]">
                 Camelio a sélectionné certaines sections selon votre situation.
-                Vous pouvez en ajouter ou en retirer selon vos besoins.
+                Les sections moins pertinentes sont désactivées par défaut, mais
+                vous pouvez les activer si vous en avez besoin.
               </p>
 
               <div className="mt-4 rounded-2xl bg-slate-50 px-5 py-4 text-sm text-[#5b6b8a]">
@@ -557,14 +635,14 @@ export default function FirstStep({ onComplete, onSkip }) {
                 ces informations plus tard.
               </div>
 
-              {removedSections.length > 0 && (
-                <div className="mt-5 rounded-2xl bg-[#f6f0e6] px-5 py-4 text-sm leading-6 text-[#465a78]">
-                  Certaines sections ont été masquées par défaut, car elles
-                  semblent moins prioritaires pour votre situation actuelle. Par
-                  exemple, un parent en couple ou un parent solo n’a pas
-                  nécessairement besoin du plan parental, du calculateur de
-                  journées ou des factures à rembourser. Vous pouvez toutefois
-                  les activer maintenant ou plus tard dans les paramètres.
+              {disabledSections.length > 0 && (
+                <div className="mt-5 rounded-2xl bg-[#fff4f6] px-5 py-4 text-sm leading-6 text-[#465a78]">
+                  Sections désactivées par défaut :{" "}
+                  <span className="font-bold text-[#eaa5af]">
+                    {disabledSections.join(", ")}
+                  </span>
+                  . Vous pourrez toutefois les réactiver maintenant ou plus tard
+                  dans les paramètres.
                 </div>
               )}
 
@@ -585,14 +663,19 @@ export default function FirstStep({ onComplete, onSkip }) {
                         className={`rounded-2xl border px-5 py-4 text-left text-sm font-semibold transition ${
                           isSelected
                             ? "border-[#a8b193] bg-[#f3f6ef] text-slate-950 shadow-sm"
-                            : "border-slate-200 bg-white text-[#465a78] hover:border-[#a8b193]"
+                            : "border-[#eaa5af]/70 bg-white text-[#465a78] hover:border-[#eaa5af]"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <span>{section.label}</span>
-                          {isSelected && (
+
+                          {isSelected ? (
                             <span className="rounded-full bg-[#a8b193] px-2 py-1 text-xs text-white">
                               Activée
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-[#eaa5af] px-2 py-1 text-xs text-white">
+                              Désactivée
                             </span>
                           )}
                         </div>
