@@ -1362,12 +1362,110 @@ function formatInvitationSections(sectionIds = [], sectionPermissions = {}) {
     .join("");
 }
 
+function createInvitationExpiry() {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+}
+
+function isExpiredIsoDate(value) {
+  if (!value) return true;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return true;
+  return date.getTime() < Date.now();
+}
+
+function cleanProfileSharePayload(body = {}) {
+  const inviteeEmail = String(body.inviteeEmail || "")
+    .trim()
+    .toLowerCase();
+
+  const childIds = Array.isArray(body.childIds) ? body.childIds : [];
+  const sectionIds = Array.isArray(body.sectionIds) ? body.sectionIds : [];
+
+  const allowedPermissions = ["read", "edit", "delete"];
+
+  const rawSectionPermissions =
+    body.sectionPermissions && typeof body.sectionPermissions === "object"
+      ? body.sectionPermissions
+      : {};
+
+  const sectionPermissions = sectionIds.reduce((accumulator, sectionId) => {
+    const permission = rawSectionPermissions[sectionId];
+
+    accumulator[sectionId] = allowedPermissions.includes(permission)
+      ? permission
+      : "read";
+
+    return accumulator;
+  }, {});
+
+  const highestPermission = Object.values(sectionPermissions).includes("delete")
+    ? "delete"
+    : Object.values(sectionPermissions).includes("edit")
+      ? "edit"
+      : "read";
+
+  return {
+    inviteeName: String(body.inviteeName || "").trim(),
+    inviteeEmail,
+    childIds,
+    children: Array.isArray(body.children) ? body.children : [],
+    sectionIds,
+    sectionPermissions,
+    permission: highestPermission,
+    note: String(body.note || "").trim(),
+  };
+}
+
+function buildProfileShareInviteUrl(invitationToken) {
+  const inviteLink = new URL("/invitation", APP_URL);
+  inviteLink.searchParams.set("token", invitationToken);
+  return inviteLink.toString();
+}
+
+async function findProfileShareByToken(invitationToken) {
+  const token = String(invitationToken || "").trim();
+
+  if (!token) return null;
+
+  const scanResult = await dynamo.send(
+    new ScanCommand({
+      TableName: DYNAMODB_TABLE,
+      FilterExpression: "#type = :type AND invitationToken = :invitationToken",
+      ExpressionAttributeNames: {
+        "#type": "type",
+      },
+      ExpressionAttributeValues: {
+        ":type": "profileShare",
+        ":invitationToken": token,
+      },
+      Limit: 1,
+    })
+  );
+
+  return (scanResult.Items || [])[0] || null;
+}
+
+function sanitizePublicInvitation(share) {
+  if (!share) return null;
+
+  return {
+    id: share.id,
+    inviteeEmail: share.inviteeEmail || "",
+    inviteeName: share.inviteeName || "",
+    ownerName: share.ownerName || "",
+    children: share.children || [],
+    sectionIds: share.sectionIds || [],
+    sectionPermissions: share.sectionPermissions || {},
+    permission: share.permission || "read",
+    status: share.status || "pending",
+    invitationExpiresAt: share.invitationExpiresAt || null,
+    expiresAt: share.expiresAt || share.invitationExpiresAt || null,
+  };
+}
+
 async function sendProfileShareInvitationEmail(share) {
-const inviteLink = new URL("/invitation", APP_URL);
-inviteLink.searchParams.set("token", share.invitationToken);
-
-
-  const inviteUrl = inviteLink.toString();
+  const inviteUrl =
+    share.inviteUrl || buildProfileShareInviteUrl(share.invitationToken);
 
   const childrenNames = (share.children || [])
     .map((child) => child.name)
@@ -1459,68 +1557,6 @@ inviteLink.searchParams.set("token", share.invitationToken);
   });
 }
 
-function createSecurityCode() {
-  return String(Math.floor(1000000 + Math.random() * 9000000));
-}
-
-function cleanSecurityCode(value = "") {
-  return String(value || "").replace(/\D/g, "").slice(0, 7);
-}
-
-function createInvitationExpiry() {
-  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-}
-
-function isExpiredIsoDate(value) {
-  if (!value) return true;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return true;
-  return date.getTime() < Date.now();
-}
-
-function cleanProfileSharePayload(body = {}) {
-  const inviteeEmail = String(body.inviteeEmail || "")
-    .trim()
-    .toLowerCase();
-
-  const childIds = Array.isArray(body.childIds) ? body.childIds : [];
-  const sectionIds = Array.isArray(body.sectionIds) ? body.sectionIds : [];
-
-  const allowedPermissions = ["read", "edit", "delete"];
-
-  const rawSectionPermissions =
-    body.sectionPermissions && typeof body.sectionPermissions === "object"
-      ? body.sectionPermissions
-      : {};
-
-  const sectionPermissions = sectionIds.reduce((accumulator, sectionId) => {
-    const permission = rawSectionPermissions[sectionId];
-
-    accumulator[sectionId] = allowedPermissions.includes(permission)
-      ? permission
-      : "read";
-
-    return accumulator;
-  }, {});
-
-  const highestPermission = Object.values(sectionPermissions).includes("delete")
-    ? "delete"
-    : Object.values(sectionPermissions).includes("edit")
-      ? "edit"
-      : "read";
-
-  return {
-    inviteeName: String(body.inviteeName || "").trim(),
-    inviteeEmail,
-    childIds,
-    children: Array.isArray(body.children) ? body.children : [],
-    sectionIds,
-    sectionPermissions,
-    permission: highestPermission,
-    note: String(body.note || "").trim(),
-  };
-}
-
 app.get(
   "/api/profile-shares",
   requireAuth,
@@ -1556,7 +1592,6 @@ app.get(
   }
 );
 
-
 app.post(
   "/api/profile-shares",
   requireAuth,
@@ -1590,6 +1625,9 @@ app.post(
 
       const now = new Date().toISOString();
       const shareId = req.body.id || randomUUID();
+      const invitationToken = randomUUID();
+      const invitationExpiresAt = createInvitationExpiry();
+      const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
       share = {
         PK: getUserPk(req),
@@ -1605,12 +1643,15 @@ app.post(
           "",
         ...payload,
         status: "pending",
-        invitationToken: randomUUID(),
-        invitationExpiresAt: createInvitationExpiry(),
-        securityCode: createSecurityCode(),
+        invitationToken,
+        invitationExpiresAt,
+        expiresAt: invitationExpiresAt,
+        inviteUrl,
         importedByUserId: "",
         importedByEmail: "",
         importedAt: null,
+        emailStatus: "pending",
+        emailError: "",
         createdAt: now,
         updatedAt: now,
       };
@@ -1622,24 +1663,82 @@ app.post(
         })
       );
 
-      await sendProfileShareInvitationEmail(share);
+      try {
+        await sendProfileShareInvitationEmail(share);
 
-      return res.status(201).json({
-        success: true,
-        share,
-        message: "L’invitation a été créée et envoyée par courriel.",
-      });
+        share = {
+          ...share,
+          emailStatus: "sent",
+          emailError: "",
+          updatedAt: new Date().toISOString(),
+        };
+
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: share.PK,
+              SK: share.SK,
+            },
+            UpdateExpression:
+              "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":emailStatus": share.emailStatus,
+              ":emailError": share.emailError,
+              ":updatedAt": share.updatedAt,
+            },
+            ReturnValues: "NONE",
+          })
+        );
+
+        return res.status(201).json({
+          success: true,
+          share,
+          message: "L’invitation a été créée et envoyée par courriel.",
+        });
+      } catch (emailError) {
+        console.error("Erreur envoi courriel invitation Camelio:", emailError);
+
+        share = {
+          ...share,
+          emailStatus: "failed",
+          emailError: emailError?.message || "Erreur d’envoi courriel.",
+          updatedAt: new Date().toISOString(),
+        };
+
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: share.PK,
+              SK: share.SK,
+            },
+            UpdateExpression:
+              "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":emailStatus": share.emailStatus,
+              ":emailError": share.emailError,
+              ":updatedAt": share.updatedAt,
+            },
+            ReturnValues: "NONE",
+          })
+        );
+
+        return res.status(201).json({
+          success: true,
+          share,
+          message:
+            "L’invitation a été créée, mais le courriel n’a pas pu être envoyé.",
+        });
+      }
     } catch (error) {
-      console.error("Erreur création ou envoi invitation Camelio:", error);
+      console.error("Erreur création invitation Camelio:", error);
 
       return res.status(500).json({
-        error: "profile_share_invitation_failed",
+        error: "profile_share_creation_failed",
         shareCreated: Boolean(share),
         share,
-        message:
-          share
-            ? "L’invitation a été créée, mais le courriel n’a pas pu être envoyé."
-            : error?.message || "L’invitation n’a pas pu être créée.",
+        message: error?.message || "L’invitation n’a pas pu être créée.",
         details: error?.message || null,
       });
     }
@@ -1714,6 +1813,91 @@ app.put(
 );
 
 app.post(
+  "/api/profile-shares/:shareId/resend",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { shareId } = req.params;
+
+      const existingResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `SHARE#${shareId}`,
+          },
+        })
+      );
+
+      const existingShare = existingResult.Item;
+
+      if (!existingShare || existingShare.status === "revoked") {
+        return res.status(404).json({
+          success: false,
+          error: "share_not_found",
+          message: "Cet accès partagé est introuvable ou révoqué.",
+        });
+      }
+
+      try {
+        await sendProfileShareInvitationEmail(existingShare);
+
+        const result = await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getUserPk(req),
+              SK: `SHARE#${shareId}`,
+            },
+            UpdateExpression:
+              "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":emailStatus": "sent",
+              ":emailError": "",
+              ":updatedAt": new Date().toISOString(),
+            },
+            ReturnValues: "ALL_NEW",
+          })
+        );
+
+        return res.json({
+          success: true,
+          share: result.Attributes,
+          message: "Invitation renvoyée par courriel.",
+        });
+      } catch (emailError) {
+        const result = await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getUserPk(req),
+              SK: `SHARE#${shareId}`,
+            },
+            UpdateExpression:
+              "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":emailStatus": "failed",
+              ":emailError": emailError?.message || "Erreur d’envoi courriel.",
+              ":updatedAt": new Date().toISOString(),
+            },
+            ReturnValues: "ALL_NEW",
+          })
+        );
+
+        return res.status(502).json({
+          success: false,
+          share: result.Attributes,
+          message: "Le courriel n’a pas pu être renvoyé.",
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
   "/api/profile-shares/:shareId/regenerate-link",
   requireAuth,
   validateAwsConfig,
@@ -1721,6 +1905,9 @@ app.post(
     try {
       const { shareId } = req.params;
       const now = new Date().toISOString();
+      const invitationToken = randomUUID();
+      const invitationExpiresAt = createInvitationExpiry();
+      const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
       const result = await dynamo.send(
         new UpdateCommand({
@@ -1730,14 +1917,15 @@ app.post(
             SK: `SHARE#${shareId}`,
           },
           UpdateExpression:
-            "SET invitationToken = :invitationToken, invitationExpiresAt = :invitationExpiresAt, securityCode = :securityCode, #status = :status, importedByUserId = :empty, importedByEmail = :empty, importedAt = :nullValue, updatedAt = :updatedAt",
+            "SET invitationToken = :invitationToken, invitationExpiresAt = :invitationExpiresAt, expiresAt = :expiresAt, inviteUrl = :inviteUrl, #status = :status, importedByUserId = :empty, importedByEmail = :empty, importedAt = :nullValue, updatedAt = :updatedAt",
           ExpressionAttributeNames: {
             "#status": "status",
           },
           ExpressionAttributeValues: {
-            ":invitationToken": randomUUID(),
-            ":invitationExpiresAt": createInvitationExpiry(),
-            ":securityCode": createSecurityCode(),
+            ":invitationToken": invitationToken,
+            ":invitationExpiresAt": invitationExpiresAt,
+            ":expiresAt": invitationExpiresAt,
+            ":inviteUrl": inviteUrl,
             ":status": "pending",
             ":empty": "",
             ":nullValue": null,
@@ -1747,12 +1935,115 @@ app.post(
         })
       );
 
-      await sendProfileShareInvitationEmail(result.Attributes);
+      let updatedShare = result.Attributes;
+
+      try {
+        await sendProfileShareInvitationEmail(updatedShare);
+
+        const emailStatusResult = await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getUserPk(req),
+              SK: `SHARE#${shareId}`,
+            },
+            UpdateExpression:
+              "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":emailStatus": "sent",
+              ":emailError": "",
+              ":updatedAt": new Date().toISOString(),
+            },
+            ReturnValues: "ALL_NEW",
+          })
+        );
+
+        updatedShare = emailStatusResult.Attributes;
+      } catch (emailError) {
+        const emailStatusResult = await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getUserPk(req),
+              SK: `SHARE#${shareId}`,
+            },
+            UpdateExpression:
+              "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":emailStatus": "failed",
+              ":emailError": emailError?.message || "Erreur d’envoi courriel.",
+              ":updatedAt": new Date().toISOString(),
+            },
+            ReturnValues: "ALL_NEW",
+          })
+        );
+
+        updatedShare = emailStatusResult.Attributes;
+      }
 
       return res.json({
         success: true,
-        share: result.Attributes,
-        message: "Un nouveau lien sécurisé a été généré et envoyé.",
+        share: updatedShare,
+        message: "Un nouveau lien sécurisé a été généré.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.get(
+  "/api/profile-shares/invitation/:token",
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const token = String(req.params.token || "").trim();
+
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_token",
+          message: "Le lien d’invitation est incomplet.",
+        });
+      }
+
+      const share = await findProfileShareByToken(token);
+
+      if (!share) {
+        return res.status(404).json({
+          success: false,
+          error: "invitation_not_found",
+          message: "Cette invitation est introuvable.",
+        });
+      }
+
+      if (share.status === "revoked") {
+        return res.status(403).json({
+          success: false,
+          error: "invitation_revoked",
+          message: "Cette invitation a été révoquée.",
+        });
+      }
+
+      if (share.status === "accepted") {
+        return res.status(409).json({
+          success: false,
+          error: "invitation_already_accepted",
+          message: "Cette invitation a déjà été acceptée.",
+        });
+      }
+
+      if (isExpiredIsoDate(share.invitationExpiresAt)) {
+        return res.status(410).json({
+          success: false,
+          error: "invitation_expired",
+          message: "Cette invitation est expirée. Demandez un nouveau lien.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        invitation: sanitizePublicInvitation(share),
       });
     } catch (error) {
       next(error);
@@ -1810,64 +2101,118 @@ app.patch(
 );
 
 app.post(
-  "/api/profile-shares/import-key",
+  "/api/profile-shares/import",
   requireAuth,
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      const securityCode = cleanSecurityCode(req.body?.securityCode);
-      const invitationToken = String(req.body?.invitationToken || req.body?.invite || "").trim();
+      const token = String(req.body?.token || req.body?.invitationToken || "")
+        .trim();
 
-      if (!/^\d{7}$/.test(securityCode)) {
+      if (!token) {
         return res.status(400).json({
-          error: "invalid_security_code",
-          message: "La clé de sécurité doit contenir 7 chiffres.",
+          success: false,
+          error: "missing_token",
+          message: "Le token d’invitation est requis.",
         });
       }
 
-      if (!invitationToken) {
-        return res.status(400).json({
-          error: "missing_invitation_token",
-          message: "Le lien d’invitation est requis pour importer la clé.",
-        });
-      }
-
-      const scanResult = await dynamo.send(
-        new ScanCommand({
-          TableName: DYNAMODB_TABLE,
-          FilterExpression:
-            "#type = :type AND invitationToken = :invitationToken AND securityCode = :securityCode",
-          ExpressionAttributeNames: {
-            "#type": "type",
-          },
-          ExpressionAttributeValues: {
-            ":type": "profileShare",
-            ":invitationToken": invitationToken,
-            ":securityCode": securityCode,
-          },
-          Limit: 1,
-        })
-      );
-
-      const share = (scanResult.Items || [])[0];
+      const share = await findProfileShareByToken(token);
 
       if (!share) {
         return res.status(404).json({
-          error: "share_not_found",
-          message: "Aucune invitation ne correspond à cette clé.",
+          success: false,
+          error: "invitation_not_found",
+          message: "Cette invitation est introuvable.",
+        });
+      }
+
+      if (share.status === "revoked") {
+        return res.status(403).json({
+          success: false,
+          error: "invitation_revoked",
+          message: "Cette invitation a été révoquée.",
+        });
+      }
+
+      if (share.status === "accepted") {
+        return res.status(409).json({
+          success: false,
+          error: "invitation_already_accepted",
+          message: "Cette invitation a déjà été acceptée.",
         });
       }
 
       if (isExpiredIsoDate(share.invitationExpiresAt)) {
         return res.status(410).json({
+          success: false,
           error: "invitation_expired",
-          message: "Le lien sécurisé est expiré. Demandez un nouveau lien.",
+          message: "Cette invitation est expirée. Demandez un nouveau lien.",
+        });
+      }
+
+      const connectedEmail = String(req.session.user?.email || "")
+        .trim()
+        .toLowerCase();
+
+      const invitedEmail = String(share.inviteeEmail || "")
+        .trim()
+        .toLowerCase();
+
+      if (!connectedEmail || connectedEmail !== invitedEmail) {
+        return res.status(403).json({
+          success: false,
+          error: "email_mismatch",
+          message:
+            "Cette invitation est associée à une autre adresse courriel. Connectez-vous avec l’adresse invitée.",
+        });
+      }
+
+      if (share.ownerUserId === req.session.user.sub) {
+        return res.status(400).json({
+          success: false,
+          error: "cannot_import_own_share",
+          message: "Vous ne pouvez pas importer votre propre partage.",
         });
       }
 
       const now = new Date().toISOString();
+      const importedShareId = randomUUID();
 
-      const result = await dynamo.send(
+      const importedShare = {
+        PK: getUserPk(req),
+        SK: `IMPORTED_SHARE#${importedShareId}`,
+        id: importedShareId,
+        type: "importedProfileShare",
+
+        sourceShareId: share.id,
+        sourceOwnerUserId: share.ownerUserId,
+        sourceOwnerEmail: share.ownerEmail || "",
+        sourceOwnerName: share.ownerName || "",
+
+        inviteeUserId: req.session.user.sub,
+        inviteeEmail: connectedEmail,
+
+        children: share.children || [],
+        childIds: share.childIds || [],
+        sectionIds: share.sectionIds || [],
+        sectionPermissions: share.sectionPermissions || {},
+        permission: share.permission || "read",
+
+        status: "accepted",
+        importedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: importedShare,
+        })
+      );
+
+      const updatedSourceResult = await dynamo.send(
         new UpdateCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
@@ -1882,7 +2227,7 @@ app.post(
           ExpressionAttributeValues: {
             ":status": "accepted",
             ":importedByUserId": req.session.user.sub,
-            ":importedByEmail": req.session.user.email || "",
+            ":importedByEmail": connectedEmail,
             ":importedAt": now,
             ":updatedAt": now,
           },
@@ -1892,8 +2237,9 @@ app.post(
 
       return res.json({
         success: true,
-        share: result.Attributes,
-        message: "La clé a été importée avec succès.",
+        message: "L’accès partagé a été importé avec succès.",
+        share: importedShare,
+        sourceShare: updatedSourceResult.Attributes,
       });
     } catch (error) {
       next(error);

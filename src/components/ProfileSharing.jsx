@@ -537,7 +537,7 @@ Au plaisir de partager cet espace avec toi 😊`;
       setIsSaving(true);
       setMessage("");
 
-      const response = await fetch(`${API_BASE_URL}/api/profile-shares/import`, {
+      const response = await fetch(`${API_BASE_URL}/api/profile-shares/import-key`, {
         method: "POST",
         credentials: "include",
         headers: {
