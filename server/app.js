@@ -1312,7 +1312,7 @@ async function sendProfileShareInvitationEmail(share) {
     : "";
 
   await mailTransporter.sendMail({
-    from: `"Camelio" <info@camelio.ca>`,
+    from: `"Camelio" <info@camelio.app>`,
     to: share.inviteeEmail,
     subject: "Tu as reçu une invitation Camelio 😊",
     html: `
