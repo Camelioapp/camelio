@@ -5,8 +5,8 @@ import {
   Eye,
   Mail,
   Pencil,
-  Plus,
   ShieldCheck,
+  Sparkles,
   Trash2,
   UserPlus,
   UsersRound,
@@ -25,18 +25,21 @@ const permissionOptions = [
   {
     id: "read",
     title: "Lecture seule",
+    shortTitle: "Lecture",
     description: "La personne peut consulter les informations partagées.",
     icon: Eye,
   },
   {
     id: "edit",
     title: "Modifier",
+    shortTitle: "Modifier",
     description: "La personne peut consulter et modifier les informations partagées.",
     icon: Pencil,
   },
   {
     id: "delete",
     title: "Modifier et supprimer",
+    shortTitle: "Supprimer",
     description:
       "La personne peut consulter, modifier et supprimer les informations partagées.",
     icon: Trash2,
@@ -105,6 +108,27 @@ function getPermissionLabel(permission) {
   );
 }
 
+function getHighestPermission(sectionPermissions = {}) {
+  const values = Object.values(sectionPermissions);
+
+  if (values.includes("delete")) return "delete";
+  if (values.includes("edit")) return "edit";
+
+  return "read";
+}
+
+function formatList(items = []) {
+  const cleanItems = items.filter(Boolean);
+
+  if (cleanItems.length === 0) return "";
+  if (cleanItems.length === 1) return cleanItems[0];
+  if (cleanItems.length === 2) return `${cleanItems[0]} et ${cleanItems[1]}`;
+
+  return `${cleanItems.slice(0, -1).join(", ")} et ${
+    cleanItems[cleanItems.length - 1]
+  }`;
+}
+
 function ChildAvatar({ child, selected }) {
   const photo = getChildPhoto(child);
 
@@ -137,6 +161,25 @@ function ChildAvatar({ child, selected }) {
   );
 }
 
+function PermissionButton({ option, selected, onClick }) {
+  const Icon = option.icon;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 rounded-full border px-3 py-2 text-xs font-bold transition ${
+        selected
+          ? "border-[#A8B193] bg-[#A8B193] text-white"
+          : "border-[#EADFCF] bg-white text-[#7D756E] hover:bg-[#FAF4EC]"
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {option.shortTitle}
+    </button>
+  );
+}
+
 export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [shares, setShares] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -151,8 +194,13 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     "calendar",
     "documents",
   ]);
-  const [permission, setPermission] = useState("read");
+  const [sectionPermissions, setSectionPermissions] = useState({
+    children: "read",
+    calendar: "read",
+    documents: "read",
+  });
   const [note, setNote] = useState("");
+  const [useAutomaticMessage, setUseAutomaticMessage] = useState(false);
   const [message, setMessage] = useState("");
 
   const shareableSections = useMemo(() => {
@@ -163,6 +211,39 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     return children.filter((child) => selectedChildIds.includes(child.id));
   }, [children, selectedChildIds]);
 
+  const automaticMessage = useMemo(() => {
+    const personName = inviteeName.trim() || "Bonjour";
+    const childNames = selectedChildren.map((child) => displayName(child));
+    const childText =
+      childNames.length > 0 ? formatList(childNames) : "l’enfant sélectionné";
+
+    const sectionDetails = selectedSectionIds
+      .map((sectionId) => {
+        const section = sections.find((item) => item.id === sectionId);
+        if (!section) return null;
+
+        return `${section.title} (${getPermissionLabel(
+          sectionPermissions[sectionId] || "read"
+        ).toLowerCase()})`;
+      })
+      .filter(Boolean);
+
+    const sectionText =
+      sectionDetails.length > 0
+        ? formatList(sectionDetails)
+        : "les sections sélectionnées";
+
+    return `${personName},
+
+Je vous partage un accès Camelio pour le profil de ${childText}.
+
+Vous aurez accès aux sections suivantes : ${sectionText}.
+
+Vous recevrez une invitation par courriel pour créer votre accès ou vous connecter à Camelio.
+
+Merci.`;
+  }, [inviteeName, selectedChildren, selectedSectionIds, sectionPermissions]);
+
   const canSubmit =
     isValidEmail(inviteeEmail) &&
     selectedChildIds.length > 0 &&
@@ -171,6 +252,12 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   useEffect(() => {
     loadShares();
   }, []);
+
+  useEffect(() => {
+    if (useAutomaticMessage) {
+      setNote(automaticMessage);
+    }
+  }, [automaticMessage, useAutomaticMessage]);
 
   async function loadShares() {
     try {
@@ -216,11 +303,39 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   }
 
   function toggleSection(sectionId) {
-    setSelectedSectionIds((current) =>
-      current.includes(sectionId)
-        ? current.filter((id) => id !== sectionId)
-        : [...current, sectionId]
-    );
+    setSelectedSectionIds((current) => {
+      const alreadySelected = current.includes(sectionId);
+
+      if (alreadySelected) {
+        const nextSectionIds = current.filter((id) => id !== sectionId);
+
+        setSectionPermissions((currentPermissions) => {
+          const nextPermissions = { ...currentPermissions };
+          delete nextPermissions[sectionId];
+          return nextPermissions;
+        });
+
+        return nextSectionIds;
+      }
+
+      setSectionPermissions((currentPermissions) => ({
+        ...currentPermissions,
+        [sectionId]: currentPermissions[sectionId] || "read",
+      }));
+
+      return [...current, sectionId];
+    });
+  }
+
+  function updateSectionPermission(sectionId, permission) {
+    if (!selectedSectionIds.includes(sectionId)) {
+      setSelectedSectionIds((current) => [...current, sectionId]);
+    }
+
+    setSectionPermissions((current) => ({
+      ...current,
+      [sectionId]: permission,
+    }));
   }
 
   function resetForm() {
@@ -228,8 +343,13 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     setInviteeEmail("");
     setSelectedChildIds([]);
     setSelectedSectionIds(["children", "calendar", "documents"]);
-    setPermission("read");
+    setSectionPermissions({
+      children: "read",
+      calendar: "read",
+      documents: "read",
+    });
     setNote("");
+    setUseAutomaticMessage(false);
     setMessage("");
   }
 
@@ -245,6 +365,14 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
 
     const now = new Date().toISOString();
 
+    const cleanSectionPermissions = selectedSectionIds.reduce(
+      (accumulator, sectionId) => {
+        accumulator[sectionId] = sectionPermissions[sectionId] || "read";
+        return accumulator;
+      },
+      {}
+    );
+
     const payload = {
       id: createShareId(),
       inviteeName: inviteeName.trim(),
@@ -255,7 +383,8 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
         name: displayName(child),
       })),
       sectionIds: selectedSectionIds,
-      permission,
+      sectionPermissions: cleanSectionPermissions,
+      permission: getHighestPermission(cleanSectionPermissions),
       note: note.trim(),
       status: "pending",
       createdAt: now,
@@ -304,6 +433,23 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     saveLocalShares(nextShares);
   }
 
+  function getShareSectionDetails(share) {
+    const permissions = share.sectionPermissions || {};
+
+    return (share.sectionIds || [])
+      .map((sectionId) => {
+        const section = sections.find((item) => item.id === sectionId);
+        if (!section) return null;
+
+        return {
+          id: sectionId,
+          title: section.title,
+          permission: permissions[sectionId] || share.permission || "read",
+        };
+      })
+      .filter(Boolean);
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -322,9 +468,9 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
               Gérer les accès partagés
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#7D756E]">
-              Choisissez les enfants, les sections et le niveau d’autorisation.
-              La personne invitée recevra une invitation pour créer son accès ou
-              se connecter à Camelio.
+              Choisissez les enfants, les sections et le niveau d’autorisation
+              pour chaque section. La personne invitée recevra une invitation
+              pour créer son accès ou se connecter à Camelio.
             </p>
           </div>
 
@@ -369,20 +515,26 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="label">Nom de la personne</span>
+              <label className="block w-full">
+                <span className="mb-2 block text-sm font-semibold text-[#4F4A45]">
+                  Nom de la personne
+                </span>
+
                 <input
-                  className="input"
+                  className="w-full rounded-3xl border border-[#EADFCF] bg-white px-4 py-3 text-sm text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
                   value={inviteeName}
                   onChange={(event) => setInviteeName(event.target.value)}
                   placeholder="Ex. Marie Tremblay"
                 />
               </label>
 
-              <label className="block">
-                <span className="label">Courriel d’invitation</span>
+              <label className="block w-full">
+                <span className="mb-2 block text-sm font-semibold text-[#4F4A45]">
+                  Courriel d’invitation
+                </span>
+
                 <input
-                  className="input"
+                  className="w-full rounded-3xl border border-[#EADFCF] bg-white px-4 py-3 text-sm text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
                   type="email"
                   value={inviteeEmail}
                   onChange={(event) => setInviteeEmail(event.target.value)}
@@ -392,7 +544,9 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
             </div>
 
             <div>
-              <p className="label">Enfants à partager</p>
+              <p className="mb-2 block text-sm font-semibold text-[#4F4A45]">
+                Enfants à partager
+              </p>
 
               {children.length === 0 ? (
                 <div className="mt-3 rounded-2xl border border-dashed border-[#D8D2C6] bg-white p-5 text-center">
@@ -434,101 +588,131 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
             </div>
 
             <div>
-              <p className="label">Sections accessibles</p>
+              <div className="mb-3 flex flex-col gap-1">
+                <p className="block text-sm font-semibold text-[#4F4A45]">
+                  Sections accessibles
+                </p>
+                <p className="text-xs leading-5 text-[#8B8278]">
+                  Sélectionnez les sections à partager, puis choisissez le niveau
+                  d’accès pour chacune.
+                </p>
+              </div>
 
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3">
                 {shareableSections.map((section) => {
                   const Icon = section.icon;
                   const selected = selectedSectionIds.includes(section.id);
+                  const currentPermission =
+                    sectionPermissions[section.id] || "read";
 
                   return (
-                    <button
+                    <div
                       key={section.id}
-                      type="button"
-                      onClick={() => toggleSection(section.id)}
-                      className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${
+                      className={`rounded-3xl border p-4 transition ${
                         selected
                           ? "border-[#B5A7C8] bg-[#F7F3FF]"
                           : "border-[#EADFCF] bg-white hover:bg-[#FAF4EC]"
                       }`}
                     >
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
-                          selected
-                            ? "bg-[#B5A7C8] text-white"
-                            : "bg-[#F8F3EA] text-[#8B8278]"
-                        }`}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </div>
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(section.id)}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        >
+                          <div
+                            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                              selected
+                                ? "bg-[#B5A7C8] text-white"
+                                : "bg-[#F8F3EA] text-[#8B8278]"
+                            }`}
+                          >
+                            <Icon className="h-5 w-5" />
+                          </div>
 
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-[#4F4A45]">
-                          {section.title}
-                        </p>
-                        <p className="truncate text-xs text-[#8B8278]">
-                          {section.description}
-                        </p>
-                      </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-bold text-[#4F4A45]">
+                                {section.title}
+                              </p>
 
-                      {selected ? (
-                        <Check className="ml-auto h-4 w-4 shrink-0 text-[#8F9874]" />
-                      ) : null}
-                    </button>
+                              {selected ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#8F9874]">
+                                  <Check className="h-3 w-3" />
+                                  Sélectionné
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <p className="mt-1 text-xs text-[#8B8278]">
+                              {section.description}
+                            </p>
+                          </div>
+                        </button>
+
+                        {selected ? (
+                          <div className="flex flex-wrap gap-2 md:justify-end">
+                            {permissionOptions.map((option) => (
+                              <PermissionButton
+                                key={option.id}
+                                option={option}
+                                selected={currentPermission === option.id}
+                                onClick={() =>
+                                  updateSectionPermission(section.id, option.id)
+                                }
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
             </div>
 
             <div>
-              <p className="label">Niveau d’accès</p>
+              <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <span className="block text-sm font-semibold text-[#4F4A45]">
+                    Message optionnel
+                  </span>
+                  <p className="mt-1 text-xs text-[#8B8278]">
+                    Vous pouvez écrire votre propre message ou utiliser le
+                    message automatique.
+                  </p>
+                </div>
 
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                {permissionOptions.map((option) => {
-                  const Icon = option.icon;
-                  const selected = permission === option.id;
-
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setPermission(option.id)}
-                      className={`rounded-3xl border p-4 text-left transition ${
-                        selected
-                          ? "border-[#A8B193] bg-[#F3F6ED]"
-                          : "border-[#EADFCF] bg-white hover:bg-[#FAF4EC]"
-                      }`}
-                    >
-                      <div
-                        className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${
-                          selected
-                            ? "bg-[#A8B193] text-white"
-                            : "bg-[#F8F3EA] text-[#7D756E]"
-                        }`}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </div>
-
-                      <p className="font-bold text-[#4F4A45]">{option.title}</p>
-                      <p className="mt-1 text-xs leading-5 text-[#7D756E]">
-                        {option.description}
-                      </p>
-                    </button>
-                  );
-                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseAutomaticMessage(true);
+                    setNote(automaticMessage);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2 text-xs font-bold text-[#7D756E] transition hover:bg-[#FAF4EC]"
+                >
+                  <Sparkles className="h-4 w-4 text-[#B5A7C8]" />
+                  Utiliser le message automatique
+                </button>
               </div>
+
+              <textarea
+                className="min-h-[160px] w-full resize-none rounded-3xl border border-[#EADFCF] bg-white px-4 py-4 text-sm leading-6 text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
+                value={note}
+                onChange={(event) => {
+                  setNote(event.target.value);
+                  setUseAutomaticMessage(false);
+                }}
+                placeholder="Ex. Voici l’accès au profil de Léo pour consulter le calendrier et les documents."
+              />
+
+              {useAutomaticMessage ? (
+                <p className="mt-2 text-xs font-semibold text-[#8F9874]">
+                  Le message automatique se mettra à jour selon la personne, les
+                  enfants, les sections et les permissions choisies.
+                </p>
+              ) : null}
             </div>
-
-            <label className="block w-full">
-  <span className="label mb-2 block">Message optionnel</span>
-
-  <textarea
-    className="input min-h-[120px] w-full resize-none rounded-3xl px-4 py-4 text-sm leading-6"
-    value={note}
-    onChange={(event) => setNote(event.target.value)}
-    placeholder="Ex. Voici l’accès au profil de Léo pour consulter le calendrier et les documents."
-  />
-</label>
 
             {message ? (
               <div className="rounded-2xl border border-[#EEC988] bg-[#FFF8E8] p-3 text-sm font-semibold text-[#8A6F34]">
@@ -598,12 +782,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
         ) : (
           <div className="space-y-3">
             {shares.map((share) => {
-              const sectionLabels = (share.sectionIds || [])
-                .map((sectionId) => {
-                  return sections.find((section) => section.id === sectionId)
-                    ?.title;
-                })
-                .filter(Boolean);
+              const sectionDetails = getShareSectionDetails(share);
 
               return (
                 <div
@@ -611,7 +790,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
                   className="rounded-3xl border border-[#EADFCF] bg-[#FFFDF8] p-4"
                 >
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-bold text-[#4F4A45]">
                           {share.inviteeName || "Invitation"}
@@ -635,17 +814,42 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
                           .join(", ") || "Non précisé"}
                       </p>
 
-                      <p className="text-sm leading-6 text-[#5F5A52]">
-                        <strong>Sections :</strong>{" "}
-                        {sectionLabels.join(", ") || "Non précisé"}
-                      </p>
+                      <div className="mt-3">
+                        <p className="text-sm font-bold text-[#5F5A52]">
+                          Sections et permissions :
+                        </p>
 
-                      <p className="text-sm leading-6 text-[#5F5A52]">
-                        <strong>Accès :</strong>{" "}
-                        {getPermissionLabel(share.permission)}
-                      </p>
+                        {sectionDetails.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {sectionDetails.map((detail) => (
+                              <span
+                                key={detail.id}
+                                className="rounded-full border border-[#EADFCF] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B625A]"
+                              >
+                                {detail.title} ·{" "}
+                                {getPermissionLabel(detail.permission)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-sm text-[#7D756E]">
+                            Non précisé
+                          </p>
+                        )}
+                      </div>
 
-                      <p className="mt-2 text-xs text-[#9A8D7C]">
+                      {share.note ? (
+                        <div className="mt-3 rounded-2xl border border-[#EADFCF] bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+                            Message
+                          </p>
+                          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#6B625A]">
+                            {share.note}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      <p className="mt-3 text-xs text-[#9A8D7C]">
                         Créé le {formatDate(share.createdAt)}
                       </p>
                     </div>
