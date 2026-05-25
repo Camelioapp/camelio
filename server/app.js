@@ -1654,6 +1654,7 @@ app.post(
 app.post(
   "/api/subscription/activate-code",
   requireAuth,
+  validateStripeConfig,
   validateAwsConfig,
   async (req, res, next) => {
     try {
@@ -1682,6 +1683,69 @@ app.post(
 
       const now = new Date().toISOString();
 
+      const codeOwners = {
+        CAMELIOBETA: "Beta",
+        PROMOALEX: "Alex",
+        PROMOEMMANUEL: "Emmanuel",
+      };
+
+      const codeOwner = codeOwners[submittedCode] || "Non défini";
+
+      let stripeCustomerId = "";
+
+      try {
+        const existingSubscriptionResult = await dynamo.send(
+          new GetCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getUserPk(req),
+              SK: "SUBSCRIPTION",
+            },
+          })
+        );
+
+        const existingSubscription = existingSubscriptionResult.Item || null;
+
+        if (existingSubscription?.stripeCustomerId) {
+          stripeCustomerId = existingSubscription.stripeCustomerId;
+
+          await stripe.customers.update(stripeCustomerId, {
+            email: req.session.user.email || undefined,
+            name: req.session.user.name || undefined,
+            metadata: {
+              userId: req.session.user.sub,
+              userEmail: req.session.user.email || "",
+              source: "Camelio",
+              plan: "free_access_code",
+              access_code: submittedCode,
+              access_code_owner: codeOwner,
+              activated_at: now,
+            },
+          });
+        } else {
+          const customer = await stripe.customers.create({
+            email: req.session.user.email || undefined,
+            name: req.session.user.name || undefined,
+            metadata: {
+              userId: req.session.user.sub,
+              userEmail: req.session.user.email || "",
+              source: "Camelio",
+              plan: "free_access_code",
+              access_code: submittedCode,
+              access_code_owner: codeOwner,
+              activated_at: now,
+            },
+          });
+
+          stripeCustomerId = customer.id;
+        }
+      } catch (stripeError) {
+        console.error(
+          "Erreur création ou mise à jour client Stripe pour code gratuit:",
+          stripeError
+        );
+      }
+
       const subscriptionItem = {
         PK: getUserPk(req),
         SK: "SUBSCRIPTION",
@@ -1693,7 +1757,8 @@ app.post(
         storageGb: Number(process.env.STRIPE_STORAGE_GB) || 5,
         source: "access_code",
         accessCode: submittedCode,
-        stripeCustomerId: "",
+        accessCodeOwner: codeOwner,
+        stripeCustomerId,
         stripeSubscriptionId: "",
         stripeCheckoutSessionId: "",
         trialEnd: null,
@@ -1718,6 +1783,114 @@ app.post(
         status: "active",
         plan: subscriptionItem.plan,
         storageGb: subscriptionItem.storageGb,
+        subscription: subscriptionItem,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/subscription/sync-checkout",
+  requireAuth,
+  validateStripeConfig,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { session_id } = req.body;
+
+      if (!session_id) {
+        return res.status(400).json({
+          error: "missing_session_id",
+          message: "session_id est requis.",
+        });
+      }
+
+      const checkoutSession = await stripe.checkout.sessions.retrieve(
+        session_id,
+        {
+          expand: ["subscription"],
+        }
+      );
+
+      if (checkoutSession.metadata?.userId !== req.session.user.sub) {
+        return res.status(403).json({
+          error: "forbidden_checkout_session",
+          message: "Cette session Stripe n’appartient pas à cet utilisateur.",
+        });
+      }
+
+      const stripeSubscription = checkoutSession.subscription;
+
+      if (!stripeSubscription) {
+        return res.status(400).json({
+          error: "missing_subscription",
+          message: "Aucun abonnement Stripe trouvé pour cette session.",
+        });
+      }
+
+      if (stripeSubscription.metadata?.userId !== req.session.user.sub) {
+        return res.status(403).json({
+          error: "forbidden_subscription",
+          message: "Cet abonnement Stripe n’appartient pas à cet utilisateur.",
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      const trialEnd = stripeSubscription.trial_end
+        ? new Date(stripeSubscription.trial_end * 1000).toISOString()
+        : null;
+
+      const currentPeriodEnd = stripeSubscription.current_period_end
+        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+        : null;
+
+      const subscriptionItem = {
+        PK: getUserPk(req),
+        SK: "SUBSCRIPTION",
+        type: "subscription",
+        userId: req.session.user.sub,
+        email: req.session.user.email || "",
+        status: stripeSubscription.status,
+        plan:
+          stripeSubscription.metadata?.plan ||
+          checkoutSession.metadata?.plan ||
+          STRIPE_PRICE_LOOKUP_KEY,
+        storageGb:
+          Number(stripeSubscription.metadata?.storageGb) ||
+          Number(checkoutSession.metadata?.storageGb) ||
+          Number(STRIPE_STORAGE_GB) ||
+          5,
+        stripeCustomerId: checkoutSession.customer || "",
+        stripeSubscriptionId: stripeSubscription.id,
+        stripeCheckoutSessionId: checkoutSession.id,
+        trialEnd,
+        trialEndsAt: trialEnd,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
+        updatedAt: now,
+        createdAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: subscriptionItem,
+        })
+      );
+
+      return res.json({
+        success: true,
+        hasAccess: ["trialing", "active"].includes(subscriptionItem.status),
+        status: subscriptionItem.status,
+        plan: subscriptionItem.plan,
+        storageGb: subscriptionItem.storageGb,
+        trialEnd: subscriptionItem.trialEnd,
+        trialEndsAt: subscriptionItem.trialEndsAt,
+        currentPeriodEnd: subscriptionItem.currentPeriodEnd,
+        cancelAtPeriodEnd: subscriptionItem.cancelAtPeriodEnd,
         subscription: subscriptionItem,
       });
     } catch (error) {
