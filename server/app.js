@@ -9,7 +9,6 @@ const cors = require("cors");
 const { Issuer, generators } = require("openid-client");
 const { randomUUID } = require("crypto");
 const Stripe = require("stripe");
-const nodemailer = require("nodemailer");
 
 const {
   PutCommand,
@@ -51,25 +50,14 @@ const APP_URL =
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
 
-const mailTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: process.env.SMTP_SECURE === "true",
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const EMAIL_FROM = process.env.EMAIL_FROM || "Camelio <onboarding@resend.dev>";
+const EMAIL_REPLY_TO =
+  process.env.EMAIL_REPLY_TO ||
+  process.env.MAIL_REPLY_TO ||
+  process.env.SMTP_USER ||
+  "info@camelio.app";
 
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-
-  requireTLS: process.env.SMTP_REQUIRE_TLS !== "false",
-
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-
-  logger: true,
-  debug: true,
-});
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
 
@@ -899,72 +887,81 @@ app.get("/health", (req, res) => {
 app.get("/api/version", (req, res) => {
   res.json({
     success: true,
-    version: "email-debug-2026-05-25",
-    message: "Cette version contient les routes de test email.",
+    version: "resend-email-2026-05-25",
+    message: "Cette version utilise Resend pour les courriels.",
   });
 });
 
-function withTimeout(promise, timeoutMs, label = "operation") {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`${label}_timeout_after_${timeoutMs}ms`));
-      }, timeoutMs);
+async function sendEmailWithResend({ to, subject, html, text }) {
+  if (!RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY est manquant dans Render.");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: EMAIL_FROM,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html,
+      text,
+      reply_to: EMAIL_REPLY_TO,
     }),
-  ]);
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error("Erreur Resend:", {
+      status: response.status,
+      data,
+    });
+
+    throw new Error(
+      data?.message ||
+        data?.error?.message ||
+        `Erreur Resend HTTP ${response.status}`
+    );
+  }
+
+  return data;
 }
 
 app.get("/api/test-email", async (req, res) => {
   try {
-    console.log("TEST EMAIL START", {
-      smtpHost: process.env.SMTP_HOST || null,
-      smtpPort: process.env.SMTP_PORT || null,
-      smtpSecure: process.env.SMTP_SECURE || null,
-      smtpRequireTls: process.env.SMTP_REQUIRE_TLS || null,
-      smtpUser: process.env.SMTP_USER || null,
-      hasPassword: Boolean(process.env.SMTP_PASS),
+    console.log("TEST RESEND EMAIL START", {
+      hasResendApiKey: Boolean(RESEND_API_KEY),
+      emailFrom: EMAIL_FROM,
+      emailReplyTo: EMAIL_REPLY_TO,
     });
 
-    await withTimeout(mailTransporter.verify(), 12000, "smtp_verify");
-
-    console.log("SMTP VERIFY OK");
-
-    await withTimeout(
-      mailTransporter.sendMail({
-        from: `"Camelio" <${process.env.SMTP_USER}>`,
-        replyTo: process.env.MAIL_REPLY_TO || process.env.SMTP_USER,
-        to: process.env.SMTP_USER,
-        subject: "Test SMTP Camelio",
-        text: "Si tu reçois ce courriel, SMTP fonctionne.",
-      }),
-      12000,
-      "smtp_send"
-    );
-
-    console.log("TEST EMAIL SENT");
+    const result = await sendEmailWithResend({
+      to: process.env.TEST_EMAIL_TO || process.env.SMTP_USER || "info@camelio.app",
+      subject: "Test courriel Camelio via Resend",
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6;">
+          <h2>Test Resend Camelio</h2>
+          <p>Si tu reçois ce courriel, l’envoi via Resend fonctionne.</p>
+        </div>
+      `,
+      text: "Si tu reçois ce courriel, l’envoi via Resend fonctionne.",
+    });
 
     return res.json({
       success: true,
-      message: "Courriel de test envoyé.",
+      message: "Courriel de test envoyé avec Resend.",
+      result,
     });
   } catch (error) {
-    console.error("Erreur test SMTP:", {
-      message: error.message,
-      code: error.code,
-      command: error.command,
-      response: error.response,
-      responseCode: error.responseCode,
-      stack: error.stack,
-    });
+    console.error("Erreur test Resend:", error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
-      code: error.code || null,
-      command: error.command || null,
-      response: error.response || null,
-      responseCode: error.responseCode || null,
     });
   }
 });
@@ -1365,12 +1362,6 @@ function formatInvitationSections(sectionIds = [], sectionPermissions = {}) {
 }
 
 async function sendProfileShareInvitationEmail(share) {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    throw new Error(
-      "Configuration SMTP manquante. Vérifie SMTP_HOST, SMTP_USER et SMTP_PASS dans Render."
-    );
-  }
-
   const inviteLink = new URL("/login", APP_URL);
 
   inviteLink.searchParams.set("invite", share.invitationToken);
@@ -1402,70 +1393,72 @@ async function sendProfileShareInvitationEmail(share) {
     `
     : "";
 
-  await mailTransporter.sendMail({
-    from: `"Camelio" <info@camelio.app>`,
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
+      <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
+        <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">
+          Camelio
+        </p>
+
+        <h2 style="margin: 0 0 16px; color: #4F4A45;">
+          Tu as reçu une invitation Camelio 😊
+        </h2>
+
+        <p>
+          ${escapeHtml(
+            share.ownerName || "Un utilisateur Camelio"
+          )} souhaite te partager un accès à Camelio.
+        </p>
+
+        <p>
+          <strong>Enfant(s) partagé(s) :</strong><br />
+          ${escapeHtml(childrenNames || "Non précisé")}
+        </p>
+
+        <p>
+          <strong>Sections accessibles :</strong>
+        </p>
+
+        <ul>
+          ${sectionsHtml}
+        </ul>
+
+        ${noteHtml}
+
+        <p>
+          Clique sur le bouton ci-dessous pour accepter l’invitation :
+        </p>
+
+        <p style="margin: 24px 0;">
+          <a
+            href="${escapeHtml(inviteUrl)}"
+            style="
+              display: inline-block;
+              background: #A8B193;
+              color: white;
+              padding: 12px 18px;
+              border-radius: 999px;
+              text-decoration: none;
+              font-weight: bold;
+            "
+          >
+            Accepter l’invitation
+          </a>
+        </p>
+
+        <p style="font-size: 12px; color: #8B8278;">
+          Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur :<br />
+          ${escapeHtml(inviteUrl)}
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmailWithResend({
     to: share.inviteeEmail,
     subject: "Tu as reçu une invitation Camelio 😊",
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
-        <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
-          <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">
-            Camelio
-          </p>
-
-          <h2 style="margin: 0 0 16px; color: #4F4A45;">
-            Tu as reçu une invitation Camelio 😊
-          </h2>
-
-          <p>
-            ${escapeHtml(
-              share.ownerName || "Un utilisateur Camelio"
-            )} souhaite te partager un accès à Camelio.
-          </p>
-
-          <p>
-            <strong>Enfant(s) partagé(s) :</strong><br />
-            ${escapeHtml(childrenNames || "Non précisé")}
-          </p>
-
-          <p>
-            <strong>Sections accessibles :</strong>
-          </p>
-
-          <ul>
-            ${sectionsHtml}
-          </ul>
-
-          ${noteHtml}
-
-          <p>
-            Clique sur le bouton ci-dessous pour accepter l’invitation :
-          </p>
-
-          <p style="margin: 24px 0;">
-            <a
-              href="${escapeHtml(inviteUrl)}"
-              style="
-                display: inline-block;
-                background: #A8B193;
-                color: white;
-                padding: 12px 18px;
-                border-radius: 999px;
-                text-decoration: none;
-                font-weight: bold;
-              "
-            >
-              Accepter l’invitation
-            </a>
-          </p>
-
-          <p style="font-size: 12px; color: #8B8278;">
-            Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur :<br />
-            ${escapeHtml(inviteUrl)}
-          </p>
-        </div>
-      </div>
-    `,
+    html,
+    text: `Tu as reçu une invitation Camelio. Clique ici pour accepter l’invitation : ${inviteUrl}`,
   });
 }
 
