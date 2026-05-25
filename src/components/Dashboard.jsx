@@ -806,8 +806,43 @@ export default function Dashboard({
     setShowFirstStep(false);
   }
 
-  const subscriptionPopup = showSubscriptionPopup ? (
+const subscriptionPopup =
+  showSubscriptionPopup &&
+  !sharedAccess.isLoading &&
+  !sharedAccess.hasSharedAccess ? (
     <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
+  ) : null;
+
+const firstStepPopup =
+  showFirstStep &&
+  !sharedAccess.isLoading &&
+  !sharedAccess.hasSharedAccess ? (
+    <FirstStep
+      onComplete={async (setupData) => {
+        try {
+          await applyInitialSetup(setupData);
+        } catch (error) {
+          console.error("Erreur application onboarding:", error);
+          setShowFirstStep(false);
+        }
+      }}
+      onSkip={async (setupData) => {
+        try {
+          await applyInitialSetup(
+            setupData || {
+              skipped: true,
+              completedAt: new Date().toISOString(),
+              children: [],
+              selectedSections: defaultSectionOrder,
+              hiddenSections: [],
+            }
+          );
+        } catch (error) {
+          console.error("Erreur skip onboarding:", error);
+          setShowFirstStep(false);
+        }
+      }}
+    />
   ) : null;
 
   const firstStepPopup = showFirstStep ? (
