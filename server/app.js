@@ -1363,9 +1363,8 @@ function formatInvitationSections(sectionIds = [], sectionPermissions = {}) {
 }
 
 async function sendProfileShareInvitationEmail(share) {
-  const inviteLink = new URL("/login", APP_URL);
-
-  inviteLink.searchParams.set("invite", share.invitationToken);
+const inviteLink = new URL("/invitation", APP_URL);
+inviteLink.searchParams.set("token", share.invitationToken);
 
 
   const inviteUrl = inviteLink.toString();
