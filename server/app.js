@@ -1916,10 +1916,11 @@ app.post(
       const now = new Date().toISOString();
 
       const codeOwners = {
-        CAMELIOBETA: "Beta",
-        PROMOALEX: "Alex",
-        PROMOEMMANUEL: "Emmanuel",
-      };
+  CAMELIOBETA: "Beta",
+  PROMOALEX: "Alex",
+  PROMOEMMANUEL: "Emmanuel",
+  PROMOMELANIE: "Mélanie",
+};
 
       const codeOwner = codeOwners[submittedCode] || "Non défini";
       let stripeCustomerId = "";

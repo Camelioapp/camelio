@@ -25,7 +25,8 @@ const FAMILY_SITUATIONS = [
   {
     id: "couple",
     label: "En couple",
-    description: "Deux parents dans le même foyer ou une organisation familiale commune.",
+    description:
+      "Deux parents dans le même foyer ou une organisation familiale commune.",
   },
   {
     id: "single_full",
@@ -35,7 +36,8 @@ const FAMILY_SITUATIONS = [
   {
     id: "solo_shared",
     label: "Soloparental, garde partagée ou non partagée",
-    description: "Un parent qui souhaite organiser la garde, les documents et les suivis.",
+    description:
+      "Un parent qui souhaite organiser la garde, les documents et les suivis.",
   },
   {
     id: "other",
@@ -56,55 +58,84 @@ const ALL_SECTIONS = [
   { id: "memorablePhrases", label: "Phrases mémorables" },
 ];
 
+/*
+  Important :
+  Les chemins doivent correspondre exactement aux noms des fichiers dans public.
+  Exemple :
+  public/Profil/Fille/fille-1.png devient /Profil/Fille/fille-1.png
+  public/Profil/Garcon/garcon-1.png devient /Profil/Garcon/garcon-1.png
+*/
 const PUBLIC_AVATARS = [
   {
     id: "fille-1",
     label: "Profil fille 1",
+    gender: "female",
     src: "/Profil/Fille/fille-1.png",
   },
   {
     id: "fille-2",
     label: "Profil fille 2",
+    gender: "female",
     src: "/Profil/Fille/fille-2.png",
   },
   {
     id: "fille-3",
     label: "Profil fille 3",
+    gender: "female",
     src: "/Profil/Fille/fille-3.png",
   },
   {
     id: "fille-4",
     label: "Profil fille 4",
+    gender: "female",
     src: "/Profil/Fille/fille-4.png",
   },
   {
     id: "garcon-1",
     label: "Profil garçon 1",
+    gender: "male",
     src: "/Profil/Garcon/garcon-1.png",
   },
   {
     id: "garcon-2",
     label: "Profil garçon 2",
+    gender: "male",
     src: "/Profil/Garcon/garcon-2.png",
   },
   {
     id: "garcon-3",
     label: "Profil garçon 3",
+    gender: "male",
     src: "/Profil/Garcon/garcon-3.png",
   },
   {
     id: "garcon-4",
     label: "Profil garçon 4",
+    gender: "male",
     src: "/Profil/Garcon/garcon-4.png",
   },
 ];
 
-function getFallbackAvatar(index) {
-  return PUBLIC_AVATARS[index % PUBLIC_AVATARS.length]?.src || "";
-}
-
 function getDefaultColor(index) {
   return CHILD_COLORS[index % CHILD_COLORS.length];
+}
+
+function getAvatarsForGender(gender) {
+  if (gender === "female") {
+    return PUBLIC_AVATARS.filter((avatar) => avatar.gender === "female");
+  }
+
+  if (gender === "male") {
+    return PUBLIC_AVATARS.filter((avatar) => avatar.gender === "male");
+  }
+
+  return PUBLIC_AVATARS;
+}
+
+function getFallbackAvatar(index, gender = "") {
+  const avatars = getAvatarsForGender(gender);
+
+  return avatars[index % avatars.length] || PUBLIC_AVATARS[0];
 }
 
 function getRecommendedSectionIds(situation) {
@@ -164,7 +195,7 @@ function getDisabledSectionLabels(situation) {
 
 function buildEmptyChild(index) {
   const color = getDefaultColor(index);
-  const avatar = PUBLIC_AVATARS[index % PUBLIC_AVATARS.length];
+  const avatar = getFallbackAvatar(index);
 
   return {
     id:
@@ -175,6 +206,8 @@ function buildEmptyChild(index) {
     lastName: "",
     nickname: "",
     birthDate: "",
+    gender: "",
+    sex: "",
     color: color.id,
     colorHex: color.value,
     photo: avatar?.src || "",
@@ -182,6 +215,30 @@ function buildEmptyChild(index) {
     avatar: avatar?.src || "",
     defaultAvatarId: avatar?.id || "",
   };
+}
+
+function AvatarPreview({ avatar, isSelected, onClick }) {
+  return (
+    <button
+      key={avatar.id}
+      type="button"
+      onClick={onClick}
+      className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-4 bg-white shadow-sm transition ${
+        isSelected ? "border-slate-950" : "border-white hover:border-[#a8b193]"
+      }`}
+      title={avatar.label}
+    >
+      <img
+        src={avatar.src}
+        alt={avatar.label}
+        className="h-full w-full object-cover"
+        onError={(event) => {
+          event.currentTarget.style.display = "none";
+          event.currentTarget.parentElement.classList.add("bg-slate-100");
+        }}
+      />
+    </button>
+  );
 }
 
 export default function FirstStep({ onComplete, onSkip }) {
@@ -229,6 +286,27 @@ export default function FirstStep({ onComplete, onSkip }) {
             }
           : child
       )
+    );
+  };
+
+  const updateChildGender = (index, gender) => {
+    setChildren((current) =>
+      current.map((child, childIndex) => {
+        if (childIndex !== index) return child;
+
+        const avatars = getAvatarsForGender(gender);
+        const defaultAvatar = avatars[0] || PUBLIC_AVATARS[0];
+
+        return {
+          ...child,
+          gender,
+          sex: gender,
+          photo: defaultAvatar?.src || "",
+          image: defaultAvatar?.src || "",
+          avatar: defaultAvatar?.src || "",
+          defaultAvatarId: defaultAvatar?.id || "",
+        };
+      })
     );
   };
 
@@ -425,7 +503,8 @@ export default function FirstStep({ onComplete, onSkip }) {
                   <span className="font-bold text-[#eaa5af]">
                     {disabledSections.join(", ")}
                   </span>
-                  . Vous pourrez toutefois les activer au besoin dans les paramètres.
+                  . Vous pourrez toutefois les activer au besoin dans les
+                  paramètres.
                 </div>
               )}
             </section>
@@ -463,157 +542,191 @@ export default function FirstStep({ onComplete, onSkip }) {
               </div>
 
               <div className="mt-6 space-y-5">
-                {children.map((child, index) => (
-                  <div
-                    key={child.id}
-                    className="rounded-[1.5rem] border border-slate-200 bg-slate-50/60 p-5"
-                  >
-                    <div className="mb-5 flex items-center justify-between gap-4">
-                      <h4 className="text-lg font-bold text-slate-950">
-                        Enfant {index + 1}
-                      </h4>
+                {children.map((child, index) => {
+                  const visibleAvatars = getAvatarsForGender(child.gender);
 
-                      <div
-                        className="h-10 w-10 rounded-full border-4 border-white shadow"
-                        style={{ backgroundColor: child.colorHex }}
-                      />
-                    </div>
+                  return (
+                    <div
+                      key={child.id}
+                      className="rounded-[1.5rem] border border-slate-200 bg-slate-50/60 p-5"
+                    >
+                      <div className="mb-5 flex items-center justify-between gap-4">
+                        <h4 className="text-lg font-bold text-slate-950">
+                          Enfant {index + 1}
+                        </h4>
 
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
-                          Prénom
-                        </label>
-                        <input
-                          type="text"
-                          value={child.firstName}
-                          onChange={(event) =>
-                            updateChild(index, "firstName", event.target.value)
-                          }
-                          placeholder="Ex. Emma"
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
+                        <div
+                          className="h-10 w-10 rounded-full border-4 border-white shadow"
+                          style={{ backgroundColor: child.colorHex }}
                         />
                       </div>
 
-                      <div>
-                        <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
-                          Nom
-                        </label>
-                        <input
-                          type="text"
-                          value={child.lastName}
-                          onChange={(event) =>
-                            updateChild(index, "lastName", event.target.value)
-                          }
-                          placeholder="Ex. Tremblay"
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
-                        />
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
+                            Prénom
+                          </label>
+                          <input
+                            type="text"
+                            value={child.firstName}
+                            onChange={(event) =>
+                              updateChild(
+                                index,
+                                "firstName",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Ex. Emma"
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
+                            Nom
+                          </label>
+                          <input
+                            type="text"
+                            value={child.lastName}
+                            onChange={(event) =>
+                              updateChild(index, "lastName", event.target.value)
+                            }
+                            placeholder="Ex. Tremblay"
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
+                            Surnom
+                          </label>
+                          <input
+                            type="text"
+                            value={child.nickname}
+                            onChange={(event) =>
+                              updateChild(index, "nickname", event.target.value)
+                            }
+                            placeholder="Ex. Mimi"
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
+                            Date de naissance
+                          </label>
+                          <input
+                            type="date"
+                            value={child.birthDate}
+                            onChange={(event) =>
+                              updateChild(
+                                index,
+                                "birthDate",
+                                event.target.value
+                              )
+                            }
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
+                            Sexe de l’enfant
+                          </label>
+
+                          <div className="grid gap-3 md:grid-cols-3">
+                            {[
+                              { id: "female", label: "Fille" },
+                              { id: "male", label: "Garçon" },
+                              { id: "other", label: "Autre" },
+                            ].map((option) => {
+                              const isSelected = child.gender === option.id;
+
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() =>
+                                    updateChildGender(index, option.id)
+                                  }
+                                  className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                                    isSelected
+                                      ? "border-[#a8b193] bg-[#f3f6ef] text-slate-950 shadow-sm"
+                                      : "border-slate-200 bg-white text-[#465a78] hover:border-[#a8b193]"
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
 
-                      <div>
-                        <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
-                          Surnom
-                        </label>
-                        <input
-                          type="text"
-                          value={child.nickname}
-                          onChange={(event) =>
-                            updateChild(index, "nickname", event.target.value)
-                          }
-                          placeholder="Ex. Mimi"
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
-                        />
-                      </div>
+                      <div className="mt-5">
+                        <p className="mb-3 text-xs font-bold text-[#5b6b8a]">
+                          Photo par défaut
+                        </p>
 
-                      <div>
-                        <label className="mb-2 block text-xs font-bold text-[#5b6b8a]">
-                          Date de naissance
-                        </label>
-                        <input
-                          type="date"
-                          value={child.birthDate}
-                          onChange={(event) =>
-                            updateChild(index, "birthDate", event.target.value)
-                          }
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#a8b193] focus:ring-4 focus:ring-[#a8b193]/15"
-                        />
-                      </div>
-                    </div>
+                        <div className="flex flex-wrap gap-3">
+                          {visibleAvatars.map((avatar) => {
+                            const isSelected =
+                              child.defaultAvatarId === avatar.id;
 
-                    <div className="mt-5">
-                      <p className="mb-3 text-xs font-bold text-[#5b6b8a]">
-                        Photo par défaut
-                      </p>
-
-                      <div className="flex flex-wrap gap-3">
-                        {PUBLIC_AVATARS.map((avatar) => {
-                          const isSelected = child.defaultAvatarId === avatar.id;
-
-                          return (
-                            <button
-                              key={avatar.id}
-                              type="button"
-                              onClick={() => updateChildAvatar(index, avatar)}
-                              className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-4 bg-white shadow-sm transition ${
-                                isSelected
-                                  ? "border-slate-950"
-                                  : "border-white hover:border-[#a8b193]"
-                              }`}
-                              title={avatar.label}
-                            >
-                              <img
-                                src={avatar.src}
-                                alt={avatar.label}
-                                className="h-full w-full object-cover"
-                                onError={(event) => {
-                                  event.currentTarget.src = getFallbackAvatar(0);
-                                }}
+                            return (
+                              <AvatarPreview
+                                key={avatar.id}
+                                avatar={avatar}
+                                isSelected={isSelected}
+                                onClick={() => updateChildAvatar(index, avatar)}
                               />
-                            </button>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+
+                        <p className="mt-2 text-xs leading-5 text-[#5b6b8a]">
+                          Les photos affichées s’ajustent selon le sexe choisi.
+                          Cette photo sera utilisée par défaut dans le profil de
+                          l’enfant et pourra être modifiée plus tard.
+                        </p>
                       </div>
 
-                      <p className="mt-2 text-xs leading-5 text-[#5b6b8a]">
-                        Ces images proviennent du dossier public de Camelio.
-                        Cette photo sera utilisée par défaut dans le profil de
-                        l’enfant et pourra être modifiée plus tard.
-                      </p>
-                    </div>
+                      <div className="mt-5">
+                        <p className="mb-3 text-xs font-bold text-[#5b6b8a]">
+                          Couleur associée à l’enfant
+                        </p>
 
-                    <div className="mt-5">
-                      <p className="mb-3 text-xs font-bold text-[#5b6b8a]">
-                        Couleur associée à l’enfant
-                      </p>
+                        <div className="flex flex-wrap gap-3">
+                          {CHILD_COLORS.map((color) => {
+                            const isSelected = child.color === color.id;
 
-                      <div className="flex flex-wrap gap-3">
-                        {CHILD_COLORS.map((color) => {
-                          const isSelected = child.color === color.id;
+                            return (
+                              <button
+                                key={color.id}
+                                type="button"
+                                onClick={() => updateChildColor(index, color)}
+                                className={`flex h-10 w-10 items-center justify-center rounded-full border-4 transition ${
+                                  isSelected
+                                    ? "border-slate-950"
+                                    : "border-white"
+                                } shadow`}
+                                style={{ backgroundColor: color.value }}
+                                title={color.label}
+                                aria-label={`Choisir la couleur ${color.label}`}
+                              />
+                            );
+                          })}
+                        </div>
 
-                          return (
-                            <button
-                              key={color.id}
-                              type="button"
-                              onClick={() => updateChildColor(index, color)}
-                              className={`flex h-10 w-10 items-center justify-center rounded-full border-4 transition ${
-                                isSelected ? "border-slate-950" : "border-white"
-                              } shadow`}
-                              style={{ backgroundColor: color.value }}
-                              title={color.label}
-                              aria-label={`Choisir la couleur ${color.label}`}
-                            />
-                          );
-                        })}
+                        <p className="mt-2 text-xs leading-5 text-[#5b6b8a]">
+                          Cette couleur sera notamment utilisée dans le calendrier
+                          pour identifier rapidement les journées, événements et
+                          informations associés à l’enfant.
+                        </p>
                       </div>
-
-                      <p className="mt-2 text-xs leading-5 text-[#5b6b8a]">
-                        Cette couleur sera notamment utilisée dans le calendrier
-                        pour identifier rapidement les journées, événements et
-                        informations associés à l’enfant.
-                      </p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
