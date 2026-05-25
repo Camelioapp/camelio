@@ -354,11 +354,6 @@ Au plaisir de partager cet espace avec toi 😊`;
     }
   }
 
-  function saveLocalShares(nextShares) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(nextShares));
-    setShares(nextShares);
-  }
-
   function toggleChild(childId) {
     setSelectedChildIds((current) =>
       current.includes(childId)
@@ -501,7 +496,9 @@ Au plaisir de partager cet espace avec toi 😊`;
       const createdShare = data.share || payload;
 
       setShares((current) => {
-        const withoutPrevious = current.filter((share) => share.id !== createdShare.id);
+        const withoutPrevious = current.filter(
+          (share) => share.id !== createdShare.id
+        );
         return [createdShare, ...withoutPrevious];
       });
 
@@ -665,16 +662,51 @@ Au plaisir de partager cet espace avec toi 😊`;
         setMessage("Lien de partage ouvert.");
         return;
       } catch {
-        // L’utilisateur peut annuler le partage natif, on retombe sur copier.
+        // L’utilisateur peut annuler le partage natif.
       }
     }
 
     await copyInviteLink(share);
   }
 
-  function removeShare(shareId) {
-    const nextShares = shares.filter((share) => share.id !== shareId);
-    saveLocalShares(nextShares);
+  async function removeShare(shareId) {
+    const previousShares = shares;
+
+    try {
+      setMessage("");
+
+      setShares((current) => current.filter((share) => share.id !== shareId));
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile-shares/${shareId}/revoke`,
+        {
+          method: "PATCH",
+          credentials: "include",
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Impossible de révoquer l’accès.");
+      }
+
+      if (data?.share) {
+        setShares((current) => {
+          return current.filter((share) => share.id !== shareId);
+        });
+      }
+
+      setMessage("L’accès partagé a été révoqué.");
+    } catch (error) {
+      console.error("Erreur révocation du partage:", error);
+
+      setShares(previousShares);
+
+      setMessage(
+        error?.message || "Impossible de révoquer l’accès. Veuillez réessayer."
+      );
+    }
   }
 
   function getShareSectionDetails(share) {
@@ -782,7 +814,10 @@ Au plaisir de partager cet espace avec toi 😊`;
             </button>
           </div>
 
-          <form onSubmit={handleImportInvitation} className="flex flex-col gap-3 md:flex-row">
+          <form
+            onSubmit={handleImportInvitation}
+            className="flex flex-col gap-3 md:flex-row"
+          >
             <input
               className="w-full rounded-3xl border border-[#EADFCF] bg-white px-4 py-3 text-sm text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
               value={importLink}
@@ -810,7 +845,9 @@ Au plaisir de partager cet espace avec toi 😊`;
                 Invitation
               </p>
               <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
-                {editingShareId ? "Modifier un accès partagé" : "Créer un accès partagé"}
+                {editingShareId
+                  ? "Modifier un accès partagé"
+                  : "Créer un accès partagé"}
               </h3>
             </div>
 
@@ -1261,7 +1298,9 @@ Au plaisir de partager cet espace avec toi 😊`;
                         <button
                           type="button"
                           onClick={() => regenerateLink(share.id)}
-                          disabled={actionLoadingId === `regenerate-${share.id}`}
+                          disabled={
+                            actionLoadingId === `regenerate-${share.id}`
+                          }
                           className="inline-flex items-center justify-center gap-2 rounded-full border border-[#B5A7C8] bg-white px-4 py-2 text-xs font-bold text-[#7D756E] transition hover:bg-[#F7F3FF] disabled:opacity-50"
                         >
                           <RefreshCw className="h-4 w-4" />
@@ -1280,7 +1319,8 @@ Au plaisir de partager cet espace avec toi 😊`;
                         <button
                           type="button"
                           onClick={() => removeShare(share.id)}
-                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#F1C9C9] bg-white px-4 py-2 text-xs font-bold text-[#B9544A] transition hover:bg-[#FFF0EF]"
+                          disabled={actionLoadingId === `revoke-${share.id}`}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#F1C9C9] bg-white px-4 py-2 text-xs font-bold text-[#B9544A] transition hover:bg-[#FFF0EF] disabled:opacity-50"
                         >
                           <Trash2 className="h-4 w-4" />
                           Retirer l’accès

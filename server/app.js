@@ -1538,11 +1538,13 @@ app.get(
         })
       );
 
-      const shares = (result.Items || []).sort((a, b) => {
-        return String(b.createdAt || "").localeCompare(
-          String(a.createdAt || "")
-        );
-      });
+      const shares = (result.Items || [])
+        .filter((share) => share.status !== "revoked")
+        .sort((a, b) => {
+          return String(b.createdAt || "").localeCompare(
+            String(a.createdAt || "")
+          );
+        });
 
       res.json({
         success: true,
@@ -1553,6 +1555,7 @@ app.get(
     }
   }
 );
+
 
 app.post(
   "/api/profile-shares",
@@ -1710,34 +1713,6 @@ app.put(
   }
 );
 
-app.delete(
-  "/api/profile-shares/:shareId",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const { shareId } = req.params;
-
-      await dynamo.send(
-        new DeleteCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: getUserPk(req),
-            SK: `SHARE#${shareId}`,
-          },
-        })
-      );
-
-      return res.json({
-        success: true,
-        deletedId: shareId,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
 app.post(
   "/api/profile-shares/:shareId/regenerate-link",
   requireAuth,
@@ -1778,6 +1753,55 @@ app.post(
         success: true,
         share: result.Attributes,
         message: "Un nouveau lien sécurisé a été généré et envoyé.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.patch(
+  "/api/profile-shares/:shareId/revoke",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { shareId } = req.params;
+      const now = new Date().toISOString();
+
+      if (!shareId) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_share_id",
+          message: "Identifiant du partage manquant.",
+        });
+      }
+
+      const result = await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `SHARE#${shareId}`,
+          },
+          UpdateExpression:
+            "SET #status = :status, revokedAt = :revokedAt, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":status": "revoked",
+            ":revokedAt": now,
+            ":updatedAt": now,
+          },
+          ReturnValues: "ALL_NEW",
+        })
+      );
+
+      return res.json({
+        success: true,
+        share: result.Attributes,
+        message: "L’accès partagé a été révoqué.",
       });
     } catch (error) {
       next(error);
