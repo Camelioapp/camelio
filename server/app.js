@@ -60,7 +60,7 @@ const mailTransporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS,
   },
 });
-    const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
+const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
 const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
 
 const COGNITO_ISSUER = process.env.COGNITO_ISSUER;
@@ -1532,6 +1532,84 @@ app.post(
   }
 );
 
+app.post(
+  "/api/profile-shares",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const payload = cleanProfileSharePayload(req.body || {});
+
+      if (!payload.inviteeEmail || !payload.inviteeEmail.includes("@")) {
+        return res.status(400).json({
+          error: "invalid_email",
+          message: "Le courriel d’invitation est invalide.",
+        });
+      }
+
+      if (payload.childIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_children",
+          message: "Sélectionnez au moins un enfant à partager.",
+        });
+      }
+
+      if (payload.sectionIds.length === 0) {
+        return res.status(400).json({
+          error: "missing_sections",
+          message: "Sélectionnez au moins une section à partager.",
+        });
+      }
+
+      const now = new Date().toISOString();
+      const shareId = req.body.id || randomUUID();
+
+      const share = {
+        PK: getUserPk(req),
+        SK: `SHARE#${shareId}`,
+        id: shareId,
+        type: "profileShare",
+        ownerUserId: req.session.user.sub,
+        ownerEmail: req.session.user.email || "",
+        ownerName:
+          req.session.user.name ||
+          req.session.user.given_name ||
+          req.session.user.email ||
+          "",
+        ...payload,
+        status: "pending",
+        invitationToken: randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: share,
+        })
+      );
+
+      await sendProfileShareInvitationEmail(share);
+
+      res.status(201).json({
+        success: true,
+        share,
+        message: "L’invitation a été créée et envoyée par courriel.",
+      });
+    } catch (error) {
+      console.error("Erreur création ou envoi invitation Camelio:", error);
+
+      return res.status(500).json({
+        error: "profile_share_invitation_failed",
+        message:
+          error?.message ||
+          "L’invitation a été créée, mais le courriel n’a pas pu être envoyé.",
+      });
+    }
+  }
+);
+
 app.get(
   "/api/profile-shares",
   requireAuth,
@@ -1622,15 +1700,6 @@ app.post(
           Item: share,
         })
       );
-
-      console.log("Invitation Camelio à envoyer:", {
-        to: share.inviteeEmail,
-        inviteeName: share.inviteeName,
-        children: share.children,
-        sectionIds: share.sectionIds,
-        permission: share.permission,
-        invitationUrl: `${APP_URL}/login?invite=${share.invitationToken}`,
-      });
 
       res.status(201).json({
         success: true,
