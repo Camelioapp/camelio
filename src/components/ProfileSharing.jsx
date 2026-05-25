@@ -519,15 +519,16 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
               </div>
             </div>
 
-            <label className="block">
-              <span className="label">Message optionnel</span>
-              <textarea
-                className="input min-h-[100px] resize-none"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="Ex. Voici l’accès au profil de Léo pour consulter le calendrier et les documents."
-              />
-            </label>
+            <label className="block w-full">
+  <span className="label mb-2 block">Message optionnel</span>
+
+  <textarea
+    className="input min-h-[120px] w-full resize-none rounded-3xl px-4 py-4 text-sm leading-6"
+    value={note}
+    onChange={(event) => setNote(event.target.value)}
+    placeholder="Ex. Voici l’accès au profil de Léo pour consulter le calendrier et les documents."
+  />
+</label>
 
             {message ? (
               <div className="rounded-2xl border border-[#EEC988] bg-[#FFF8E8] p-3 text-sm font-semibold text-[#8A6F34]">
