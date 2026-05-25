@@ -16,6 +16,7 @@ import SettingsView from "./SettingsView.jsx";
 import MemorablePhrases from "./MemorablePhrases.jsx";
 import { sections, getSectionTheme } from "./sectionsData.js";
 import { motion } from "framer-motion";
+import ProfileSharing from "./ProfileSharing.jsx";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
@@ -588,7 +589,8 @@ export default function Dashboard({
 
       case "memorable-phrases":
         return <MemorablePhrases children={children} onBack={goHome} />;
-
+      case "profile-sharing":
+        return <ProfileSharing children={children} onBack={goHome} />;
       case "settings":
         return (
           <SettingsView
