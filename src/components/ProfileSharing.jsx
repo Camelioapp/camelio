@@ -3,7 +3,6 @@ import {
   Check,
   ChevronDown,
   Eye,
-  KeyRound,
   Mail,
   Pencil,
   ShieldCheck,
@@ -72,12 +71,6 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
 }
 
-function cleanImportAccessKey(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[^a-zA-Z0-9-_]/g, "")
-    .slice(0, 80);
-}
 
 function getChildInitials(child) {
   const first =
@@ -196,7 +189,6 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [showForm, setShowForm] = useState(false);
   const [inviteeName, setInviteeName] = useState("");
   const [inviteeEmail, setInviteeEmail] = useState("");
-  const [importAccessKey, setImportAccessKey] = useState("");
   const [selectedChildIds, setSelectedChildIds] = useState([]);
   const [selectedSectionIds, setSelectedSectionIds] = useState([
     "children",
@@ -356,7 +348,6 @@ Au plaisir de partager cet espace avec toi 😊`;
   function resetForm() {
     setInviteeName("");
     setInviteeEmail("");
-    setImportAccessKey("");
     setSelectedChildIds([]);
     setSelectedSectionIds(["children", "calendar", "documents"]);
     setSectionPermissions({
@@ -393,7 +384,6 @@ Au plaisir de partager cet espace avec toi 😊`;
       id: createShareId(),
       inviteeName: inviteeName.trim(),
       inviteeEmail: inviteeEmail.trim().toLowerCase(),
-      importAccessKey: cleanImportAccessKey(importAccessKey),
       childIds: selectedChildIds,
       children: selectedChildren.map((child) => ({
         id: child.id,
@@ -556,31 +546,6 @@ Au plaisir de partager cet espace avec toi 😊`;
                   onChange={(event) => setInviteeEmail(event.target.value)}
                   placeholder="exemple@email.com"
                 />
-              </label>
-
-              <label className="block w-full md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-[#4F4A45]">
-                  Clé d’importation ou d’accès
-                </span>
-
-                <div className="relative">
-                  <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#B8AA9A]" />
-
-                  <input
-                    className="w-full rounded-3xl border border-[#EADFCF] bg-white px-11 py-3 text-sm text-[#4F4A45] outline-none transition placeholder:text-[#B8AA9A] focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
-                    value={importAccessKey}
-                    onChange={(event) =>
-                      setImportAccessKey(cleanImportAccessKey(event.target.value))
-                    }
-                    placeholder="Ex. ACCES-MARIE-2026"
-                  />
-                </div>
-
-                <p className="mt-2 text-xs leading-5 text-[#8B8278]">
-                  Cette clé sera ajoutée au lien sécurisé envoyé par courriel.
-                  Si le champ est vide, le serveur pourra générer une clé
-                  automatiquement.
-                </p>
               </label>
             </div>
 
@@ -847,13 +812,6 @@ Au plaisir de partager cet espace avec toi 😊`;
                       <p className="mt-1 text-sm text-[#7D756E]">
                         {share.inviteeEmail}
                       </p>
-
-                      {share.importAccessKey ? (
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#EADFCF] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B625A]">
-                          <KeyRound className="h-3.5 w-3.5 text-[#A8B193]" />
-                          Clé d’accès : {share.importAccessKey}
-                        </div>
-                      ) : null}
 
                       <p className="mt-3 text-sm leading-6 text-[#5F5A52]">
                         <strong>Enfants :</strong>{" "}

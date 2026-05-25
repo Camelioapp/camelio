@@ -887,8 +887,8 @@ app.get("/health", (req, res) => {
 app.get("/api/version", (req, res) => {
   res.json({
     success: true,
-    version: "resend-email-no-access-key-2026-05-25",
-    message: "Cette version utilise Resend pour les courriels, sans clé d’accès.",
+    version: "resend-email-2026-05-25",
+    message: "Cette version utilise Resend pour les courriels.",
   });
 });
 
@@ -1366,6 +1366,10 @@ async function sendProfileShareInvitationEmail(share) {
 
   inviteLink.searchParams.set("invite", share.invitationToken);
 
+  if (share.importAccessKey) {
+    inviteLink.searchParams.set("accessKey", share.importAccessKey);
+  }
+
   const inviteUrl = inviteLink.toString();
 
   const childrenNames = (share.children || [])
@@ -1458,6 +1462,16 @@ async function sendProfileShareInvitationEmail(share) {
   });
 }
 
+function cleanImportAccessKey(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]/g, "")
+    .slice(0, 80);
+}
+
+function createInvitationAccessKey() {
+  return randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase();
+}
 
 function cleanProfileSharePayload(body = {}) {
   const inviteeEmail = String(body.inviteeEmail || "")
@@ -1493,6 +1507,7 @@ function cleanProfileSharePayload(body = {}) {
   return {
     inviteeName: String(body.inviteeName || "").trim(),
     inviteeEmail,
+    importAccessKey: cleanImportAccessKey(body.importAccessKey),
     childIds,
     children: Array.isArray(body.children) ? body.children : [],
     sectionIds,
@@ -1584,6 +1599,7 @@ app.post(
         ...payload,
         status: "pending",
         invitationToken: randomUUID(),
+        importAccessKey: payload.importAccessKey || createInvitationAccessKey(),
         createdAt: now,
         updatedAt: now,
       };
