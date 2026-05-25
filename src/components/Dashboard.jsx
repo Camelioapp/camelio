@@ -613,13 +613,66 @@ export default function Dashboard({
   ) : null;
 const firstStepPopup = showFirstStep ? (
   <FirstStep
-    isOpen={showFirstStep}
-    onClose={() => {
-      setShowFirstStep(false);
+    onComplete={async (setupData) => {
+      try {
+        await fetch(`${API_BASE_URL}/api/profile`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            onboardingCompleted: true,
+            onboardingSkipped: Boolean(setupData?.skipped),
+            onboardingCompletedAt: new Date().toISOString(),
+            onboarding: setupData,
+          }),
+        });
+
+        localStorage.setItem("camelio_first_step_completed", "true");
+        localStorage.setItem(
+          "camelio_initial_setup",
+          JSON.stringify(setupData)
+        );
+
+        setShowFirstStep(false);
+      } catch (error) {
+        console.error("Erreur sauvegarde onboarding:", error);
+        setShowFirstStep(false);
+      }
     }}
-    onComplete={(data) => {
-      console.log("Configuration initiale complétée:", data);
-      setShowFirstStep(false);
+    onSkip={async () => {
+      try {
+        const setupData = {
+          skipped: true,
+          completedAt: new Date().toISOString(),
+        };
+
+        await fetch(`${API_BASE_URL}/api/profile`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            onboardingCompleted: true,
+            onboardingSkipped: true,
+            onboardingCompletedAt: new Date().toISOString(),
+            onboarding: setupData,
+          }),
+        });
+
+        localStorage.setItem("camelio_first_step_completed", "true");
+        localStorage.setItem(
+          "camelio_initial_setup",
+          JSON.stringify(setupData)
+        );
+
+        setShowFirstStep(false);
+      } catch (error) {
+        console.error("Erreur skip onboarding:", error);
+        setShowFirstStep(false);
+      }
     }}
   />
 ) : null;

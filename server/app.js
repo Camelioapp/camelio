@@ -1055,7 +1055,95 @@ app.post("/api/referral-code", requireAuth, (req, res) => {
     message: "Code de référence généré pour cet utilisateur.",
   });
 });
+app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const now = new Date().toISOString();
+    const userPk = getUserPk(req);
 
+    const result = await dynamo.send(
+      new GetCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: userPk,
+          SK: "PROFILE",
+        },
+      })
+    );
+
+    const existingProfile = result.Item || {};
+
+    const existingUserId = existingProfile.userId
+      ? String(existingProfile.userId).replace(/\D/g, "").slice(0, 7)
+      : "";
+
+    const hasValidSevenDigitUserId = /^\d{7}$/.test(existingUserId);
+
+    let userId = existingUserId;
+
+    if (!hasValidSevenDigitUserId) {
+      userId = await generateUniqueSevenDigitUserId();
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: {
+            PK: `USERID#${userId}`,
+            SK: "LOOKUP",
+            type: "userIdLookup",
+            userPk,
+            cognitoSub: req.session.user.sub,
+            email: req.session.user.email || "",
+            createdAt: now,
+          },
+        })
+      );
+    }
+
+    const profile = {
+      ...existingProfile,
+      PK: userPk,
+      SK: "PROFILE",
+      type: "profile",
+      userId,
+      cognitoSub: req.session.user.sub,
+      email: existingProfile.email || req.session.user.email || "",
+      name:
+        existingProfile.name ||
+        existingProfile.displayName ||
+        req.session.user.name ||
+        req.session.user.given_name ||
+        "",
+      displayName:
+        existingProfile.displayName ||
+        existingProfile.name ||
+        req.session.user.name ||
+        req.session.user.given_name ||
+        "",
+      phone: existingProfile.phone || "",
+      preferredLanguage: existingProfile.preferredLanguage || "fr",
+      onboardingCompleted: Boolean(existingProfile.onboardingCompleted),
+      onboardingSkipped: Boolean(existingProfile.onboardingSkipped),
+      onboardingCompletedAt: existingProfile.onboardingCompletedAt || null,
+      onboarding: existingProfile.onboarding || {},
+      createdAt: existingProfile.createdAt || now,
+      updatedAt: now,
+    };
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: profile,
+      })
+    );
+
+    return res.json({
+      success: true,
+      profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
     const now = new Date().toISOString();
