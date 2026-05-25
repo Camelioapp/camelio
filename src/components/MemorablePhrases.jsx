@@ -3,7 +3,6 @@ import {
   CalendarDays,
   ChevronDown,
   Edit3,
-  ImagePlus,
   Palette,
   Quote,
   Search,
@@ -468,46 +467,46 @@ async function createShareImageBlob({ phrase, options }) {
   }
 
   let topY = 135;
-let hasChildPhotoInShareImage = false;
+  let hasChildPhotoInShareImage = false;
 
-if (options.includeChildPhoto && firstChild?.photo) {
-  const childImage = await loadImage(firstChild.photo);
+  if (options.includeChildPhoto && firstChild?.photo) {
+    const childImage = await loadImage(firstChild.photo);
 
-  if (childImage) {
-    hasChildPhotoInShareImage = true;
+    if (childImage) {
+      hasChildPhotoInShareImage = true;
 
-    const photoSize = 185;
-    const photoRadius = photoSize / 2;
-    const photoX = 540 - photoRadius;
-    const photoY = topY - 10;
+      const photoSize = 185;
+      const photoRadius = photoSize / 2;
+      const photoX = 540 - photoRadius;
+      const photoY = topY - 10;
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(540, photoY + photoRadius, photoRadius, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-    drawImageCover(ctx, childImage, photoX, photoY, photoSize, photoSize);
-    ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(540, photoY + photoRadius, photoRadius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      drawImageCover(ctx, childImage, photoX, photoY, photoSize, photoSize);
+      ctx.restore();
 
-    ctx.strokeStyle = "#FFFFFF";
-    ctx.lineWidth = 12;
-    ctx.beginPath();
-    ctx.arc(540, photoY + photoRadius, photoRadius + 6, 0, Math.PI * 2);
-    ctx.stroke();
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.arc(540, photoY + photoRadius, photoRadius + 6, 0, Math.PI * 2);
+      ctx.stroke();
 
-    ctx.fillStyle = theme.text;
-    ctx.font = "bold 27px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(firstChild.name, 540, topY + photoSize + 28);
-    ctx.textAlign = "left";
+      ctx.fillStyle = theme.text;
+      ctx.font = "bold 27px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(firstChild.name, 540, topY + photoSize + 28);
+      ctx.textAlign = "left";
 
-    topY += 235;
+      topY += 235;
+    }
   }
-}
 
-if (!hasChildPhotoInShareImage) {
-  topY = 245;
-}
+  if (!hasChildPhotoInShareImage) {
+    topY = 245;
+  }
 
   ctx.fillStyle = theme.main;
   ctx.font = "bold 78px Georgia";
@@ -533,14 +532,14 @@ if (!hasChildPhotoInShareImage) {
   ctx.textAlign = "center";
 
   const childNameForAge =
-  firstChild?.name ||
-  firstChild?.nickname ||
-  firstChild?.firstName ||
-  "l’enfant";
+    firstChild?.name ||
+    firstChild?.nickname ||
+    firstChild?.firstName ||
+    "l’enfant";
 
-const ageText = phrase.childAgeAtSituation
-  ? `Âge de ${childNameForAge} au moment de cette phrase : ${phrase.childAgeAtSituation}`
-  : "";
+  const ageText = phrase.childAgeAtSituation
+    ? `Âge de ${childNameForAge} au moment de cette phrase : ${phrase.childAgeAtSituation}`
+    : "";
 
   const dateText = formatDate(phrase.date);
 
@@ -636,30 +635,6 @@ function PhrasePopup({
     });
   };
 
-  const handlePhotoUpload = (event) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-    const photoUrl = URL.createObjectURL(file);
-
-    setFormData((current) => ({
-      ...current,
-      photoFile: file,
-      photoUrl,
-    }));
-
-    event.target.value = "";
-  };
-
-  const removePhoto = () => {
-    setFormData((current) => ({
-      ...current,
-      photoFile: null,
-      photoUrl: "",
-    }));
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
       <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-[2rem] bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-[2rem]">
@@ -671,8 +646,8 @@ function PhrasePopup({
 
             <p className="mt-1 text-sm text-[#746F64]">
               {isEdit
-                ? "Modifie la phrase, la date, les enfants associés ou la photo."
-                : "Ajoute une phrase, une date, un ou plusieurs enfants et une photo souvenir."}
+                ? "Modifie la phrase, la date ou les enfants associés."
+                : "Ajoute une phrase, une date et un ou plusieurs enfants associés."}
             </p>
           </div>
 
@@ -751,47 +726,6 @@ function PhrasePopup({
               value={formData.date}
               onChange={(event) => updateField("date", event.target.value)}
             />
-          </div>
-
-          <div>
-            <label className="text-xs font-black uppercase tracking-[0.14em] text-[#8A8378]">
-              Photo
-            </label>
-
-            {formData.photoUrl ? (
-              <div className="mt-3 overflow-hidden rounded-3xl bg-[#FFF7FB] ring-1 ring-[#F3D8E6]">
-                <img
-                  src={formData.photoUrl}
-                  alt="Souvenir"
-                  className="h-52 w-full object-cover"
-                />
-
-                <div className="flex items-center justify-between gap-3 p-3">
-                  <p className="text-sm font-bold text-[#746F64]">
-                    Photo ajoutée
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={removePhoto}
-                    className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
-                  >
-                    Retirer
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#FFF7FB] px-4 py-4 text-sm font-bold text-[#B8819C] ring-1 ring-[#F3D8E6]">
-                <ImagePlus className="h-5 w-5" />
-                Ajouter une photo
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handlePhotoUpload}
-                />
-              </label>
-            )}
           </div>
 
           <div>
@@ -962,15 +896,15 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
             <div className="text-center">
               <p className="text-xs font-bold text-[#746F64]">
                 {phrase.childAgeAtSituation
-  ? `Âge de ${
-      firstChild?.name ||
-      firstChild?.nickname ||
-      firstChild?.firstName ||
-      "l’enfant"
-    } au moment de cette phrase : ${phrase.childAgeAtSituation} · ${formatDate(
-      phrase.date
-    )}`
-  : formatDate(phrase.date)}
+                  ? `Âge de ${
+                      firstChild?.name ||
+                      firstChild?.nickname ||
+                      firstChild?.firstName ||
+                      "l’enfant"
+                    } au moment de cette phrase : ${
+                      phrase.childAgeAtSituation
+                    } · ${formatDate(phrase.date)}`
+                  : formatDate(phrase.date)}
               </p>
             </div>
 
@@ -1111,22 +1045,22 @@ function ShareImagePopup({ phrase, onClose, onShare }) {
 
 export default function MemorablePhrases({ children = [], onBack }) {
   const childOptions = useMemo(() => {
-  return children
-    .filter((child) => child.id)
-    .map((child) => ({
-      id: String(child.id),
-      name: displayChildName(child),
-      photo: child.photo || child.image || child.avatar || "",
-      birthDate: child.birthDate || "",
-      color:
-        child.calendarColor ||
-        child.color ||
-        child.themeColor ||
-        child.accentColor ||
-        child.profileColor ||
-        "",
-    }));
-}, [children]);
+    return children
+      .filter((child) => child.id)
+      .map((child) => ({
+        id: String(child.id),
+        name: displayChildName(child),
+        photo: child.photo || child.image || child.avatar || "",
+        birthDate: child.birthDate || "",
+        color:
+          child.calendarColor ||
+          child.color ||
+          child.themeColor ||
+          child.accentColor ||
+          child.profileColor ||
+          "",
+      }));
+  }, [children]);
 
   const [phrases, setPhrases] = useState(() => {
     const firstChild = childOptions?.[0] || null;
@@ -1141,8 +1075,6 @@ export default function MemorablePhrases({ children = [], onBack }) {
         date: "2025-12-04",
         context: "",
         favorite: false,
-        photoUrl: "",
-        photoFile: null,
         childAgeAtSituation: firstChild
           ? calculateAgeAtDate(firstChild.birthDate, "2025-12-04")
           : "",
@@ -1155,8 +1087,6 @@ export default function MemorablePhrases({ children = [], onBack }) {
         date: "2025-08-03",
         context: "",
         favorite: false,
-        photoUrl: "",
-        photoFile: null,
         childAgeAtSituation: secondChild
           ? calculateAgeAtDate(secondChild.birthDate, "2025-08-03")
           : "",
@@ -1178,8 +1108,6 @@ export default function MemorablePhrases({ children = [], onBack }) {
     childIds: [],
     date: getTodayDate(),
     context: "",
-    photoUrl: "",
-    photoFile: null,
   };
 
   const [formData, setFormData] = useState(emptyForm);
@@ -1238,8 +1166,6 @@ export default function MemorablePhrases({ children = [], onBack }) {
       childIds: [],
       date: getTodayDate(),
       context: "",
-      photoUrl: "",
-      photoFile: null,
     });
   };
 
@@ -1259,8 +1185,6 @@ export default function MemorablePhrases({ children = [], onBack }) {
       date: situationDate,
       context: formData.context.trim(),
       favorite: false,
-      photoUrl: formData.photoUrl,
-      photoFile: formData.photoFile,
       childAgeAtSituation: firstChild
         ? calculateAgeAtDate(firstChild.birthDate, situationDate)
         : "",
@@ -1285,8 +1209,6 @@ export default function MemorablePhrases({ children = [], onBack }) {
       childIds: phrase.childIds || [],
       date: phrase.date || getTodayDate(),
       context: phrase.context || "",
-      photoUrl: phrase.photoUrl || "",
-      photoFile: phrase.photoFile || null,
     });
   };
 
@@ -1532,14 +1454,6 @@ export default function MemorablePhrases({ children = [], onBack }) {
                     boxShadow: `0 0 0 1px ${theme.border}`,
                   }}
                 >
-                  {item.photoUrl ? (
-                    <img
-                      src={item.photoUrl}
-                      alt="Souvenir associé à la phrase"
-                      className="mb-4 h-52 w-full rounded-[1.25rem] object-cover"
-                    />
-                  ) : null}
-
                   <div className="flex items-start justify-between gap-3">
                     <Quote
                       className="mt-1 h-5 w-5 shrink-0"
@@ -1593,8 +1507,8 @@ export default function MemorablePhrases({ children = [], onBack }) {
 
                       {item.childAgeAtSituation ? (
                         <p className="mt-3 text-xs font-bold text-[#8A8378]">
-                          Âge de {item.children?.[0]?.name || "l’enfant"} au moment de cette phrase :{" "}
-{item.childAgeAtSituation}
+                          Âge de {item.children?.[0]?.name || "l’enfant"} au
+                          moment de cette phrase : {item.childAgeAtSituation}
                         </p>
                       ) : null}
                     </div>
