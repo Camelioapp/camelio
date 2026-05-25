@@ -85,6 +85,11 @@ export default function Invitation({
       }
 
       setInvitation(data.invitation || null);
+      if (data.alreadyAccepted && authenticated) {
+  clearInvitationToken();
+  window.location.href = "/";
+  return;
+}
     } catch (loadError) {
       console.error("Erreur chargement invitation:", loadError);
       setError(loadError?.message || "Impossible de charger l’invitation.");

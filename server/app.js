@@ -2012,13 +2012,14 @@ app.get(
     try {
       const token = String(req.params.token || "").trim();
 
-      if (!token) {
-        return res.status(400).json({
-          success: false,
-          error: "missing_token",
-          message: "Le lien d’invitation est incomplet.",
-        });
-      }
+      if (share.status === "accepted") {
+  return res.json({
+    success: true,
+    invitation: sanitizePublicInvitation(share),
+    alreadyAccepted: true,
+    message: "Cette invitation a déjà été acceptée.",
+  });
+}
 
       const share = await findProfileShareByToken(token);
 
