@@ -916,6 +916,21 @@ function cleanProfilePayload(body = {}) {
   };
 }
 
+
+function getProfileDisplayName(profile = {}, fallbackEmail = "") {
+  return (
+    profile.nickname ||
+    profile.preferredNickname ||
+    profile.displayName ||
+    profile.name ||
+    profile.given_name ||
+    profile.givenName ||
+    profile.fullName ||
+    fallbackEmail ||
+    ""
+  );
+}
+
 function cleanEventPayload(body = {}) {
   return {
     title: body.title || "",
@@ -2167,17 +2182,19 @@ app.get(
         profile.userId ||
         String(profile.PK || "").replace("USER#", "");
 
+      const automaticName = getProfileDisplayName(profile, profile.email || email);
+
       return res.json({
         success: true,
         found: true,
         user: {
           userId,
           email: profile.email || email,
-          name:
-            profile.name ||
-            profile.displayName ||
-            profile.given_name ||
-            "",
+          name: automaticName,
+          displayName: profile.displayName || profile.name || automaticName,
+          nickname: profile.nickname || profile.preferredNickname || "",
+          familyRole: profile.familyRole || profile.userRole || "",
+          profilePhoto: profile.profilePhoto || profile.avatar || "",
           source: "profile",
         },
       });

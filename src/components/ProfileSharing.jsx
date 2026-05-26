@@ -124,6 +124,19 @@ function getHighestPermission(sectionPermissions = {}) {
   return "read";
 }
 
+function getUserAutomaticName(user) {
+  if (!user) return "";
+
+  return (
+    user.nickname ||
+    user.displayName ||
+    user.name ||
+    user.givenName ||
+    user.email ||
+    "Sans nom"
+  );
+}
+
 function getStatusLabel(share) {
   if (share.status === "accepted") return "Accès donné";
   if (share.status === "revoked") return "Retiré";
@@ -393,12 +406,17 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       }
 
       if (data?.found && data?.user) {
-        setFoundUser(data.user);
-        setSelectedUser(data.user);
-        setSearchName(data.user.name || "");
+        const user = {
+          ...data.user,
+          name: getUserAutomaticName(data.user),
+        };
+
+        setFoundUser(user);
+        setSelectedUser(user);
+        setSearchName(getUserAutomaticName(user));
         setSearchStatus("found");
         setWizardStep(2);
-        setWizardInfo("Utilisateur trouvé. Vous pouvez continuer.");
+        setWizardInfo("Utilisateur trouvé. Son nom a été récupéré automatiquement.");
         return;
       }
 
@@ -557,7 +575,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     const payload = {
       targetUserId: selectedUser.userId,
       inviteeUserId: selectedUser.userId,
-      inviteeName: selectedUser.name || searchName.trim(),
+      inviteeName: getUserAutomaticName(selectedUser) || searchName.trim(),
       inviteeEmail: selectedUser.email || searchEmail.trim().toLowerCase(),
       childIds: selectedChildIds,
       children: selectedChildren.map((child) => ({
@@ -785,8 +803,12 @@ if (!response.ok) {
                     Utilisateur trouvé
                   </h3>
 
-                  <p className="mt-1 text-sm text-[#6F685F]">
-                    {selectedUser.name || "Sans nom"}
+                  <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                    Nom récupéré automatiquement
+                  </p>
+
+                  <p className="mt-1 text-base font-bold text-[#4F4A45]">
+                    {getUserAutomaticName(selectedUser)}
                   </p>
 
                   <p className="text-sm font-semibold text-[#6F785F]">
