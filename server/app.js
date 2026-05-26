@@ -94,8 +94,58 @@ const S3_DOCUMENTS_BUCKET = process.env.S3_DOCUMENTS_BUCKET;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PRICE_LOOKUP_KEY =
   process.env.STRIPE_PRICE_LOOKUP_KEY || "camelio_monthly_595";
+const STRIPE_PRICE_LOOKUP_KEY_SOLO =
+  process.env.STRIPE_PRICE_LOOKUP_KEY_SOLO ||
+  process.env.STRIPE_PRICE_LOOKUP_KEY_PARENT_SOLO ||
+  "camelio_solo_monthly";
+const STRIPE_PRICE_LOOKUP_KEY_DUO =
+  process.env.STRIPE_PRICE_LOOKUP_KEY_DUO ||
+  process.env.STRIPE_PRICE_LOOKUP_KEY_PARENT_DUO ||
+  "camelio_duo_monthly";
+const STRIPE_PRICE_LOOKUP_KEY_FAMILLE_PLUS =
+  process.env.STRIPE_PRICE_LOOKUP_KEY_FAMILLE_PLUS ||
+  process.env.STRIPE_PRICE_LOOKUP_KEY_FAMILY_PLUS ||
+  process.env.STRIPE_PRICE_LOOKUP_KEY_PREMIUM ||
+  "camelio_famille_plus_monthly";
 const STRIPE_STORAGE_GB = process.env.STRIPE_STORAGE_GB || "5";
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
+const CAMELIO_PLANS = {
+  solo: {
+    id: "solo",
+    label: "Solo",
+    lookupKey: STRIPE_PRICE_LOOKUP_KEY_SOLO,
+    storageGb: 5,
+    guestLimit: 0,
+  },
+  duo: {
+    id: "duo",
+    label: "Duo",
+    lookupKey: STRIPE_PRICE_LOOKUP_KEY_DUO,
+    storageGb: 10,
+    guestLimit: 1,
+  },
+  famille_plus: {
+    id: "famille_plus",
+    label: "Famille+",
+    lookupKey: STRIPE_PRICE_LOOKUP_KEY_FAMILLE_PLUS,
+    storageGb: 50,
+    guestLimit: 5,
+  },
+};
+
+function getCamelioPlan(planIdOrLookupKey) {
+  const raw = String(planIdOrLookupKey || "").trim();
+  const normalized = raw.toLowerCase().replace(/[ -]/g, "_");
+
+  if (CAMELIO_PLANS[normalized]) return CAMELIO_PLANS[normalized];
+
+  return (
+    Object.values(CAMELIO_PLANS).find(
+      (plan) => plan.lookupKey === raw || plan.lookupKey.toLowerCase() === normalized
+    ) || CAMELIO_PLANS.solo
+  );
+}
 
 
 const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
@@ -523,6 +573,57 @@ function requireAuth(req, res, next) {
 
 function getUserPk(req) {
   return `USER#${req.session.user.sub}`;
+}
+
+async function ensureSubscriptionPlaceholder(req) {
+  const now = new Date().toISOString();
+  const userPk = getUserPk(req);
+
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: userPk,
+        SK: "SUBSCRIPTION",
+      },
+    })
+  );
+
+  if (result.Item) {
+    return result.Item;
+  }
+
+  const placeholder = {
+    PK: userPk,
+    SK: "SUBSCRIPTION",
+    type: "subscription",
+    userId: req.session.user.sub,
+    email: req.session.user.email || "",
+    status: "none",
+    plan: null,
+    accountType: "pending",
+    subscriptionRequired: true,
+    source: "profile_created",
+    stripeCustomerId: "",
+    stripeSubscriptionId: "",
+    stripeCheckoutSessionId: "",
+    storageGb: 0,
+    trialEnd: null,
+    trialEndsAt: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Item: placeholder,
+    })
+  );
+
+  return placeholder;
 }
 
 async function upsertSubscriptionFromStripe(stripeSubscription) {
@@ -1444,6 +1545,8 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
     const now = new Date().toISOString();
     const userPk = getUserPk(req);
 
+    await ensureSubscriptionPlaceholder(req);
+
     const result = await dynamo.send(
       new GetCommand({
         TableName: DYNAMODB_TABLE,
@@ -1550,6 +1653,8 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
     const now = new Date().toISOString();
     const userPk = getUserPk(req);
     const cleanedProfile = cleanProfilePayload(req.body || {});
+
+    await ensureSubscriptionPlaceholder(req);
 
     const existingResult = await dynamo.send(
       new GetCommand({
@@ -3335,6 +3440,43 @@ app.post(
         ? `guest-${importedShare.id}`
         : "";
 
+      await ensureSubscriptionPlaceholder(req);
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: SUBSCRIPTIONS_TABLE,
+          Item: {
+            PK: getUserPk(req),
+            SK: "SUBSCRIPTION",
+            type: "subscription",
+            userId: req.session.user.sub,
+            email: connectedEmail,
+            status: "guest",
+            plan: null,
+            accountType: "guest",
+            subscriptionRequired: false,
+            source: "guest_invitation_code",
+            guestAccessCode: code,
+            linkedOwnerAccountId: share.ownerUserId || share.sourceOwnerUserId || "",
+            linkedOwnerEmail: share.ownerEmail || share.sourceOwnerEmail || "",
+            linkedOwnerName: share.ownerName || share.sourceOwnerName || "",
+            importedShareId: importedShare?.id || "",
+            sourceShareId: share.id || "",
+            storageGb: 0,
+            stripeCustomerId: "",
+            stripeSubscriptionId: "",
+            stripeCheckoutSessionId: "",
+            trialEnd: null,
+            trialEndsAt: null,
+            currentPeriodEnd: null,
+            cancelAtPeriodEnd: false,
+            activatedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          },
+        })
+      );
+
       if (importedGuestAccountId) {
         await dynamo.send(
           new UpdateCommand({
@@ -4050,6 +4192,8 @@ app.get(
     try {
       const now = new Date().toISOString();
 
+      await ensureSubscriptionPlaceholder(req);
+
       const result = await dynamo.send(
         new GetCommand({
           TableName: SUBSCRIPTIONS_TABLE,
@@ -4385,7 +4529,10 @@ app.post(
         });
       }
 
+      await ensureSubscriptionPlaceholder(req);
+
       const now = new Date().toISOString();
+      const promoPlan = CAMELIO_PLANS.famille_plus;
 
       const codeOwners = {
   CAMELIOBETA: "Beta",
@@ -4421,7 +4568,9 @@ app.post(
           userId: req.session.user.sub,
           userEmail: req.session.user.email || "",
           source: "Camelio",
-          plan: "free_access_code",
+          plan: promoPlan.id,
+          planLabel: promoPlan.label,
+          lookupKey: promoPlan.lookupKey,
           access_code: submittedCode,
           access_code_owner: codeOwner,
           activated_at: now,
@@ -4435,7 +4584,9 @@ app.post(
           userId: req.session.user.sub,
           userEmail: req.session.user.email || "",
           source: "Camelio",
-          plan: "free_access_code",
+          plan: promoPlan.id,
+          planLabel: promoPlan.label,
+          lookupKey: promoPlan.lookupKey,
           access_code: submittedCode,
           access_code_owner: codeOwner,
           activated_at: now,
@@ -4459,9 +4610,13 @@ app.post(
         userId: req.session.user.sub,
         email: req.session.user.email || "",
         status: "active",
-        plan: "free_access_code",
-        storageGb: Number(process.env.STRIPE_STORAGE_GB) || 5,
-        source: "access_code",
+        plan: promoPlan.id,
+        planLabel: promoPlan.label,
+        storageGb: promoPlan.storageGb,
+        guestLimit: promoPlan.guestLimit,
+        accountType: "principal",
+        subscriptionRequired: false,
+        source: "promo_code",
         accessCode: submittedCode,
         accessCodeOwner: codeOwner,
         stripeCustomerId,
@@ -5108,7 +5263,10 @@ app.post(
   requireAuth,
   async (req, res) => {
     try {
-      const lookupKey = req.body?.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
+      await ensureSubscriptionPlaceholder(req);
+
+      const selectedPlan = getCamelioPlan(req.body?.plan || req.body?.lookup_key);
+      const lookupKey = selectedPlan.lookupKey || STRIPE_PRICE_LOOKUP_KEY;
 
       // Important : par défaut, on NE met PAS d'essai gratuit.
       // L'essai est activé seulement si le frontend envoie explicitement trial: true.
@@ -5133,8 +5291,11 @@ app.post(
         metadata: {
           userId: req.session.user.sub,
           userEmail: req.session.user.email || "",
-          plan: lookupKey,
-          storageGb: STRIPE_STORAGE_GB,
+          plan: selectedPlan.id,
+          planLabel: selectedPlan.label,
+          lookupKey,
+          storageGb: String(selectedPlan.storageGb),
+          guestLimit: String(selectedPlan.guestLimit),
           trial: wantsTrial ? "true" : "false",
         },
       };
@@ -5165,8 +5326,11 @@ app.post(
         metadata: {
           userId: req.session.user.sub,
           userEmail: req.session.user.email || "",
-          plan: lookupKey,
-          storageGb: STRIPE_STORAGE_GB,
+          plan: selectedPlan.id,
+          planLabel: selectedPlan.label,
+          lookupKey,
+          storageGb: String(selectedPlan.storageGb),
+          guestLimit: String(selectedPlan.guestLimit),
           trial: wantsTrial ? "true" : "false",
         },
 
