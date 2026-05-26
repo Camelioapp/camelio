@@ -1109,7 +1109,108 @@ async function createCognitoAccount() {
     </div>
   </div>
 ) : null}
+{showWizard ? (
+  <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
+    <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-[#EADFCF] bg-[#FFFDF8] shadow-2xl">
+      <div className="flex items-start justify-between gap-4 border-b border-[#EADFCF] bg-[#FFFDF8] px-5 py-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
+            Partage de profil
+          </p>
 
+          <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
+            Nouveau partage
+          </h3>
+
+          <p className="mt-1 text-sm text-[#7D756E]">
+            Étape {wizardStep} sur {wizardSteps.length} ·{" "}
+            {wizardSteps.find((step) => step.id === wizardStep)?.title}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={closeWizard}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm transition hover:bg-[#F8F3EA]"
+          aria-label="Fermer"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="border-b border-[#EADFCF] bg-white px-5 py-3">
+        <div className="flex flex-wrap gap-2">
+          {wizardSteps.map((step) => {
+            const isActive = wizardStep === step.id;
+            const isCompleted = wizardStep > step.id;
+
+            return (
+              <div
+                key={step.id}
+                className={`flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${
+                  isActive
+                    ? "bg-[#A8B193] text-white"
+                    : isCompleted
+                      ? "bg-[#EEF0E7] text-[#6F785F]"
+                      : "bg-[#F8F3EA] text-[#8B8278]"
+                }`}
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/25">
+                  {isCompleted ? <Check className="h-3.5 w-3.5" /> : step.id}
+                </span>
+                {step.title}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {(wizardMessage || wizardError) && (
+        <div className="px-5 pt-4">
+          {wizardMessage ? (
+            <div className="rounded-2xl border border-[#D8E0C7] bg-[#F3F6ED] px-4 py-3 text-sm font-semibold text-[#6F785F]">
+              {wizardMessage}
+            </div>
+          ) : null}
+
+          {wizardError ? (
+            <div className="rounded-2xl border border-[#F1C9C9] bg-[#FFF0EF] px-4 py-3 text-sm font-semibold text-[#B9544A]">
+              {wizardError}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        {renderWizardStep()}
+      </div>
+
+      {wizardStep > 1 && wizardStep < 4 ? (
+        <div className="flex justify-between gap-3 border-t border-[#EADFCF] bg-white px-5 py-4">
+          <button
+            type="button"
+            onClick={() => {
+              setWizardMessage("");
+              setWizardError("");
+              setWizardStep((current) => Math.max(1, current - 1));
+            }}
+            className="rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E]"
+          >
+            Retour
+          </button>
+
+          <button
+            type="button"
+            onClick={closeWizard}
+            className="rounded-full px-5 py-3 text-sm font-bold text-[#7D756E] transition hover:bg-[#F8F3EA]"
+          >
+            Annuler
+          </button>
+        </div>
+      ) : null}
+    </div>
+  </div>
+) : null}
       <div className="rounded-[30px] border border-[#EADFCF] bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
