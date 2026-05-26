@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Copy,
   Eye,
+  Mail,
   Pencil,
   Search,
   Send,
@@ -213,6 +214,10 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [expandedShareId, setExpandedShareId] = useState("");
   const [message, setMessage] = useState("");
   const [accountCreationNotice, setAccountCreationNotice] = useState(null);
+  const [inviteDraft, setInviteDraft] = useState(null);
+  const [inviteEmailBody, setInviteEmailBody] = useState("");
+  const [inviteEmailSubject, setInviteEmailSubject] = useState("Invitation à rejoindre Camelio");
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
 
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -438,7 +443,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     const cleanEmail = searchEmail.trim().toLowerCase();
 
     if (!isValidEmail(cleanEmail)) {
-      setWizardProblem("Ajoute un courriel valide avant d’envoyer l’invitation.");
+      setWizardProblem("Ajoute un courriel valide avant de préparer l’invitation.");
       return;
     }
 
@@ -456,6 +461,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
           body: JSON.stringify({
             email: cleanEmail,
             name: searchName.trim(),
+            send: false,
           }),
         }
       );
@@ -466,27 +472,96 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
         throw new Error(
           data?.message ||
             data?.error ||
-            "Impossible d’envoyer l’invitation."
+            "Impossible de préparer l’invitation."
         );
       }
 
-      setAccountCreationNotice({
-        title: "Invitation envoyée",
-        message:
-          "La personne doit maintenant créer son compte Camelio avec ce courriel. Une fois son compte créé, vous devrez recommencer à l’étape 1, rechercher son courriel à nouveau, puis poursuivre le partage.",
-        email: cleanEmail,
-      });
+      const subject = data?.emailSubject || "Invitation à rejoindre Camelio";
+      const body =
+        data?.emailBody ||
+        `Bonjour${searchName.trim() ? ` ${searchName.trim()}` : ""},\n\nJe t’invite à créer ton compte Camelio pour que je puisse te partager certaines informations familiales dans un espace sécurisé.\n\nTon code invité est : ${data?.guestAccessCode || ""}\n\nUtilise ce code avec le courriel ${cleanEmail} lors de ton inscription ou dans l’activation de ton espace invité.\n\nÀ bientôt!`;
 
-      setWizardInfo(
-        "Invitation envoyée. Attendez que la personne crée son compte, puis recommencez la recherche à l’étape 1."
-      );
+      setInviteEmailSubject(subject);
+      setInviteEmailBody(body);
+      setInviteDraft({
+        email: cleanEmail,
+        name: searchName.trim(),
+        guestAccessCode: data?.guestAccessCode || "",
+      });
     } catch (error) {
-      console.error("Erreur invitation création compte:", error);
-      setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
+      console.error("Erreur préparation invitation création compte:", error);
+      setWizardProblem(error?.message || "Impossible de préparer l’invitation.");
     } finally {
       setIsSaving(false);
     }
   }
+
+  async function sendInviteDraft() {
+    if (!inviteDraft?.email) return;
+
+    try {
+      setIsSendingInvite(true);
+      setWizardMessage("");
+      setWizardError("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile-shares/users/invite-create-account`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: inviteDraft.email,
+            name: inviteDraft.name || searchName.trim(),
+            guestAccessCode: inviteDraft.guestAccessCode,
+            emailSubject: inviteEmailSubject,
+            emailBody: inviteEmailBody,
+            send: true,
+          }),
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || "Impossible d’envoyer l’invitation.");
+      }
+
+      setInviteDraft((current) => ({ ...(current || {}), sent: true }));
+      setWizardInfo("Invitation envoyée. Le code invité peut aussi être copié et transmis manuellement.");
+    } catch (error) {
+      console.error("Erreur envoi invitation création compte:", error);
+      setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
+    } finally {
+      setIsSendingInvite(false);
+    }
+  }
+
+  async function copyInviteDraftCode() {
+    if (!inviteDraft?.guestAccessCode) {
+      setWizardProblem("Aucun code invité disponible.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteDraft.guestAccessCode);
+      setWizardInfo("Code invité copié.");
+    } catch {
+      setWizardProblem("Impossible de copier le code automatiquement.");
+    }
+  }
+
+  async function copyInviteDraftEmail() {
+    const text = `Objet : ${inviteEmailSubject}\n\n${inviteEmailBody}`;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setWizardInfo("Courriel copié.");
+    } catch {
+      setWizardProblem("Impossible de copier le courriel automatiquement.");
+    }
+  }
+
 
   async function createCognitoAccount() {
     const cleanEmail = searchEmail.trim().toLowerCase();
@@ -876,37 +951,12 @@ if (!response.ok) {
               <div className="mt-5 flex flex-col gap-3 md:flex-row">
                 <button
                   type="button"
-                  onClick={() => {
-                    setWizardMessage("");
-                    setWizardError("");
-                    setSearchStatus("idle");
-                    setWizardStep(1);
-                  }}
-                  disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E] disabled:opacity-50"
-                >
-                  <Pencil className="h-4 w-4" />
-                  Modifier le courriel
-                </button>
-
-                <button
-                  type="button"
                   onClick={inviteToCreateAccount}
                   disabled={isSaving}
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                 >
-                
-                  Inviter à créer un compte
-                </button>
-
-                <button
-                  type="button"
-                  onClick={createCognitoAccount}
-                  disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Créer le compte pour elle
+                  <Mail className="h-4 w-4" />
+                  {isSaving ? "Préparation..." : "Inviter à créer un compte"}
                 </button>
               </div>
             </div>
@@ -1196,6 +1246,116 @@ if (!response.ok) {
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white"
               >
                 J’ai compris
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+
+      {inviteDraft ? (
+        <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[30px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
+                  Invitation familiale
+                </p>
+
+                <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
+                  Inviter à créer un compte
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-[#7D756E]">
+                  Tu peux modifier le message avant l’envoi. Le code invité est unique et associé au courriel recherché.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setInviteDraft(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm"
+                aria-label="Fermer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+              <div className="rounded-2xl border border-[#EADFCF] bg-white px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                  Courriel associé
+                </p>
+                <p className="mt-1 break-all text-sm font-bold text-[#4F4A45]">
+                  {inviteDraft.email}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-[#D8CBE8] bg-[#F7F3FF] px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#9D8BB7]">
+                  Code invité
+                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="break-all text-sm font-black text-[#4F4A45]">
+                    {inviteDraft.guestAccessCode || "Non disponible"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={copyInviteDraftCode}
+                    className="inline-flex items-center justify-center rounded-full border border-[#D8CBE8] bg-white p-2 text-[#7D6A9A]"
+                    aria-label="Copier le code invité"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <label className="mt-4 block">
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                Objet
+              </span>
+              <input
+                value={inviteEmailSubject}
+                onChange={(event) => setInviteEmailSubject(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-[#EADFCF] bg-white px-4 py-3 text-sm font-semibold text-[#4F4A45] outline-none focus:border-[#A8B193]"
+              />
+            </label>
+
+            <label className="mt-4 block">
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                Message
+              </span>
+              <textarea
+                value={inviteEmailBody}
+                onChange={(event) => setInviteEmailBody(event.target.value)}
+                rows={10}
+                className="mt-2 w-full rounded-2xl border border-[#EADFCF] bg-white px-4 py-3 text-sm leading-6 text-[#4F4A45] outline-none focus:border-[#A8B193]"
+              />
+            </label>
+
+            <p className="mt-3 text-xs leading-5 text-[#8B8278]">
+              Ce code devra être utilisé par la personne invitée lors de l’activation de son espace invité. Il ne fonctionne qu’avec le courriel associé.
+            </p>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={copyInviteDraftEmail}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E]"
+              >
+                <Copy className="h-4 w-4" />
+                Copier le courriel
+              </button>
+
+              <button
+                type="button"
+                onClick={sendInviteDraft}
+                disabled={isSendingInvite || inviteDraft.sent}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+              >
+                <Mail className="h-4 w-4" />
+                {inviteDraft.sent ? "Invitation envoyée" : isSendingInvite ? "Envoi..." : "Envoyer l’invitation"}
               </button>
             </div>
           </div>

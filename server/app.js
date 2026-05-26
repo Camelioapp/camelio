@@ -1963,21 +1963,35 @@ function createTemporaryPassword() {
   return `Cam-${randomUUID().replace(/-/g, "").slice(0, 14)}aA1!`;
 }
 
-async function sendCreateAccountInvitationEmail({ email, name = "" }) {
+async function sendCreateAccountInvitationEmail({
+  email,
+  name = "",
+  guestAccessCode = "",
+  emailSubject = "Invitation à rejoindre Camelio",
+  emailBody = "",
+}) {
   const signupUrl = buildCamelioSignupUrl();
   const accueilUrl = buildCamelioAccueilUrl();
+  const safeBody = String(
+    emailBody ||
+      `Bonjour${name ? ` ${name}` : ""},\n\nJe t’invite à créer ton compte Camelio pour que je puisse te partager certaines informations familiales dans un espace sécurisé.\n\nTon code invité est : ${guestAccessCode}\n\nUtilise ce code avec le courriel ${email} lors de ton inscription ou dans l’activation de ton espace invité.\n\nÀ bientôt!`
+  );
+
+  const formattedBody = safeBody
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("\n");
 
   return sendEmailWithResend({
     to: email,
-    subject: "Invitation à créer ton compte Camelio",
+    subject: emailSubject || "Invitation à rejoindre Camelio",
     html: `
       <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
         <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
           <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">Camelio</p>
-          <h2 style="margin: 0 0 16px; color: #4F4A45;">Tu es invité à créer ton compte Camelio 😊</h2>
-          <p>${escapeHtml(name || "Bonjour")}, une personne souhaite te partager un accès familial dans Camelio.</p>
-          <p>Crée d’abord ton compte avec cette adresse courriel : <strong>${escapeHtml(email)}</strong>.</p>
-          <p>Une fois ton compte créé, la personne pourra te retrouver dans la recherche Camelio et te donner les accès souhaités.</p>
+          <h2 style="margin: 0 0 16px; color: #4F4A45;">Tu es invité à rejoindre Camelio 😊</h2>
+          ${formattedBody}
+          ${guestAccessCode ? `<p style="background:#F7F3FF; border:1px solid #D8CBE8; border-radius:16px; padding:12px;"><strong>Code invité :</strong> ${escapeHtml(guestAccessCode)}</p>` : ""}
           <p style="margin: 24px 0;">
             <a href="${escapeHtml(signupUrl)}" style="display: inline-block; background: #A8B193; color: white; padding: 12px 18px; border-radius: 999px; text-decoration: none; font-weight: bold;">Créer mon compte Camelio</a>
           </p>
@@ -1985,7 +1999,7 @@ async function sendCreateAccountInvitationEmail({ email, name = "" }) {
         </div>
       </div>
     `,
-    text: `Tu es invité à créer ton compte Camelio avec l’adresse ${email}. Crée ton compte ici : ${signupUrl}`,
+    text: `${safeBody}\n\nCréer mon compte : ${signupUrl}`,
   });
 }
 
@@ -2324,6 +2338,22 @@ app.post(
     try {
       const email = normalizeInviteeEmail(req.body?.email || "");
       const name = String(req.body?.name || "").trim();
+      const shouldSend = req.body?.send === true;
+      const providedCode = String(req.body?.guestAccessCode || "").trim().toUpperCase();
+      const guestAccessCode = providedCode || (await generateUniqueGuestAccessCode());
+      const emailSubject = String(req.body?.emailSubject || "Invitation à rejoindre Camelio").trim();
+      const emailBody = String(
+        req.body?.emailBody ||
+          `Bonjour${name ? ` ${name}` : ""},
+
+Je t’invite à créer ton compte Camelio pour que je puisse te partager certaines informations familiales dans un espace sécurisé.
+
+Ton code invité est : ${guestAccessCode}
+
+Utilise ce code avec le courriel ${email} lors de ton inscription ou dans l’activation de ton espace invité.
+
+À bientôt!`
+      );
 
       if (!email || !email.includes("@")) {
         return res.status(400).json({
@@ -2344,11 +2374,53 @@ app.post(
         });
       }
 
-      await sendCreateAccountInvitationEmail({ email, name });
+      const now = new Date().toISOString();
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: {
+            PK: getUserPk(req),
+            SK: `GUEST_SIGNUP_CODE#${guestAccessCode}`,
+            type: "guestSignupInvitation",
+            ownerUserId: req.session.user.sub,
+            ownerEmail: req.session.user.email || "",
+            ownerName:
+              req.session.user.name ||
+              req.session.user.given_name ||
+              req.session.user.email ||
+              "",
+            inviteeEmail: email,
+            inviteeName: name,
+            guestAccessCode,
+            guestAccessCodeEmail: email,
+            status: shouldSend ? "sent" : "draft",
+            emailSubject,
+            emailBody,
+            createdAt: now,
+            updatedAt: now,
+          },
+        })
+      );
+
+      if (shouldSend) {
+        await sendCreateAccountInvitationEmail({
+          email,
+          name,
+          guestAccessCode,
+          emailSubject,
+          emailBody,
+        });
+      }
 
       return res.json({
         success: true,
-        message: "Invitation à créer un compte envoyée par courriel.",
+        sent: shouldSend,
+        guestAccessCode,
+        emailSubject,
+        emailBody,
+        message: shouldSend
+          ? "Invitation à créer un compte envoyée par courriel."
+          : "Invitation préparée.",
       });
     } catch (error) {
       next(error);
