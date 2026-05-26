@@ -19,7 +19,7 @@ export default function SubscriptionPopup({
   const [loadingType, setLoadingType] = useState("");
   const [error, setError] = useState("");
   const [accessCode, setAccessCode] = useState("");
-  const [successMessage, setSuccessMessage] = "";
+  const [successMessage, setSuccessMessage] = useState("");
   const [showAccessCode, setShowAccessCode] = useState(false);
 
   useEffect(() => {
