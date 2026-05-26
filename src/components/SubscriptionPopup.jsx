@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Sparkles, CheckCircle2, KeyRound } from "lucide-react";
+import {
+  Sparkles,
+  CheckCircle2,
+  KeyRound,
+  ChevronDown,
+  ChevronUp,
+  LogOut,
+} from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
@@ -12,7 +19,8 @@ export default function SubscriptionPopup({
   const [loadingType, setLoadingType] = useState("");
   const [error, setError] = useState("");
   const [accessCode, setAccessCode] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [successMessage, setSuccessMessage] = "";
+  const [showAccessCode, setShowAccessCode] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -61,6 +69,10 @@ export default function SubscriptionPopup({
     };
   }, []);
 
+  const handleLogout = () => {
+    window.location.href = `${API_URL}/logout`;
+  };
+
   const startCheckout = async (trial) => {
     try {
       setLoadingType(trial ? "trial" : "paid");
@@ -74,8 +86,8 @@ export default function SubscriptionPopup({
         },
         credentials: "include",
         body: JSON.stringify({
-  trial,
-}),
+          trial,
+        }),
       });
 
       let data = {};
@@ -87,10 +99,15 @@ export default function SubscriptionPopup({
       }
 
       if (!response.ok) {
+        console.error("Erreur backend Stripe Checkout:", {
+          status: response.status,
+          data,
+        });
+
         throw new Error(
           data.message ||
             data.error ||
-            "Impossible de créer la session Stripe."
+            `Erreur serveur. Code HTTP : ${response.status}`
         );
       }
 
@@ -140,7 +157,16 @@ export default function SubscriptionPopup({
       }
 
       if (!response.ok) {
-        throw new Error(data.message || data.error || "Ce code n’est pas valide.");
+        console.error("Erreur backend code d’accès:", {
+          status: response.status,
+          data,
+        });
+
+        throw new Error(
+          data.message ||
+            data.error ||
+            `Erreur serveur. Code HTTP : ${response.status}`
+        );
       }
 
       setHasAccess(true);
@@ -168,6 +194,16 @@ export default function SubscriptionPopup({
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/35 px-4">
       <div className="relative w-full max-w-[430px] rounded-[2rem] bg-[#FFFCF7] p-6 shadow-2xl ring-1 ring-black/5">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="absolute right-5 top-5 flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-[#8A8178] transition hover:bg-[#F4EFE6] hover:text-[#3F3B35]"
+          title="Se déconnecter"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          <span>Quitter</span>
+        </button>
+
         <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF4E8] text-[#8FA173]">
           <Sparkles className="h-7 w-7" />
         </div>
@@ -247,41 +283,64 @@ export default function SubscriptionPopup({
           </button>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-[#E7DCCB] bg-white p-4">
-          <div className="mb-3 flex items-center gap-2 text-[#3F3B35]">
-            <KeyRound className="h-4 w-4 text-[#8FA173]" />
-            <p className="text-sm font-bold">J’ai un code d’accès</p>
-          </div>
+        <div className="mt-4 rounded-2xl border border-[#E7DCCB] bg-white">
+          <button
+            type="button"
+            onClick={() => {
+              setShowAccessCode((current) => !current);
+              setError("");
+            }}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-bold text-[#3F3B35]">
+              <KeyRound className="h-4 w-4 text-[#8FA173]" />
+              J’ai un code d’accès
+            </span>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={accessCode}
-              onChange={(event) => setAccessCode(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  activateAccessCode();
-                }
-              }}
-              placeholder="Ex. CAMELIO2026"
-              className="min-w-0 flex-1 rounded-xl border border-[#E7DCCB] bg-[#FFFCF7] px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-[#3F3B35] outline-none transition focus:border-[#8FA173] focus:ring-2 focus:ring-[#8FA173]/20"
-              disabled={Boolean(loadingType)}
-            />
+            <span className="text-[#8A8178]">
+              {showAccessCode ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </span>
+          </button>
 
-            <button
-              type="button"
-              onClick={activateAccessCode}
-              disabled={Boolean(loadingType)}
-              className="rounded-xl bg-[#3F3B35] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loadingType === "code" ? "..." : "Activer"}
-            </button>
-          </div>
+          {showAccessCode && (
+            <div className="border-t border-[#F0E7DB] px-4 pb-4 pt-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={accessCode}
+                  onChange={(event) =>
+                    setAccessCode(event.target.value.toUpperCase())
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      activateAccessCode();
+                    }
+                  }}
+                  placeholder="Ex. CAMELIO2026"
+                  className="min-w-0 flex-1 rounded-xl border border-[#E7DCCB] bg-[#FFFCF7] px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-[#3F3B35] outline-none transition focus:border-[#8FA173] focus:ring-2 focus:ring-[#8FA173]/20"
+                  disabled={Boolean(loadingType)}
+                />
 
-          <p className="mt-2 text-xs leading-5 text-[#8A8178]">
-            Le code permet d’activer un accès gratuit sans passer par le paiement
-            Stripe.
-          </p>
+                <button
+                  type="button"
+                  onClick={activateAccessCode}
+                  disabled={Boolean(loadingType)}
+                  className="rounded-xl bg-[#3F3B35] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingType === "code" ? "..." : "Activer"}
+                </button>
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-[#8A8178]">
+                Le code permet d’activer un accès gratuit sans passer par le
+                paiement Stripe.
+              </p>
+            </div>
+          )}
         </div>
 
         <p className="mt-4 text-center text-xs leading-5 text-[#8A8178]">
