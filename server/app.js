@@ -3435,58 +3435,60 @@ app.post(
       const codeOwner = codeOwners[submittedCode] || "Non défini";
       let stripeCustomerId = "";
 
-      try {
-        const existingSubscriptionResult = await dynamo.send(
-          new GetCommand({
-            TableName: SUBSCRIPTIONS_TABLE,
-            Key: {
-              PK: getUserPk(req),
-              SK: "SUBSCRIPTION",
-            },
-          })
-        );
+      if (stripe) {
+  try {
+    const existingSubscriptionResult = await dynamo.send(
+      new GetCommand({
+        TableName: SUBSCRIPTIONS_TABLE,
+        Key: {
+          PK: getUserPk(req),
+          SK: "SUBSCRIPTION",
+        },
+      })
+    );
 
-        const existingSubscription = existingSubscriptionResult.Item || null;
+    const existingSubscription = existingSubscriptionResult.Item || null;
 
-        if (existingSubscription?.stripeCustomerId) {
-          stripeCustomerId = existingSubscription.stripeCustomerId;
+    if (existingSubscription?.stripeCustomerId) {
+      stripeCustomerId = existingSubscription.stripeCustomerId;
 
-          await stripe.customers.update(stripeCustomerId, {
-            email: req.session.user.email || undefined,
-            name: req.session.user.name || undefined,
-            metadata: {
-              userId: req.session.user.sub,
-              userEmail: req.session.user.email || "",
-              source: "Camelio",
-              plan: "free_access_code",
-              access_code: submittedCode,
-              access_code_owner: codeOwner,
-              activated_at: now,
-            },
-          });
-        } else {
-          const customer = await stripe.customers.create({
-            email: req.session.user.email || undefined,
-            name: req.session.user.name || undefined,
-            metadata: {
-              userId: req.session.user.sub,
-              userEmail: req.session.user.email || "",
-              source: "Camelio",
-              plan: "free_access_code",
-              access_code: submittedCode,
-              access_code_owner: codeOwner,
-              activated_at: now,
-            },
-          });
+      await stripe.customers.update(stripeCustomerId, {
+        email: req.session.user.email || undefined,
+        name: req.session.user.name || undefined,
+        metadata: {
+          userId: req.session.user.sub,
+          userEmail: req.session.user.email || "",
+          source: "Camelio",
+          plan: "free_access_code",
+          access_code: submittedCode,
+          access_code_owner: codeOwner,
+          activated_at: now,
+        },
+      });
+    } else {
+      const customer = await stripe.customers.create({
+        email: req.session.user.email || undefined,
+        name: req.session.user.name || undefined,
+        metadata: {
+          userId: req.session.user.sub,
+          userEmail: req.session.user.email || "",
+          source: "Camelio",
+          plan: "free_access_code",
+          access_code: submittedCode,
+          access_code_owner: codeOwner,
+          activated_at: now,
+        },
+      });
 
-          stripeCustomerId = customer.id;
-        }
-      } catch (stripeError) {
-        console.error(
-          "Erreur création ou mise à jour client Stripe pour code gratuit:",
-          stripeError
-        );
-      }
+      stripeCustomerId = customer.id;
+    }
+  } catch (stripeError) {
+    console.error(
+      "Erreur création ou mise à jour client Stripe pour code gratuit:",
+      stripeError
+    );
+  }
+}
 
       const subscriptionItem = {
         PK: getUserPk(req),
@@ -4098,7 +4100,6 @@ app.delete(
 app.post(
   "/create-checkout-session",
   requireAuth,
-  validateStripeConfig,
   async (req, res) => {
     try {
       const lookupKey = req.body?.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
