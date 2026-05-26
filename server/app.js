@@ -62,6 +62,8 @@ const EMAIL_REPLY_TO =
   "info@camelio.app";
 
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
+const SUBSCRIPTIONS_TABLE =
+  process.env.SUBSCRIPTIONS_TABLE || "CamelioSubscriptions";
 const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
 
 const COGNITO_ISSUER = process.env.COGNITO_ISSUER;
@@ -402,6 +404,9 @@ function validateAwsConfig(req, res, next) {
   if (!process.env.DYNAMODB_TABLE && IS_PRODUCTION) {
     missing.push("DYNAMODB_TABLE");
   }
+  if (!process.env.SUBSCRIPTIONS_TABLE && IS_PRODUCTION) {
+    missing.push("SUBSCRIPTIONS_TABLE");
+  }
 
   if (!process.env.AWS_ACCESS_KEY_ID && !IS_PRODUCTION) {
     missing.push("AWS_ACCESS_KEY_ID");
@@ -571,7 +576,7 @@ async function upsertSubscriptionFromStripe(stripeSubscription) {
 
   await dynamo.send(
     new PutCommand({
-      TableName: DYNAMODB_TABLE,
+      TableName: SUBSCRIPTIONS_TABLE,
       Item: subscriptionItem,
     })
   );
@@ -981,6 +986,7 @@ app.get("/aws-check", (req, res) => {
   res.json({
     awsRegion: process.env.AWS_REGION || null,
     dynamodbTable: process.env.DYNAMODB_TABLE || null,
+    subscriptionsTable: process.env.SUBSCRIPTIONS_TABLE || null,
     s3Bucket: process.env.S3_DOCUMENTS_BUCKET || null,
     hasAccessKey: Boolean(process.env.AWS_ACCESS_KEY_ID),
     hasSecretKey: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
@@ -3084,7 +3090,7 @@ app.get(
 
       const result = await dynamo.send(
         new GetCommand({
-          TableName: DYNAMODB_TABLE,
+          TableName: SUBSCRIPTIONS_TABLE,
           Key: {
             PK: getUserPk(req),
             SK: "SUBSCRIPTION",
@@ -3200,7 +3206,7 @@ app.get(
 
       await dynamo.send(
         new PutCommand({
-          TableName: DYNAMODB_TABLE,
+          TableName: SUBSCRIPTIONS_TABLE,
           Item: syncedSubscription,
         })
       );
@@ -3233,7 +3239,7 @@ app.get(
     try {
       const subscriptionResult = await dynamo.send(
         new GetCommand({
-          TableName: DYNAMODB_TABLE,
+          TableName: SUBSCRIPTIONS_TABLE,
           Key: {
             PK: getUserPk(req),
             SK: "SUBSCRIPTION",
@@ -3364,7 +3370,7 @@ app.post(
 
       await dynamo.send(
         new PutCommand({
-          TableName: DYNAMODB_TABLE,
+          TableName: SUBSCRIPTIONS_TABLE,
           Item: subscriptionItem,
         })
       );
@@ -3432,7 +3438,7 @@ app.post(
       try {
         const existingSubscriptionResult = await dynamo.send(
           new GetCommand({
-            TableName: DYNAMODB_TABLE,
+            TableName: SUBSCRIPTIONS_TABLE,
             Key: {
               PK: getUserPk(req),
               SK: "SUBSCRIPTION",
@@ -3508,7 +3514,7 @@ app.post(
 
       await dynamo.send(
         new PutCommand({
-          TableName: DYNAMODB_TABLE,
+          TableName: SUBSCRIPTIONS_TABLE,
           Item: subscriptionItem,
         })
       );
