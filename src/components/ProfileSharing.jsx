@@ -430,50 +430,29 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     }
   }
 
-  async function createCognitoAccount() {
-    try {
-      setIsSaving(true);
-      setWizardMessage("");
-      setWizardError("");
+async function createCognitoAccount() {
+  const cleanEmail = searchEmail.trim().toLowerCase();
+  const cleanName = searchName.trim();
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/profile-shares/users/create-cognito`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: searchEmail.trim().toLowerCase(),
-            name: searchName.trim(),
-          }),
-        }
-      );
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Impossible de créer le compte.");
-      }
-
-      if (data?.user?.userId) {
-        setFoundUser(data.user);
-        setSelectedUser(data.user);
-        setSearchName(data.user.name || searchName);
-        setSearchStatus("found");
-        setWizardStep(3);
-        setWizardInfo("Compte trouvé ou créé. Vous pouvez choisir les accès.");
-      } else {
-        setWizardInfo(
-          data?.message ||
-            "Compte créé. La personne doit compléter l’activation reçue par courriel."
-        );
-      }
-    } catch (error) {
-      setWizardProblem(error?.message || "Impossible de créer le compte.");
-    } finally {
-      setIsSaving(false);
-    }
+  if (!isValidEmail(cleanEmail)) {
+    setWizardProblem("Ajoute un courriel valide avant de créer le compte.");
+    return;
   }
+
+  try {
+    await navigator.clipboard.writeText(cleanEmail);
+  } catch {
+    // Ce n’est pas bloquant si la copie échoue.
+  }
+
+  const signupUrl = `${API_BASE_URL}/signup`;
+
+  setWizardInfo(
+    `Ouvre la page d’inscription dans une fenêtre privée/incognito, puis crée le compte avec ce courriel : ${cleanEmail}. Le courriel a été copié si ton navigateur l’autorise. Une fois le compte créé, reviens ici et clique sur “Rechercher à nouveau”.`
+  );
+
+  window.open(signupUrl, "_blank", "noopener,noreferrer");
+}
 
   function toggleChild(childId) {
     setSelectedChildIds((current) =>
