@@ -74,9 +74,8 @@ export default function SubscriptionPopup({
         },
         credentials: "include",
         body: JSON.stringify({
-          lookup_key: "camelio_monthly_595",
-          trial,
-        }),
+  trial,
+}),
       });
 
       let data = {};
