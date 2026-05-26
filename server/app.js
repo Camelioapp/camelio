@@ -898,11 +898,19 @@ function cleanChildPayload(body = {}) {
 }
 
 function cleanProfilePayload(body = {}) {
+  const profilePhotoPosition = body.profilePhotoPosition || body.avatarPosition || {
+    x: 50,
+    y: 50,
+  };
+
   return {
     displayName: body.displayName || "",
     nickname: body.nickname || body.preferredNickname || "",
     familyRole: body.familyRole || body.userRole || "",
     profilePhoto: body.profilePhoto || body.avatar || "",
+    profilePhotoS3Key: body.profilePhotoS3Key || body.avatarS3Key || "",
+    profilePhotoPosition,
+    profilePhotoZoom: Number(body.profilePhotoZoom || body.avatarZoom) || 1,
     phone: body.phone || "",
     preferredLanguage: body.preferredLanguage || "fr",
   };
@@ -955,6 +963,39 @@ function inferDocumentFileType(fileName = "", fileType = "") {
   }
 
   return "";
+}
+
+async function hydrateProfilePhotoUrl(profile, ownerId) {
+  if (!profile?.profilePhotoS3Key) {
+    return profile;
+  }
+
+  if (!isSafeS3KeyForOwner(profile.profilePhotoS3Key, ownerId)) {
+    return {
+      ...profile,
+      profilePhoto: "",
+      profilePhotoBlocked: true,
+    };
+  }
+
+  try {
+    const downloadUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Key: profile.profilePhotoS3Key,
+      }),
+      { expiresIn: 3600 }
+    );
+
+    return {
+      ...profile,
+      profilePhoto: downloadUrl,
+    };
+  } catch (error) {
+    console.error("Erreur génération URL photo profil:", error);
+    return profile;
+  }
 }
 
 function sanitizeFileName(fileName = "") {
@@ -1450,6 +1491,14 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       nickname: existingProfile.nickname || existingProfile.preferredNickname || "",
       familyRole: existingProfile.familyRole || existingProfile.userRole || "",
       profilePhoto: existingProfile.profilePhoto || existingProfile.avatar || "",
+      profilePhotoS3Key: existingProfile.profilePhotoS3Key || existingProfile.avatarS3Key || "",
+      profilePhotoPosition:
+        existingProfile.profilePhotoPosition || existingProfile.avatarPosition || {
+          x: 50,
+          y: 50,
+        },
+      profilePhotoZoom:
+        existingProfile.profilePhotoZoom || existingProfile.avatarZoom || 1,
       phone: existingProfile.phone || "",
       preferredLanguage: existingProfile.preferredLanguage || "fr",
       welcomeCompleted: Boolean(
@@ -1471,9 +1520,11 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       })
     );
 
+    const hydratedProfile = await hydrateProfilePhotoUrl(profile, req.session.user.sub);
+
     return res.json({
       success: true,
-      profile,
+      profile: hydratedProfile,
     });
   } catch (error) {
     next(error);
@@ -1535,6 +1586,16 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       nickname: cleanedProfile.nickname || existingProfile.nickname || "",
       familyRole: cleanedProfile.familyRole || existingProfile.familyRole || "",
       profilePhoto: cleanedProfile.profilePhoto || existingProfile.profilePhoto || "",
+      profilePhotoS3Key:
+        cleanedProfile.profilePhotoS3Key || existingProfile.profilePhotoS3Key || "",
+      profilePhotoPosition:
+        cleanedProfile.profilePhotoPosition ||
+        existingProfile.profilePhotoPosition || {
+          x: 50,
+          y: 50,
+        },
+      profilePhotoZoom:
+        cleanedProfile.profilePhotoZoom || existingProfile.profilePhotoZoom || 1,
       phone: cleanedProfile.phone || existingProfile.phone || "",
       preferredLanguage:
         cleanedProfile.preferredLanguage ||
@@ -1573,9 +1634,11 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       })
     );
 
+    const hydratedProfile = await hydrateProfilePhotoUrl(profile, req.session.user.sub);
+
     return res.json({
       success: true,
-      profile,
+      profile: hydratedProfile,
     });
   } catch (error) {
     next(error);
