@@ -203,7 +203,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [actionLoadingId, setActionLoadingId] = useState("");
   const [expandedShareId, setExpandedShareId] = useState("");
   const [message, setMessage] = useState("");
-
+  const [accountCreationNotice, setAccountCreationNotice] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardMessage, setWizardMessage] = useState("");
@@ -388,51 +388,56 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
 }
 
   async function inviteToCreateAccount() {
-    try {
-      setIsSaving(true);
-      setWizardMessage("");
-      setWizardError("");
+  const cleanEmail = searchEmail.trim().toLowerCase();
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/profile-shares/users/invite-create-account`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: searchEmail.trim().toLowerCase(),
-            name: searchName.trim(),
-          }),
-        }
-      );
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Impossible d’envoyer l’invitation.");
-      }
-
-      if (data?.user) {
-        setFoundUser(data.user);
-        setSelectedUser(data.user);
-        setSearchName(data.user.name || searchName);
-        setSearchStatus("found");
-      }
-
-      setWizardInfo(
-        data?.message ||
-          "Invitation envoyée. La personne doit créer son compte avant d’être sélectionnable."
-      );
-    } catch (error) {
-      setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
-    } finally {
-      setIsSaving(false);
-    }
+  if (!isValidEmail(cleanEmail)) {
+    setWizardProblem("Ajoute un courriel valide avant d’envoyer l’invitation.");
+    return;
   }
+
+  try {
+    setIsSaving(true);
+    setWizardMessage("");
+    setWizardError("");
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/profile-shares/users/invite-create-account`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: cleanEmail,
+          name: searchName.trim(),
+        }),
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Impossible d’envoyer l’invitation.");
+    }
+
+    setAccountCreationNotice({
+      title: "Invitation envoyée",
+      message:
+        "La personne doit maintenant créer son compte Camelio avec ce courriel. Une fois son compte créé, vous devrez recommencer à l’étape 1, rechercher son courriel à nouveau, puis poursuivre le partage.",
+      email: cleanEmail,
+    });
+
+    setWizardInfo(
+      "Invitation envoyée. Attendez que la personne crée son compte, puis recommencez la recherche à l’étape 1."
+    );
+  } catch (error) {
+    setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
+  } finally {
+    setIsSaving(false);
+  }
+}
 
 async function createCognitoAccount() {
   const cleanEmail = searchEmail.trim().toLowerCase();
-  const cleanName = searchName.trim();
 
   if (!isValidEmail(cleanEmail)) {
     setWizardProblem("Ajoute un courriel valide avant de créer le compte.");
@@ -442,16 +447,21 @@ async function createCognitoAccount() {
   try {
     await navigator.clipboard.writeText(cleanEmail);
   } catch {
-    // Ce n’est pas bloquant si la copie échoue.
+    // La copie n’est pas obligatoire.
   }
 
-  const signupUrl = `${API_BASE_URL}/signup`;
+  setAccountCreationNotice({
+    title: "Créer le compte",
+    message:
+      "Une page d’inscription va s’ouvrir. Créez le compte avec ce courriel. Lorsque le compte sera créé, revenez ici, retournez à l’étape 1 et recherchez le même courriel pour sélectionner l’utilisateur.",
+    email: cleanEmail,
+  });
 
   setWizardInfo(
-    `Ouvre la page d’inscription dans une fenêtre privée/incognito, puis crée le compte avec ce courriel : ${cleanEmail}. Le courriel a été copié si ton navigateur l’autorise. Une fois le compte créé, reviens ici et clique sur “Rechercher à nouveau”.`
+    "Après avoir créé le compte, recommencez la recherche à l’étape 1 pour sélectionner l’utilisateur."
   );
 
-  window.open(signupUrl, "_blank", "noopener,noreferrer");
+  window.open(`${API_BASE_URL}/signup`, "_blank", "noopener,noreferrer");
 }
 
   function toggleChild(childId) {
@@ -787,14 +797,14 @@ async function createCognitoAccount() {
                 </button>
 
                 <button
-                  type="button"
-                  onClick={createCognitoAccount}
-                  disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Créer le compte pour elle
-                </button>
+  type="button"
+  onClick={createCognitoAccount}
+  disabled={isSaving}
+  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+>
+  <UserPlus className="h-4 w-4" />
+  Créer le compte pour elle
+</button>
 
               </div>
             </div>
@@ -1033,62 +1043,72 @@ async function createCognitoAccount() {
         </div>
       ) : null}
 
-      {showWizard ? (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-[#4F4A45]/35 p-3 py-8 backdrop-blur-sm">
-          <div className="relative z-[10000] w-full max-w-4xl rounded-[34px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-2xl md:p-6">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
-                  Nouveau partage
-                </p>
+      {accountCreationNotice ? (
+  <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
+    <div className="w-full max-w-lg rounded-[30px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
+            Compte requis
+          </p>
 
-                <h3 className="mt-1 text-2xl font-bold text-[#4F4A45]">
-                  Assistant de partage
-                </h3>
-              </div>
-
-              <button
-                type="button"
-                onClick={closeWizard}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm"
-                aria-label="Fermer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mb-4 grid grid-cols-4 gap-2">
-              {wizardSteps.map((step) => (
-                <div
-                  key={step.id}
-                  className={`rounded-2xl border px-3 py-3 text-center ${
-                    wizardStep >= step.id
-                      ? "border-[#A8B193] bg-[#F3F6ED] text-[#6F785F]"
-                      : "border-[#EADFCF] bg-white text-[#8B8278]"
-                  }`}
-                >
-                  <p className="text-xs font-bold">Étape {step.id}</p>
-                  <p className="mt-1 text-xs font-semibold">{step.title}</p>
-                </div>
-              ))}
-            </div>
-
-            {wizardMessage ? (
-              <div className="mb-4 rounded-2xl border border-[#D8E0C7] bg-[#F3F6ED] px-4 py-3 text-sm font-semibold text-[#6F785F]">
-                {wizardMessage}
-              </div>
-            ) : null}
-
-            {wizardError ? (
-              <div className="mb-4 rounded-2xl border border-[#F1C9C9] bg-[#FFF0EF] px-4 py-3 text-sm font-semibold text-[#B9544A]">
-                {wizardError}
-              </div>
-            ) : null}
-
-            {renderWizardStep()}
-          </div>
+          <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
+            {accountCreationNotice.title}
+          </h3>
         </div>
-      ) : null}
+
+        <button
+          type="button"
+          onClick={() => setAccountCreationNotice(null)}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm"
+          aria-label="Fermer"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-[#EADFCF] bg-white px-4 py-3">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+          Courriel à utiliser
+        </p>
+
+        <p className="mt-1 break-all text-sm font-bold text-[#4F4A45]">
+          {accountCreationNotice.email}
+        </p>
+      </div>
+
+      <p className="mt-4 text-sm leading-6 text-[#6F685F]">
+        {accountCreationNotice.message}
+      </p>
+
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setAccountCreationNotice(null);
+            setWizardStep(1);
+            setSearchStatus("idle");
+            setFoundUser(null);
+            setSelectedUser(null);
+            setWizardMessage("");
+            setWizardError("");
+          }}
+          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E]"
+        >
+          Retourner à l’étape 1
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAccountCreationNotice(null)}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white"
+        >
+          J’ai compris
+        </button>
+      </div>
+    </div>
+  </div>
+) : null}
 
       <div className="rounded-[30px] border border-[#EADFCF] bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
