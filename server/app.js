@@ -180,24 +180,24 @@ app.post(
     try {
       switch (event.type) {
         case "customer.subscription.created":
-        case "customer.subscription.updated":
-        case "customer.subscription.deleted": {
-          const stripeSubscription = event.data.object;
+case "customer.subscription.updated":
+case "customer.subscription.deleted": {
+  const stripeSubscription = event.data.object;
 
-          const updatedSubscription = await upsertSubscriptionFromStripe(
-            stripeSubscription
-          );
+  const updatedSubscription = await upsertSubscriptionFromStripe(
+    stripeSubscription
+  );
 
-          console.log("Stripe subscription synchronisée:", {
-            eventType: event.type,
-            stripeSubscriptionId: stripeSubscription.id,
-            status: stripeSubscription.status,
-            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
-            updated: Boolean(updatedSubscription),
-          });
+  console.log("Stripe subscription reçue:", {
+    eventType: event.type,
+    stripeSubscriptionId: stripeSubscription.id,
+    status: stripeSubscription.status,
+    hasCamelioUserId: Boolean(stripeSubscription.metadata?.userId),
+    updated: Boolean(updatedSubscription),
+  });
 
-          break;
-        }
+  break;
+}
 
         default:
           console.log(`Webhook Stripe ignoré: ${event.type}`);
@@ -528,13 +528,13 @@ function getUserPk(req) {
 async function upsertSubscriptionFromStripe(stripeSubscription) {
   const userId = stripeSubscription.metadata?.userId;
 
-  if (!userId) {
-    console.warn(
-      "Webhook Stripe ignoré : aucun userId dans metadata de l'abonnement.",
-      stripeSubscription.id
-    );
-    return null;
-  }
+if (!userId) {
+  console.warn(
+    "Webhook Stripe ignoré : aucun userId dans metadata de l'abonnement.",
+    stripeSubscription.id
+  );
+  return null;
+}
 
   const now = new Date().toISOString();
 
