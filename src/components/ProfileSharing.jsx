@@ -754,15 +754,20 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   Aucun compte Camelio trouvé
 </h3>
 
-<p className="mt-2 text-sm leading-6 text-[#7D756E]">
-  Aucun utilisateur n’a été trouvé avec ce courriel. La personne doit d’abord
-  avoir un compte Camelio avant que tu puisses lui donner un accès partagé.
-</p>
+<div className="mt-3 rounded-2xl border border-[#EADFCF] bg-[#FFFDF8] px-4 py-3">
+  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+    Courriel recherché
+  </p>
 
-<p className="mt-2 text-sm leading-6 text-[#7D756E]">
-  Tu peux lui envoyer une invitation à créer son compte, ou créer le compte
-  pour elle. Une fois le compte créé, tu pourras le rechercher à nouveau et le
-  sélectionner.
+  <p className="mt-1 break-all text-sm font-bold text-[#4F4A45]">
+    {searchEmail.trim().toLowerCase() || "Aucun courriel indiqué"}
+  </p>
+</div>
+
+<p className="mt-3 text-sm leading-6 text-[#7D756E]">
+  Aucun utilisateur n’a été trouvé avec ce courriel. Vérifie d’abord qu’il n’y a
+  pas de coquille. Si le courriel est exact, la personne doit créer un compte
+  Camelio avant que tu puisses lui donner un accès partagé.
 </p>
 
               <label className="mt-4 block text-sm font-semibold text-[#4F4A45]">
@@ -777,6 +782,21 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
               />
 
               <div className="mt-5 flex flex-col gap-3 md:flex-row">
+                
+                <button
+  type="button"
+  onClick={() => {
+    setWizardMessage("");
+    setWizardError("");
+    setSearchStatus("idle");
+    setWizardStep(1);
+  }}
+  disabled={isSaving}
+  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E] disabled:opacity-50"
+>
+  <Pencil className="h-4 w-4" />
+  Modifier le courriel
+</button>
                 <button
                   type="button"
                   onClick={inviteToCreateAccount}
