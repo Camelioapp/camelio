@@ -32,6 +32,8 @@ const {
 const {
   CognitoIdentityProviderClient,
   AdminDeleteUserCommand,
+  AdminCreateUserCommand,
+  ListUsersCommand,
 } = require("@aws-sdk/client-cognito-identity-provider");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
@@ -888,9 +890,9 @@ app.get("/health", (req, res) => {
 app.get("/api/version", (req, res) => {
   res.json({
     success: true,
-    version: "profile-sharing-option-a-email-pending-2026-05-25",
+    version: "profile-sharing-token-import-2026-05-25",
     message:
-      "Cette version crée une invitation durable par courriel et rattache automatiquement les accès partagés au compte invité.",
+      "Cette version utilise token + courriel connecté pour les invitations.",
   });
 });
 
@@ -1100,36 +1102,20 @@ app.get("/callback", async (req, res, next) => {
   }
 });
 
-app.get("/me", async (req, res, next) => {
-  try {
-    if (!req.session.user) {
-      return res.json({
-        authenticated: false,
-        user: null,
-        referralCode: null,
-      });
-    }
-
-    let sharedAccess = {
-      attachedCount: 0,
-      shares: [],
-    };
-
-    try {
-      sharedAccess = await attachPendingProfileShareInvitations(req);
-    } catch (error) {
-      console.error("Erreur rattachement invitations en attente:", error);
-    }
-
+app.get("/me", (req, res) => {
+  if (!req.session.user) {
     return res.json({
-      authenticated: true,
-      user: req.session.user,
-      referralCode: getReferralCode(req),
-      sharedAccess,
+      authenticated: false,
+      user: null,
+      referralCode: null,
     });
-  } catch (error) {
-    next(error);
   }
+
+  return res.json({
+    authenticated: true,
+    user: req.session.user,
+    referralCode: getReferralCode(req),
+  });
 });
 
 app.get("/logout", (req, res) => {
@@ -1439,6 +1425,204 @@ function buildProfileShareInviteUrl(invitationToken) {
   return inviteLink.toString();
 }
 
+function normalizeInviteeEmail(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildCamelioAccueilUrl() {
+  return new URL("/accueil", APP_URL).toString();
+}
+
+function buildCamelioSignupUrl() {
+  return new URL("/signup", APP_URL).toString();
+}
+
+async function findDynamoProfileByEmail(email) {
+  const cleanEmail = normalizeInviteeEmail(email);
+  if (!cleanEmail) return null;
+
+  let lastEvaluatedKey;
+
+  do {
+    const result = await dynamo.send(
+      new ScanCommand({
+        TableName: DYNAMODB_TABLE,
+        FilterExpression: "#type = :type AND email = :email",
+        ExpressionAttributeNames: {
+          "#type": "type",
+        },
+        ExpressionAttributeValues: {
+          ":type": "profile",
+          ":email": cleanEmail,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+
+    const profile = (result.Items || [])[0];
+
+    if (profile) {
+      const userId = profile.cognitoSub || String(profile.PK || "").replace(/^USER#/, "");
+
+      return {
+        found: true,
+        source: "dynamodb",
+        userId,
+        email: profile.email || cleanEmail,
+        name: profile.displayName || profile.name || profile.email || cleanEmail,
+        profile,
+      };
+    }
+
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return null;
+}
+
+async function findCognitoUserByEmail(email) {
+  const cleanEmail = normalizeInviteeEmail(email);
+
+  if (!cleanEmail || !COGNITO_USER_POOL_ID) return null;
+
+  const safeEmail = cleanEmail.replace(/"/g, '\\"');
+
+  const result = await cognitoIdentityProvider.send(
+    new ListUsersCommand({
+      UserPoolId: COGNITO_USER_POOL_ID,
+      Filter: `email = "${safeEmail}"`,
+      Limit: 1,
+    })
+  );
+
+  const user = (result.Users || [])[0];
+
+  if (!user) return null;
+
+  const attributes = Object.fromEntries(
+    (user.Attributes || []).map((attribute) => [attribute.Name, attribute.Value])
+  );
+
+  return {
+    found: true,
+    source: "cognito",
+    userId: attributes.sub || user.Username,
+    email: attributes.email || cleanEmail,
+    name: attributes.name || attributes.given_name || attributes.email || cleanEmail,
+    cognitoUsername: user.Username,
+    userStatus: user.UserStatus,
+  };
+}
+
+async function findCamelioUserByEmail(email) {
+  const cleanEmail = normalizeInviteeEmail(email);
+  if (!cleanEmail) return null;
+
+  const profileMatch = await findDynamoProfileByEmail(cleanEmail);
+  if (profileMatch) return profileMatch;
+
+  const cognitoMatch = await findCognitoUserByEmail(cleanEmail);
+  if (cognitoMatch) return cognitoMatch;
+
+  return null;
+}
+
+function createTemporaryPassword() {
+  return `Cam-${randomUUID().replace(/-/g, "").slice(0, 14)}aA1!`;
+}
+
+async function sendCreateAccountInvitationEmail({ email, name = "" }) {
+  const signupUrl = buildCamelioSignupUrl();
+  const accueilUrl = buildCamelioAccueilUrl();
+
+  return sendEmailWithResend({
+    to: email,
+    subject: "Invitation à créer ton compte Camelio",
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
+        <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
+          <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">Camelio</p>
+          <h2 style="margin: 0 0 16px; color: #4F4A45;">Tu es invité à créer ton compte Camelio 😊</h2>
+          <p>${escapeHtml(name || "Bonjour")}, une personne souhaite te partager un accès familial dans Camelio.</p>
+          <p>Crée d’abord ton compte avec cette adresse courriel : <strong>${escapeHtml(email)}</strong>.</p>
+          <p>Une fois ton compte créé, la personne pourra te retrouver dans la recherche Camelio et te donner les accès souhaités.</p>
+          <p style="margin: 24px 0;">
+            <a href="${escapeHtml(signupUrl)}" style="display: inline-block; background: #A8B193; color: white; padding: 12px 18px; border-radius: 999px; text-decoration: none; font-weight: bold;">Créer mon compte Camelio</a>
+          </p>
+          <p style="font-size: 12px; color: #8B8278;">Page d’accueil : ${escapeHtml(accueilUrl)}</p>
+        </div>
+      </div>
+    `,
+    text: `Tu es invité à créer ton compte Camelio avec l’adresse ${email}. Crée ton compte ici : ${signupUrl}`,
+  });
+}
+
+async function sendProfileShareConfirmationEmail(share) {
+  const dashboardUrl = new URL("/", APP_URL).toString();
+  const childrenNames = (share.children || [])
+    .map((child) => child.name)
+    .filter(Boolean)
+    .join(", ");
+
+  return sendEmailWithResend({
+    to: share.inviteeEmail,
+    subject: "Ton accès partagé Camelio est prêt",
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
+        <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
+          <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">Camelio</p>
+          <h2 style="margin: 0 0 16px; color: #4F4A45;">Ton accès partagé est prêt 😊</h2>
+          <p>${escapeHtml(share.ownerName || "Un utilisateur Camelio")} t’a donné accès à des informations partagées dans Camelio.</p>
+          <p><strong>Enfant(s) partagé(s) :</strong><br />${escapeHtml(childrenNames || "Non précisé")}</p>
+          <p>Connecte-toi avec l’adresse <strong>${escapeHtml(share.inviteeEmail)}</strong> pour voir ton espace partagé.</p>
+          <p style="margin: 24px 0;">
+            <a href="${escapeHtml(dashboardUrl)}" style="display: inline-block; background: #A8B193; color: white; padding: 12px 18px; border-radius: 999px; text-decoration: none; font-weight: bold;">Ouvrir Camelio</a>
+          </p>
+        </div>
+      </div>
+    `,
+    text: `Ton accès partagé Camelio est prêt. Connecte-toi ici : ${dashboardUrl}`,
+  });
+}
+
+async function createImportedProfileShareForUser({ share, targetUserId, connectedEmail = "" }) {
+  if (!share || !targetUserId) return null;
+
+  const now = new Date().toISOString();
+  const importedShareId = randomUUID();
+
+  const importedShare = {
+    PK: `USER#${targetUserId}`,
+    SK: `IMPORTED_SHARE#${importedShareId}`,
+    id: importedShareId,
+    type: "importedProfileShare",
+    sourceShareId: share.id,
+    sourceOwnerUserId: share.ownerUserId,
+    sourceOwnerEmail: share.ownerEmail || "",
+    sourceOwnerName: share.ownerName || "",
+    inviteeUserId: targetUserId,
+    inviteeEmail: connectedEmail || share.inviteeEmail || "",
+    children: share.children || [],
+    childIds: share.childIds || [],
+    sectionIds: share.sectionIds || [],
+    sectionPermissions: share.sectionPermissions || {},
+    permission: share.permission || "read",
+    status: "accepted",
+    importedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: DYNAMODB_TABLE,
+      Item: importedShare,
+    })
+  );
+
+  return importedShare;
+}
+
 async function findProfileShareByToken(invitationToken) {
   const token = String(invitationToken || "").trim();
 
@@ -1472,254 +1656,6 @@ async function findProfileShareByToken(invitationToken) {
   } while (lastEvaluatedKey);
 
   return null;
-}
-
-
-function normalizeInvitationEmail(email = "") {
-  return String(email || "").trim().toLowerCase();
-}
-
-function getInvitationEmailPk(email = "") {
-  return `INVITATION_EMAIL#${normalizeInvitationEmail(email)}`;
-}
-
-async function findUserProfileByEmail(email = "") {
-  const normalizedEmail = normalizeInvitationEmail(email);
-
-  if (!normalizedEmail) return null;
-
-  let lastEvaluatedKey;
-
-  do {
-    const result = await dynamo.send(
-      new ScanCommand({
-        TableName: DYNAMODB_TABLE,
-        FilterExpression: "#type = :type AND email = :email",
-        ExpressionAttributeNames: {
-          "#type": "type",
-        },
-        ExpressionAttributeValues: {
-          ":type": "profile",
-          ":email": normalizedEmail,
-        },
-        ExclusiveStartKey: lastEvaluatedKey,
-      })
-    );
-
-    const profile = (result.Items || [])[0];
-
-    if (profile) return profile;
-
-    lastEvaluatedKey = result.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return null;
-}
-
-async function getImportedShareBySource(userPk, sourceShareId) {
-  if (!userPk || !sourceShareId) return null;
-
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: DYNAMODB_TABLE,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: {
-        ":pk": userPk,
-        ":sk": "IMPORTED_SHARE#",
-      },
-    })
-  );
-
-  return (result.Items || []).find(
-    (item) => item.sourceShareId === sourceShareId && item.status !== "revoked"
-  ) || null;
-}
-
-async function createImportedShareForUser({ userPk, userId, userEmail, share }) {
-  if (!userPk || !userId || !share?.id) return null;
-
-  const existingImport = await getImportedShareBySource(userPk, share.id);
-
-  if (existingImport) return existingImport;
-
-  const now = new Date().toISOString();
-  const importedShareId = randomUUID();
-
-  const importedShare = {
-    PK: userPk,
-    SK: `IMPORTED_SHARE#${importedShareId}`,
-    id: importedShareId,
-    type: "importedProfileShare",
-
-    sourceShareId: share.id,
-    sourceOwnerUserId: share.ownerUserId,
-    sourceOwnerEmail: share.ownerEmail || "",
-    sourceOwnerName: share.ownerName || "",
-
-    inviteeUserId: userId,
-    inviteeEmail: normalizeInvitationEmail(userEmail || share.inviteeEmail || ""),
-
-    children: share.children || [],
-    childIds: share.childIds || [],
-    sectionIds: share.sectionIds || [],
-    sectionPermissions: share.sectionPermissions || {},
-    permission: share.permission || "read",
-
-    status: "accepted",
-    importedAt: now,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await dynamo.send(
-    new PutCommand({
-      TableName: DYNAMODB_TABLE,
-      Item: importedShare,
-    })
-  );
-
-  return importedShare;
-}
-
-async function upsertPendingProfileShareInvitation(share) {
-  const inviteeEmail = normalizeInvitationEmail(share?.inviteeEmail || "");
-
-  if (!share?.id || !inviteeEmail) return null;
-
-  const now = new Date().toISOString();
-  const pendingInvitation = {
-    PK: getInvitationEmailPk(inviteeEmail),
-    SK: `SHARE#${share.id}`,
-    type: "pendingProfileShareInvitation",
-    inviteeEmail,
-    sourceShareId: share.id,
-    sourceOwnerUserId: share.ownerUserId,
-    ownerEmail: share.ownerEmail || "",
-    ownerName: share.ownerName || "",
-    invitationToken: share.invitationToken || "",
-    inviteUrl: share.inviteUrl || "",
-    status: share.status === "revoked" ? "revoked" : "pending",
-    expiresAt: share.invitationExpiresAt || share.expiresAt || null,
-    createdAt: share.createdAt || now,
-    updatedAt: now,
-  };
-
-  await dynamo.send(
-    new PutCommand({
-      TableName: DYNAMODB_TABLE,
-      Item: pendingInvitation,
-    })
-  );
-
-  return pendingInvitation;
-}
-
-async function attachPendingProfileShareInvitations(req) {
-  const user = req.session.user;
-  const inviteeEmail = normalizeInvitationEmail(user?.email || "");
-
-  if (!user?.sub || !inviteeEmail) {
-    return {
-      attachedCount: 0,
-      shares: [],
-    };
-  }
-
-  const userPk = getUserPk(req);
-
-  const pendingResult = await dynamo.send(
-    new QueryCommand({
-      TableName: DYNAMODB_TABLE,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: {
-        ":pk": getInvitationEmailPk(inviteeEmail),
-        ":sk": "SHARE#",
-      },
-    })
-  );
-
-  const attachedShares = [];
-
-  for (const pending of pendingResult.Items || []) {
-    if (pending.status === "revoked") continue;
-
-    const sourceResult = await dynamo.send(
-      new GetCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: `USER#${pending.sourceOwnerUserId}`,
-          SK: `SHARE#${pending.sourceShareId}`,
-        },
-      })
-    );
-
-    const share = sourceResult.Item;
-
-    if (!share || share.status === "revoked") continue;
-
-    if (normalizeInvitationEmail(share.inviteeEmail) !== inviteeEmail) continue;
-
-    const importedShare = await createImportedShareForUser({
-      userPk,
-      userId: user.sub,
-      userEmail: inviteeEmail,
-      share,
-    });
-
-    if (importedShare) {
-      attachedShares.push(importedShare);
-    }
-
-    const now = new Date().toISOString();
-
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: pending.PK,
-          SK: pending.SK,
-        },
-        UpdateExpression:
-          "SET #status = :status, acceptedByUserId = :acceptedByUserId, acceptedAt = :acceptedAt, updatedAt = :updatedAt",
-        ExpressionAttributeNames: {
-          "#status": "status",
-        },
-        ExpressionAttributeValues: {
-          ":status": "accepted",
-          ":acceptedByUserId": user.sub,
-          ":acceptedAt": now,
-          ":updatedAt": now,
-        },
-      })
-    );
-
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: share.PK,
-          SK: share.SK,
-        },
-        UpdateExpression:
-          "SET #status = :status, importedByUserId = :importedByUserId, importedByEmail = :importedByEmail, importedAt = :importedAt, updatedAt = :updatedAt",
-        ExpressionAttributeNames: {
-          "#status": "status",
-        },
-        ExpressionAttributeValues: {
-          ":status": "accepted",
-          ":importedByUserId": user.sub,
-          ":importedByEmail": inviteeEmail,
-          ":importedAt": now,
-          ":updatedAt": now,
-        },
-      })
-    );
-  }
-
-  return {
-    attachedCount: attachedShares.length,
-    shares: attachedShares,
-  };
 }
 
 function sanitizePublicInvitation(share) {
@@ -1834,6 +1770,138 @@ async function sendProfileShareInvitationEmail(share) {
   });
 }
 
+
+app.get(
+  "/api/profile-shares/users/search",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const email = normalizeInviteeEmail(req.query.email || "");
+
+      if (!email || !email.includes("@")) {
+        return res.status(400).json({
+          success: false,
+          error: "invalid_email",
+          message: "Ajoutez un courriel valide pour rechercher l’utilisateur.",
+        });
+      }
+
+      const user = await findCamelioUserByEmail(email);
+
+      return res.json({
+        success: true,
+        found: Boolean(user),
+        user,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/profile-shares/users/invite-create-account",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const email = normalizeInviteeEmail(req.body?.email || "");
+      const name = String(req.body?.name || "").trim();
+
+      if (!email || !email.includes("@")) {
+        return res.status(400).json({
+          success: false,
+          error: "invalid_email",
+          message: "Le courriel est invalide.",
+        });
+      }
+
+      const existingUser = await findCamelioUserByEmail(email);
+
+      if (existingUser) {
+        return res.json({
+          success: true,
+          alreadyExists: true,
+          user: existingUser,
+          message: "Un compte existe déjà avec ce courriel.",
+        });
+      }
+
+      await sendCreateAccountInvitationEmail({ email, name });
+
+      return res.json({
+        success: true,
+        message: "Invitation à créer un compte envoyée par courriel.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/profile-shares/users/create-cognito",
+  requireAuth,
+  validateAwsConfig,
+  validateCognitoAdminConfig,
+  async (req, res, next) => {
+    try {
+      const email = normalizeInviteeEmail(req.body?.email || "");
+      const name = String(req.body?.name || "").trim();
+
+      if (!email || !email.includes("@")) {
+        return res.status(400).json({
+          success: false,
+          error: "invalid_email",
+          message: "Le courriel est invalide.",
+        });
+      }
+
+      const existingUser = await findCamelioUserByEmail(email);
+
+      if (existingUser) {
+        return res.json({
+          success: true,
+          alreadyExists: true,
+          user: existingUser,
+          message: "Un compte existe déjà avec ce courriel.",
+        });
+      }
+
+      try {
+        await cognitoIdentityProvider.send(
+          new AdminCreateUserCommand({
+            UserPoolId: COGNITO_USER_POOL_ID,
+            Username: email,
+            UserAttributes: [
+              { Name: "email", Value: email },
+              ...(name ? [{ Name: "name", Value: name }] : []),
+            ],
+            DesiredDeliveryMediums: ["EMAIL"],
+            TemporaryPassword: createTemporaryPassword(),
+          })
+        );
+      } catch (error) {
+        if (error?.name !== "UsernameExistsException") {
+          throw error;
+        }
+      }
+
+      const createdUser = await findCamelioUserByEmail(email);
+
+      return res.json({
+        success: true,
+        user: createdUser,
+        message:
+          "Compte créé dans Cognito. La personne doit compléter son accès avec le courriel reçu.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 app.get(
   "/api/profile-shares",
   requireAuth,
@@ -1940,26 +2008,75 @@ app.post(
         })
       );
 
-      await upsertPendingProfileShareInvitation(share);
+      const targetUserId = String(req.body?.targetUserId || req.body?.inviteeUserId || "").trim();
 
-      try {
-        const existingInviteeProfile = await findUserProfileByEmail(
-          share.inviteeEmail
+      if (targetUserId) {
+        const importedShare = await createImportedProfileShareForUser({
+          share,
+          targetUserId,
+          connectedEmail: share.inviteeEmail,
+        });
+
+        share = {
+          ...share,
+          status: "accepted",
+          importedByUserId: targetUserId,
+          importedByEmail: share.inviteeEmail,
+          importedAt: new Date().toISOString(),
+          emailStatus: "pending",
+          updatedAt: new Date().toISOString(),
+        };
+
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: share.PK,
+              SK: share.SK,
+            },
+            UpdateExpression:
+              "SET #status = :status, importedByUserId = :importedByUserId, importedByEmail = :importedByEmail, importedAt = :importedAt, emailStatus = :emailStatus, updatedAt = :updatedAt",
+            ExpressionAttributeNames: {
+              "#status": "status",
+            },
+            ExpressionAttributeValues: {
+              ":status": share.status,
+              ":importedByUserId": share.importedByUserId,
+              ":importedByEmail": share.importedByEmail,
+              ":importedAt": share.importedAt,
+              ":emailStatus": share.emailStatus,
+              ":updatedAt": share.updatedAt,
+            },
+            ReturnValues: "NONE",
+          })
         );
 
-        if (existingInviteeProfile?.PK && existingInviteeProfile?.cognitoSub) {
-          await createImportedShareForUser({
-            userPk: existingInviteeProfile.PK,
-            userId: existingInviteeProfile.cognitoSub,
-            userEmail: share.inviteeEmail,
-            share,
-          });
+        try {
+          await sendProfileShareConfirmationEmail(share);
+          share = { ...share, emailStatus: "sent", emailError: "", updatedAt: new Date().toISOString() };
+          await dynamo.send(
+            new UpdateCommand({
+              TableName: DYNAMODB_TABLE,
+              Key: { PK: share.PK, SK: share.SK },
+              UpdateExpression: "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
+              ExpressionAttributeValues: {
+                ":emailStatus": share.emailStatus,
+                ":emailError": share.emailError,
+                ":updatedAt": share.updatedAt,
+              },
+              ReturnValues: "NONE",
+            })
+          );
+        } catch (emailError) {
+          share = { ...share, emailStatus: "failed", emailError: emailError?.message || "Erreur d’envoi courriel.", updatedAt: new Date().toISOString() };
         }
-      } catch (linkError) {
-        console.error(
-          "Erreur rattachement immédiat de l'accès invité:",
-          linkError
-        );
+
+        return res.status(201).json({
+          success: true,
+          share,
+          importedShare,
+          message: "L’accès partagé a été créé pour l’utilisateur sélectionné.",
+        });
       }
 
       try {
@@ -2325,10 +2442,9 @@ app.get(
       }
 
       if (share.status === "accepted") {
-        return res.json({
-          success: true,
-          invitation: sanitizePublicInvitation(share),
-          alreadyAccepted: true,
+        return res.status(409).json({
+          success: false,
+          error: "invitation_already_accepted",
           message: "Cette invitation a déjà été acceptée.",
         });
       }
@@ -2435,6 +2551,14 @@ app.post(
         });
       }
 
+      if (share.status === "accepted") {
+        return res.status(409).json({
+          success: false,
+          error: "invitation_already_accepted",
+          message: "Cette invitation a déjà été acceptée.",
+        });
+      }
+
       if (isExpiredIsoDate(share.invitationExpiresAt)) {
         return res.status(410).json({
           success: false,
@@ -2443,8 +2567,13 @@ app.post(
         });
       }
 
-      const connectedEmail = normalizeInvitationEmail(req.session.user?.email || "");
-      const invitedEmail = normalizeInvitationEmail(share.inviteeEmail || "");
+      const connectedEmail = String(req.session.user?.email || "")
+        .trim()
+        .toLowerCase();
+
+      const invitedEmail = String(share.inviteeEmail || "")
+        .trim()
+        .toLowerCase();
 
       if (!connectedEmail || connectedEmail !== invitedEmail) {
         return res.status(403).json({
@@ -2463,16 +2592,41 @@ app.post(
         });
       }
 
-      await upsertPendingProfileShareInvitation(share);
-
-      const importedShare = await createImportedShareForUser({
-        userPk: getUserPk(req),
-        userId: req.session.user.sub,
-        userEmail: connectedEmail,
-        share,
-      });
-
       const now = new Date().toISOString();
+      const importedShareId = randomUUID();
+
+      const importedShare = {
+        PK: getUserPk(req),
+        SK: `IMPORTED_SHARE#${importedShareId}`,
+        id: importedShareId,
+        type: "importedProfileShare",
+
+        sourceShareId: share.id,
+        sourceOwnerUserId: share.ownerUserId,
+        sourceOwnerEmail: share.ownerEmail || "",
+        sourceOwnerName: share.ownerName || "",
+
+        inviteeUserId: req.session.user.sub,
+        inviteeEmail: connectedEmail,
+
+        children: share.children || [],
+        childIds: share.childIds || [],
+        sectionIds: share.sectionIds || [],
+        sectionPermissions: share.sectionPermissions || {},
+        permission: share.permission || "read",
+
+        status: "accepted",
+        importedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: importedShare,
+        })
+      );
 
       const updatedSourceResult = await dynamo.send(
         new UpdateCommand({
@@ -2497,27 +2651,6 @@ app.post(
         })
       );
 
-      await dynamo.send(
-        new UpdateCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: getInvitationEmailPk(connectedEmail),
-            SK: `SHARE#${share.id}`,
-          },
-          UpdateExpression:
-            "SET #status = :status, acceptedByUserId = :acceptedByUserId, acceptedAt = :acceptedAt, updatedAt = :updatedAt",
-          ExpressionAttributeNames: {
-            "#status": "status",
-          },
-          ExpressionAttributeValues: {
-            ":status": "accepted",
-            ":acceptedByUserId": req.session.user.sub,
-            ":acceptedAt": now,
-            ":updatedAt": now,
-          },
-        })
-      );
-
       return res.json({
         success: true,
         message: "L’accès partagé a été importé avec succès.",
@@ -2536,12 +2669,6 @@ app.get(
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      try {
-        await attachPendingProfileShareInvitations(req);
-      } catch (attachError) {
-        console.error("Erreur rattachement invitations en attente:", attachError);
-      }
-
       const result = await dynamo.send(
         new QueryCommand({
           TableName: DYNAMODB_TABLE,

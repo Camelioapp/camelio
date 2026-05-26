@@ -36,7 +36,6 @@ export default function App() {
     authenticated: false,
     user: null,
     referralCode: null,
-    sharedAccess: null,
   });
 
   const [parentProfile, setParentProfile] = useState({
@@ -73,7 +72,6 @@ export default function App() {
         authenticated: Boolean(data?.authenticated),
         user: data?.user || null,
         referralCode: data?.referralCode || null,
-        sharedAccess: data?.sharedAccess || null,
       };
 
       setAuth(nextAuth);
@@ -91,13 +89,7 @@ export default function App() {
       }
     } catch (error) {
       console.error("Erreur vérification session:", error);
-
-      setAuth({
-        authenticated: false,
-        user: null,
-        referralCode: null,
-        sharedAccess: null,
-      });
+      setAuth({ authenticated: false, user: null, referralCode: null });
     } finally {
       setIsLoading(false);
     }
@@ -141,6 +133,11 @@ export default function App() {
   }
 
   const invitationToken = getTokenFromUrl() || getSavedInvitationToken();
+
+  if (path === "/" && !auth.authenticated) {
+    window.history.replaceState(null, "", "/accueil");
+    return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
+  }
 
   if (path === "/invitation") {
     return (
@@ -191,6 +188,7 @@ export default function App() {
   }
 
   if (!auth.authenticated) {
+    window.history.replaceState(null, "", "/accueil");
     return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
   }
 
