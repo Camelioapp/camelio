@@ -6,7 +6,6 @@ import {
   Eye,
   Mail,
   Pencil,
-  RefreshCw,
   Search,
   Send,
   ShieldCheck,
@@ -86,7 +85,6 @@ function formatDate(value) {
   if (!value) return "Non précisé";
 
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) return "Non précisé";
 
   return date.toLocaleDateString("fr-CA", {
@@ -100,7 +98,6 @@ function formatDateTime(value) {
   if (!value) return "Non précisé";
 
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) return "Non précisé";
 
   return date.toLocaleString("fr-CA", {
@@ -204,10 +201,12 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [expandedShareId, setExpandedShareId] = useState("");
   const [message, setMessage] = useState("");
   const [accountCreationNotice, setAccountCreationNotice] = useState(null);
+
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardMessage, setWizardMessage] = useState("");
   const [wizardError, setWizardError] = useState("");
+  const [editingShareId, setEditingShareId] = useState("");
 
   const [searchEmail, setSearchEmail] = useState("");
   const [searchName, setSearchName] = useState("");
@@ -290,11 +289,44 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       calendar: "read",
       documents: "read",
     });
+    setEditingShareId("");
     setNote("");
   }
 
   function openWizard() {
     resetWizard();
+    setMessage("");
+    setShowWizard(true);
+  }
+
+  function openEditWizard(share) {
+    const sectionIds = Array.isArray(share.sectionIds) ? share.sectionIds : [];
+    const childIds = Array.isArray(share.childIds)
+      ? share.childIds
+      : (share.children || []).map((child) => child.id).filter(Boolean);
+
+    setEditingShareId(share.id || "");
+    setWizardStep(3);
+    setWizardMessage("");
+    setWizardError("");
+    setSearchEmail(share.inviteeEmail || "");
+    setSearchName(share.inviteeName || "");
+    setSearchStatus("found");
+
+    setSelectedUser({
+      userId:
+        share.importedByUserId ||
+        share.inviteeUserId ||
+        share.targetUserId ||
+        "",
+      email: share.inviteeEmail || "",
+      name: share.inviteeName || "",
+    });
+
+    setSelectedChildIds(childIds);
+    setSelectedSectionIds(sectionIds);
+    setSectionPermissions(share.sectionPermissions || {});
+    setNote(share.note || "");
     setMessage("");
     setShowWizard(true);
   }
@@ -315,154 +347,157 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   }
 
   async function searchUserByEmail() {
-  if (!canSearch) {
-    setWizardProblem("Ajoute un courriel valide avant de rechercher.");
-    return;
-  }
+    if (!canSearch) {
+      setWizardProblem("Ajoute un courriel valide avant de rechercher.");
+      return;
+    }
 
-  try {
-    setSearchStatus("loading");
-    setWizardMessage("");
-    setWizardError("");
-    setFoundUser(null);
-    setSelectedUser(null);
+    try {
+      setSearchStatus("loading");
+      setWizardMessage("");
+      setWizardError("");
+      setFoundUser(null);
+      setSelectedUser(null);
 
-    const cleanEmail = searchEmail.trim().toLowerCase();
+      const cleanEmail = searchEmail.trim().toLowerCase();
 
-    const response = await fetch(
-      `${API_BASE_URL}/api/profile-shares/users/search?email=${encodeURIComponent(
-        cleanEmail
-      )}`,
-      {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile-shares/users/search?email=${encodeURIComponent(
+          cleanEmail
+        )}`,
+        {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (
+        response.status === 404 ||
+        data?.found === false ||
+        data?.error === "user_not_found"
+      ) {
+        setSearchStatus("not-found");
+        setWizardStep(2);
+        setWizardMessage("");
+        setWizardError("");
+        setSearchName("");
+        return;
       }
-    );
 
-    const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          data?.message || "Impossible de rechercher cet utilisateur."
+        );
+      }
 
-    // Cas normal : aucun utilisateur trouvé
-    if (
-      response.status === 404 ||
-      data?.found === false ||
-      data?.error === "user_not_found"
-    ) {
+      if (data?.found && data?.user) {
+        setFoundUser(data.user);
+        setSelectedUser(data.user);
+        setSearchName(data.user.name || "");
+        setSearchStatus("found");
+        setWizardStep(2);
+        setWizardInfo("Utilisateur trouvé. Vous pouvez continuer.");
+        return;
+      }
+
       setSearchStatus("not-found");
       setWizardStep(2);
       setWizardMessage("");
       setWizardError("");
       setSearchName("");
-      return;
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        data?.message || "Impossible de rechercher cet utilisateur."
+    } catch (error) {
+      console.error("Erreur recherche utilisateur:", error);
+      setSearchStatus("error");
+      setWizardProblem(
+        error?.message || "Impossible de rechercher cet utilisateur."
       );
     }
+  }
 
-    if (data?.found && data?.user) {
-      setFoundUser(data.user);
-      setSelectedUser(data.user);
-      setSearchName(data.user.name || "");
-      setSearchStatus("found");
-      setWizardStep(2);
-      setWizardInfo("Utilisateur trouvé. Vous pouvez continuer.");
+  async function inviteToCreateAccount() {
+    const cleanEmail = searchEmail.trim().toLowerCase();
+
+    if (!isValidEmail(cleanEmail)) {
+      setWizardProblem("Ajoute un courriel valide avant d’envoyer l’invitation.");
       return;
     }
 
-    // Cas normal : réponse OK, mais aucun compte
-    setSearchStatus("not-found");
-    setWizardStep(2);
-    setWizardMessage("");
-    setWizardError("");
-    setSearchName("");
-  } catch (error) {
-    console.error("Erreur recherche utilisateur:", error);
-    setSearchStatus("error");
-    setWizardProblem(
-      error?.message || "Impossible de rechercher cet utilisateur."
-    );
-  }
-}
+    try {
+      setIsSaving(true);
+      setWizardMessage("");
+      setWizardError("");
 
-  async function inviteToCreateAccount() {
-  const cleanEmail = searchEmail.trim().toLowerCase();
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile-shares/users/invite-create-account`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: cleanEmail,
+            name: searchName.trim(),
+          }),
+        }
+      );
 
-  if (!isValidEmail(cleanEmail)) {
-    setWizardProblem("Ajoute un courriel valide avant d’envoyer l’invitation.");
-    return;
-  }
+      const data = await response.json().catch(() => null);
 
-  try {
-    setIsSaving(true);
-    setWizardMessage("");
-    setWizardError("");
-
-    const response = await fetch(
-      `${API_BASE_URL}/api/profile-shares/users/invite-create-account`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: cleanEmail,
-          name: searchName.trim(),
-        }),
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            "Impossible d’envoyer l’invitation."
+        );
       }
-    );
 
-    const data = await response.json().catch(() => null);
+      setAccountCreationNotice({
+        title: "Invitation envoyée",
+        message:
+          "La personne doit maintenant créer son compte Camelio avec ce courriel. Une fois son compte créé, vous devrez recommencer à l’étape 1, rechercher son courriel à nouveau, puis poursuivre le partage.",
+        email: cleanEmail,
+      });
 
-    if (!response.ok) {
-      throw new Error(data?.message || "Impossible d’envoyer l’invitation.");
+      setWizardInfo(
+        "Invitation envoyée. Attendez que la personne crée son compte, puis recommencez la recherche à l’étape 1."
+      );
+    } catch (error) {
+      console.error("Erreur invitation création compte:", error);
+      setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function createCognitoAccount() {
+    const cleanEmail = searchEmail.trim().toLowerCase();
+
+    if (!isValidEmail(cleanEmail)) {
+      setWizardProblem("Ajoute un courriel valide avant de créer le compte.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(cleanEmail);
+    } catch {
+      // La copie n’est pas obligatoire.
     }
 
     setAccountCreationNotice({
-      title: "Invitation envoyée",
+      title: "Créer le compte",
       message:
-        "La personne doit maintenant créer son compte Camelio avec ce courriel. Une fois son compte créé, vous devrez recommencer à l’étape 1, rechercher son courriel à nouveau, puis poursuivre le partage.",
+        "Une page d’inscription va s’ouvrir. Créez le compte avec ce courriel. Lorsque le compte sera créé, revenez ici, retournez à l’étape 1 et recherchez le même courriel pour sélectionner l’utilisateur.",
       email: cleanEmail,
     });
 
     setWizardInfo(
-      "Invitation envoyée. Attendez que la personne crée son compte, puis recommencez la recherche à l’étape 1."
+      "Après avoir créé le compte, recommencez la recherche à l’étape 1 pour sélectionner l’utilisateur."
     );
-  } catch (error) {
-    setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
-  } finally {
-    setIsSaving(false);
+
+    window.open(`${API_BASE_URL}/signup`, "_blank", "noopener,noreferrer");
   }
-}
-
-async function createCognitoAccount() {
-  const cleanEmail = searchEmail.trim().toLowerCase();
-
-  if (!isValidEmail(cleanEmail)) {
-    setWizardProblem("Ajoute un courriel valide avant de créer le compte.");
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(cleanEmail);
-  } catch {
-    // La copie n’est pas obligatoire.
-  }
-
-  setAccountCreationNotice({
-    title: "Créer le compte",
-    message:
-      "Une page d’inscription va s’ouvrir. Créez le compte avec ce courriel. Lorsque le compte sera créé, revenez ici, retournez à l’étape 1 et recherchez le même courriel pour sélectionner l’utilisateur.",
-    email: cleanEmail,
-  });
-
-  setWizardInfo(
-    "Après avoir créé le compte, recommencez la recherche à l’étape 1 pour sélectionner l’utilisateur."
-  );
-
-  window.open(`${API_BASE_URL}/signup`, "_blank", "noopener,noreferrer");
-}
 
   function toggleChild(childId) {
     setSelectedChildIds((current) =>
@@ -543,17 +578,30 @@ async function createCognitoAccount() {
       setWizardMessage("");
       setWizardError("");
 
-      const response = await fetch(`${API_BASE_URL}/api/profile-shares`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const isEditing = Boolean(editingShareId);
+
+      const response = await fetch(
+        isEditing
+          ? `${API_BASE_URL}/api/profile-shares/${editingShareId}`
+          : `${API_BASE_URL}/api/profile-shares`,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data?.message || "Impossible de créer le partage.");
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            (isEditing
+              ? "Impossible de modifier le partage."
+              : "Impossible de créer le partage.")
+        );
       }
 
       if (data?.share) {
@@ -564,9 +612,15 @@ async function createCognitoAccount() {
       }
 
       setWizardStep(4);
-      setWizardInfo(data?.message || "L’accès partagé a été créé.");
+      setWizardInfo(
+        data?.message ||
+          (isEditing
+            ? "L’accès partagé a été modifié."
+            : "L’accès partagé a été créé.")
+      );
     } catch (error) {
-      setWizardProblem(error?.message || "Impossible de créer le partage.");
+      console.error("Erreur création ou modification du partage:", error);
+      setWizardProblem(error?.message || "Impossible d’enregistrer le partage.");
     } finally {
       setIsSaving(false);
     }
@@ -610,7 +664,6 @@ async function createCognitoAccount() {
 
     try {
       setMessage("");
-
       setShares((current) => current.filter((share) => share.id !== shareId));
 
       const response = await fetch(
@@ -740,24 +793,26 @@ async function createCognitoAccount() {
           ) : (
             <div className="rounded-3xl border border-[#EADFCF] bg-white p-5">
               <h3 className="text-lg font-bold text-[#4F4A45]">
-  Aucun compte Camelio trouvé
-</h3>
+                Aucun compte Camelio trouvé
+              </h3>
 
-<div className="mt-3 rounded-2xl border border-[#EADFCF] bg-[#FFFDF8] px-4 py-3">
-  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
-    Courriel recherché
-  </p>
+              <div className="mt-3 rounded-2xl border border-[#EADFCF] bg-[#FFFDF8] px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                  Courriel recherché
+                </p>
 
-  <p className="mt-1 break-all text-sm font-bold text-[#4F4A45]">
-    {searchEmail.trim().toLowerCase() || "Aucun courriel indiqué"}
-  </p>
-</div>
+                <p className="mt-1 break-all text-sm font-bold text-[#4F4A45]">
+                  {searchEmail.trim().toLowerCase() ||
+                    "Aucun courriel indiqué"}
+                </p>
+              </div>
 
-<p className="mt-3 text-sm leading-6 text-[#7D756E]">
-  Aucun utilisateur n’a été trouvé avec ce courriel. Vérifie d’abord qu’il n’y a
-  pas de coquille. Si le courriel est exact, la personne doit créer un compte
-  Camelio avant que tu puisses lui donner un accès partagé.
-</p>
+              <p className="mt-3 text-sm leading-6 text-[#7D756E]">
+                Aucun utilisateur n’a été trouvé avec ce courriel. Vérifie
+                d’abord qu’il n’y a pas de coquille. Si le courriel est exact,
+                la personne doit créer un compte Camelio avant que tu puisses
+                lui donner un accès partagé.
+              </p>
 
               <label className="mt-4 block text-sm font-semibold text-[#4F4A45]">
                 Nom de la personne, optionnel
@@ -771,21 +826,21 @@ async function createCognitoAccount() {
               />
 
               <div className="mt-5 flex flex-col gap-3 md:flex-row">
-                
                 <button
-  type="button"
-  onClick={() => {
-    setWizardMessage("");
-    setWizardError("");
-    setSearchStatus("idle");
-    setWizardStep(1);
-  }}
-  disabled={isSaving}
-  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E] disabled:opacity-50"
->
-  <Pencil className="h-4 w-4" />
-  Modifier le courriel
-</button>
+                  type="button"
+                  onClick={() => {
+                    setWizardMessage("");
+                    setWizardError("");
+                    setSearchStatus("idle");
+                    setWizardStep(1);
+                  }}
+                  disabled={isSaving}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E] disabled:opacity-50"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Modifier le courriel
+                </button>
+
                 <button
                   type="button"
                   onClick={inviteToCreateAccount}
@@ -797,15 +852,14 @@ async function createCognitoAccount() {
                 </button>
 
                 <button
-  type="button"
-  onClick={createCognitoAccount}
-  disabled={isSaving}
-  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
->
-  <UserPlus className="h-4 w-4" />
-  Créer le compte pour elle
-</button>
-
+                  type="button"
+                  onClick={createCognitoAccount}
+                  disabled={isSaving}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#B5A7C8] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Créer le compte pour elle
+                </button>
               </div>
             </div>
           )}
@@ -847,7 +901,9 @@ async function createCognitoAccount() {
                         <p className="font-bold text-[#4F4A45]">
                           {displayName(child)}
                         </p>
-                        <p className="text-xs text-[#8B8278]">Profil enfant</p>
+                        <p className="text-xs text-[#8B8278]">
+                          Profil enfant
+                        </p>
                       </div>
                     </button>
                   );
@@ -945,7 +1001,11 @@ async function createCognitoAccount() {
               className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
             >
               <Send className="h-4 w-4" />
-              {isSaving ? "Création..." : "Créer le partage"}
+              {isSaving
+                ? "Enregistrement..."
+                : editingShareId
+                  ? "Enregistrer les modifications"
+                  : "Créer le partage"}
             </button>
           </div>
         </div>
@@ -959,13 +1019,11 @@ async function createCognitoAccount() {
         </div>
 
         <h3 className="mt-4 text-xl font-bold text-[#4F4A45]">
-          Accès partagé créé
+          {editingShareId ? "Accès partagé modifié" : "Accès partagé créé"}
         </h3>
 
         <p className="mt-2 text-sm leading-6 text-[#6F685F]">
-          L’utilisateur sélectionné a maintenant un accès limité aux sections
-          que tu as choisies. Un courriel de confirmation est envoyé si la
-          configuration courriel est active.
+          Les accès sélectionnés sont maintenant enregistrés.
         </p>
 
         <button
@@ -1020,9 +1078,9 @@ async function createCognitoAccount() {
             </h3>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#7D756E]">
-              Le partage se fait maintenant avec un compte Camelio existant. Si
-              aucun compte n’existe, invitez la personne à créer son compte ou
-              créez un compte Cognito pour elle.
+              Le partage se fait avec un compte Camelio existant. Si aucun
+              compte n’existe, invite la personne à créer son compte ou crée un
+              compte pour elle.
             </p>
           </div>
 
@@ -1044,173 +1102,179 @@ async function createCognitoAccount() {
       ) : null}
 
       {accountCreationNotice ? (
-  <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
-    <div className="w-full max-w-lg rounded-[30px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-2xl">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
-            Compte requis
-          </p>
+        <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-[30px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
+                  Compte requis
+                </p>
 
-          <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
-            {accountCreationNotice.title}
-          </h3>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setAccountCreationNotice(null)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm"
-          aria-label="Fermer"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-[#EADFCF] bg-white px-4 py-3">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
-          Courriel à utiliser
-        </p>
-
-        <p className="mt-1 break-all text-sm font-bold text-[#4F4A45]">
-          {accountCreationNotice.email}
-        </p>
-      </div>
-
-      <p className="mt-4 text-sm leading-6 text-[#6F685F]">
-        {accountCreationNotice.message}
-      </p>
-
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
-        <button
-          type="button"
-          onClick={() => {
-            setAccountCreationNotice(null);
-            setWizardStep(1);
-            setSearchStatus("idle");
-            setFoundUser(null);
-            setSelectedUser(null);
-            setWizardMessage("");
-            setWizardError("");
-          }}
-          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E]"
-        >
-          Retourner à l’étape 1
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAccountCreationNotice(null)}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white"
-        >
-          J’ai compris
-        </button>
-      </div>
-    </div>
-  </div>
-) : null}
-{showWizard ? (
-  <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
-    <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-[#EADFCF] bg-[#FFFDF8] shadow-2xl">
-      <div className="flex items-start justify-between gap-4 border-b border-[#EADFCF] bg-[#FFFDF8] px-5 py-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
-            Partage de profil
-          </p>
-
-          <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
-            Nouveau partage
-          </h3>
-
-          <p className="mt-1 text-sm text-[#7D756E]">
-            Étape {wizardStep} sur {wizardSteps.length} ·{" "}
-            {wizardSteps.find((step) => step.id === wizardStep)?.title}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={closeWizard}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm transition hover:bg-[#F8F3EA]"
-          aria-label="Fermer"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="border-b border-[#EADFCF] bg-white px-5 py-3">
-        <div className="flex flex-wrap gap-2">
-          {wizardSteps.map((step) => {
-            const isActive = wizardStep === step.id;
-            const isCompleted = wizardStep > step.id;
-
-            return (
-              <div
-                key={step.id}
-                className={`flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${
-                  isActive
-                    ? "bg-[#A8B193] text-white"
-                    : isCompleted
-                      ? "bg-[#EEF0E7] text-[#6F785F]"
-                      : "bg-[#F8F3EA] text-[#8B8278]"
-                }`}
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/25">
-                  {isCompleted ? <Check className="h-3.5 w-3.5" /> : step.id}
-                </span>
-                {step.title}
+                <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
+                  {accountCreationNotice.title}
+                </h3>
               </div>
-            );
-          })}
-        </div>
-      </div>
 
-      {(wizardMessage || wizardError) && (
-        <div className="px-5 pt-4">
-          {wizardMessage ? (
-            <div className="rounded-2xl border border-[#D8E0C7] bg-[#F3F6ED] px-4 py-3 text-sm font-semibold text-[#6F785F]">
-              {wizardMessage}
+              <button
+                type="button"
+                onClick={() => setAccountCreationNotice(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm"
+                aria-label="Fermer"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-          ) : null}
 
-          {wizardError ? (
-            <div className="rounded-2xl border border-[#F1C9C9] bg-[#FFF0EF] px-4 py-3 text-sm font-semibold text-[#B9544A]">
-              {wizardError}
+            <div className="mt-4 rounded-2xl border border-[#EADFCF] bg-white px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                Courriel à utiliser
+              </p>
+
+              <p className="mt-1 break-all text-sm font-bold text-[#4F4A45]">
+                {accountCreationNotice.email}
+              </p>
             </div>
-          ) : null}
-        </div>
-      )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-        {renderWizardStep()}
-      </div>
+            <p className="mt-4 text-sm leading-6 text-[#6F685F]">
+              {accountCreationNotice.message}
+            </p>
 
-      {wizardStep > 1 && wizardStep < 4 ? (
-        <div className="flex justify-between gap-3 border-t border-[#EADFCF] bg-white px-5 py-4">
-          <button
-            type="button"
-            onClick={() => {
-              setWizardMessage("");
-              setWizardError("");
-              setWizardStep((current) => Math.max(1, current - 1));
-            }}
-            className="rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E]"
-          >
-            Retour
-          </button>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountCreationNotice(null);
+                  setWizardStep(1);
+                  setSearchStatus("idle");
+                  setFoundUser(null);
+                  setSelectedUser(null);
+                  setWizardMessage("");
+                  setWizardError("");
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E]"
+              >
+                Retourner à l’étape 1
+              </button>
 
-          <button
-            type="button"
-            onClick={closeWizard}
-            className="rounded-full px-5 py-3 text-sm font-bold text-[#7D756E] transition hover:bg-[#F8F3EA]"
-          >
-            Annuler
-          </button>
+              <button
+                type="button"
+                onClick={() => setAccountCreationNotice(null)}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white"
+              >
+                J’ai compris
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
-    </div>
-  </div>
-) : null}
+
+      {showWizard ? (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-[#EADFCF] bg-[#FFFDF8] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[#EADFCF] bg-[#FFFDF8] px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#A8B193]">
+                  Partage de profil
+                </p>
+
+                <h3 className="mt-1 text-xl font-bold text-[#4F4A45]">
+                  {editingShareId ? "Modifier le partage" : "Nouveau partage"}
+                </h3>
+
+                <p className="mt-1 text-sm text-[#7D756E]">
+                  Étape {wizardStep} sur {wizardSteps.length} ·{" "}
+                  {wizardSteps.find((step) => step.id === wizardStep)?.title}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeWizard}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm transition hover:bg-[#F8F3EA]"
+                aria-label="Fermer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="border-b border-[#EADFCF] bg-white px-5 py-3">
+              <div className="flex flex-wrap gap-2">
+                {wizardSteps.map((step) => {
+                  const isActive = wizardStep === step.id;
+                  const isCompleted = wizardStep > step.id;
+
+                  return (
+                    <div
+                      key={step.id}
+                      className={`flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${
+                        isActive
+                          ? "bg-[#A8B193] text-white"
+                          : isCompleted
+                            ? "bg-[#EEF0E7] text-[#6F785F]"
+                            : "bg-[#F8F3EA] text-[#8B8278]"
+                      }`}
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/25">
+                        {isCompleted ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          step.id
+                        )}
+                      </span>
+                      {step.title}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {(wizardMessage || wizardError) && (
+              <div className="px-5 pt-4">
+                {wizardMessage ? (
+                  <div className="rounded-2xl border border-[#D8E0C7] bg-[#F3F6ED] px-4 py-3 text-sm font-semibold text-[#6F785F]">
+                    {wizardMessage}
+                  </div>
+                ) : null}
+
+                {wizardError ? (
+                  <div className="rounded-2xl border border-[#F1C9C9] bg-[#FFF0EF] px-4 py-3 text-sm font-semibold text-[#B9544A]">
+                    {wizardError}
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+              {renderWizardStep()}
+            </div>
+
+            {wizardStep > 1 && wizardStep < 4 ? (
+              <div className="flex justify-between gap-3 border-t border-[#EADFCF] bg-white px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWizardMessage("");
+                    setWizardError("");
+                    setWizardStep((current) => Math.max(1, current - 1));
+                  }}
+                  className="rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E]"
+                >
+                  Retour
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closeWizard}
+                  className="rounded-full px-5 py-3 text-sm font-bold text-[#7D756E] transition hover:bg-[#F8F3EA]"
+                >
+                  Annuler
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-[30px] border border-[#EADFCF] bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -1251,6 +1315,11 @@ async function createCognitoAccount() {
             {shares.map((share) => {
               const expanded = expandedShareId === share.id;
               const sectionDetails = getShareSectionDetails(share);
+              const visibleSectionDetails = sectionDetails.slice(0, 4);
+              const hiddenSectionCount = Math.max(
+                sectionDetails.length - 4,
+                0
+              );
               const childrenNames =
                 (share.children || []).map((child) => child.name).join(", ") ||
                 "Non précisé";
@@ -1258,83 +1327,110 @@ async function createCognitoAccount() {
               return (
                 <div
                   key={share.id}
-                  className="rounded-3xl border border-[#EADFCF] bg-[#FFFDF8] p-4"
+                  className="overflow-hidden rounded-[2rem] border border-[#EADFCF] bg-[#FFFDF8] shadow-sm transition hover:shadow-md"
                 >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedShareId((current) =>
-                        current === share.id ? "" : share.id
-                      )
-                    }
-                    className="flex w-full flex-col gap-3 text-left md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-bold text-[#4F4A45]">
-                          {share.inviteeName || "Invitation"}
-                        </p>
-
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusClasses(
-                            share
-                          )}`}
-                        >
-                          {getStatusLabel(share)}
-                        </span>
-                      </div>
-
-                      <p className="mt-1 text-sm text-[#7D756E]">
-                        {share.inviteeEmail}
-                      </p>
-
-                      <p className="mt-2 text-sm text-[#5F5A52]">
-                        <strong>Enfant(s) :</strong> {childrenNames}
-                      </p>
-                    </div>
-
-                    <ChevronDown
-                      className={`h-5 w-5 shrink-0 text-[#B8AA9A] transition ${
-                        expanded ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {expanded ? (
-                    <div className="mt-4 border-t border-[#EADFCF] pt-4">
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="rounded-2xl bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
-                            Courriel
+                  <div className="p-4 md:p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-lg font-bold text-[#4F4A45]">
+                            {share.inviteeName || "Invitation"}
                           </p>
-                          <p className="mt-1 text-sm text-[#4F4A45]">
-                            {share.inviteeEmail || "Non précisé"}
-                          </p>
+
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusClasses(
+                              share
+                            )}`}
+                          >
+                            {getStatusLabel(share)}
+                          </span>
                         </div>
 
-                        <div className="rounded-2xl bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
+                        <p className="mt-1 break-all text-sm font-semibold text-[#6F785F]">
+                          {share.inviteeEmail}
+                        </p>
+
+                        <p className="mt-3 text-sm leading-6 text-[#6B625A]">
+                          <span className="font-bold text-[#4F4A45]">
+                            Enfant(s) :
+                          </span>{" "}
+                          {childrenNames}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {visibleSectionDetails.map((detail) => (
+                            <span
+                              key={detail.id}
+                              className="rounded-full border border-[#EADFCF] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B625A]"
+                            >
+                              {detail.title}
+                            </span>
+                          ))}
+
+                          {hiddenSectionCount > 0 ? (
+                            <span className="rounded-full bg-[#F3F0E8] px-3 py-1.5 text-xs font-bold text-[#8B8278]">
+                              + {hiddenSectionCount} section(s)
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openEditWizard(share)}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2.5 text-xs font-bold text-[#6B625A] transition hover:bg-[#F8F3EA]"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Modifier
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedShareId((current) =>
+                              current === share.id ? "" : share.id
+                            )
+                          }
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2.5 text-xs font-bold text-[#6B625A] transition hover:bg-[#F8F3EA]"
+                        >
+                          Détails
+                          <ChevronDown
+                            className={`h-4 w-4 transition ${
+                              expanded ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {expanded ? (
+                    <div className="border-t border-[#EADFCF] bg-white/60 p-4 md:p-5">
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="rounded-2xl bg-white p-3 ring-1 ring-[#F0E6D8]">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
                             Création
                           </p>
-                          <p className="mt-1 text-sm text-[#4F4A45]">
+                          <p className="mt-1 text-sm font-semibold text-[#4F4A45]">
                             {formatDate(share.createdAt)}
                           </p>
                         </div>
 
-                        <div className="rounded-2xl bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
-                            Expiration du lien
+                        <div className="rounded-2xl bg-white p-3 ring-1 ring-[#F0E6D8]">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                            Expiration
                           </p>
-                          <p className="mt-1 text-sm text-[#4F4A45]">
+                          <p className="mt-1 text-sm font-semibold text-[#4F4A45]">
                             {formatDateTime(share.expiresAt)}
                           </p>
                         </div>
 
-                        <div className="rounded-2xl bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">
-                            Statut courriel
+                        <div className="rounded-2xl bg-white p-3 ring-1 ring-[#F0E6D8]">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                            Courriel
                           </p>
-                          <p className="mt-1 text-sm text-[#4F4A45]">
+                          <p className="mt-1 text-sm font-semibold text-[#4F4A45]">
                             {share.emailStatus === "sent"
                               ? "Envoyé"
                               : share.emailStatus === "failed"
@@ -1345,8 +1441,8 @@ async function createCognitoAccount() {
                       </div>
 
                       <div className="mt-4">
-                        <p className="text-sm font-bold text-[#5F5A52]">
-                          Sections et permissions :
+                        <p className="text-sm font-bold text-[#4F4A45]">
+                          Sections et permissions
                         </p>
 
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -1362,7 +1458,7 @@ async function createCognitoAccount() {
                         </div>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="mt-5 flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => copyInviteLink(share)}
@@ -1379,7 +1475,7 @@ async function createCognitoAccount() {
                           className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
                         >
                           <Send className="h-4 w-4" />
-                          Renvoyer le courriel
+                          Renvoyer
                         </button>
 
                         <button
@@ -1388,7 +1484,7 @@ async function createCognitoAccount() {
                           className="inline-flex items-center justify-center gap-2 rounded-full border border-[#F1C9C9] bg-white px-4 py-2 text-xs font-bold text-[#B9544A]"
                         >
                           <Trash2 className="h-4 w-4" />
-                          Retirer l’accès
+                          Retirer
                         </button>
                       </div>
                     </div>

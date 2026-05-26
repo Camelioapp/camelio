@@ -2520,7 +2520,146 @@ app.get(
     }
   }
 );
+app.patch(
+  "/api/profile-shares/:shareId",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { shareId } = req.params;
+      const payload = cleanProfileSharePayload(req.body || {});
+      const now = new Date().toISOString();
 
+      if (!shareId) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_share_id",
+          message: "Identifiant du partage manquant.",
+        });
+      }
+
+      if (!payload.inviteeEmail || !payload.inviteeEmail.includes("@")) {
+        return res.status(400).json({
+          success: false,
+          error: "invalid_email",
+          message: "Le courriel d’invitation est invalide.",
+        });
+      }
+
+      if (payload.childIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_children",
+          message: "Sélectionnez au moins un enfant à partager.",
+        });
+      }
+
+      if (payload.sectionIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_sections",
+          message: "Sélectionnez au moins une section à partager.",
+        });
+      }
+
+      const existingResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `SHARE#${shareId}`,
+          },
+        })
+      );
+
+      const existingShare = existingResult.Item;
+
+      if (!existingShare || existingShare.status === "revoked") {
+        return res.status(404).json({
+          success: false,
+          error: "share_not_found",
+          message: "Ce partage est introuvable.",
+        });
+      }
+
+      const updateResult = await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getUserPk(req),
+            SK: `SHARE#${shareId}`,
+          },
+          UpdateExpression:
+            "SET inviteeName = :inviteeName, inviteeEmail = :inviteeEmail, childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, permission = :permission, note = :note, updatedAt = :updatedAt",
+          ExpressionAttributeValues: {
+            ":inviteeName": payload.inviteeName || "",
+            ":inviteeEmail": payload.inviteeEmail,
+            ":childIds": payload.childIds,
+            ":children": payload.children,
+            ":sectionIds": payload.sectionIds,
+            ":sectionPermissions": payload.sectionPermissions,
+            ":permission": payload.permission || "read",
+            ":note": payload.note || "",
+            ":updatedAt": now,
+          },
+          ReturnValues: "ALL_NEW",
+        })
+      );
+
+      const updatedShare = updateResult.Attributes;
+
+      if (existingShare.importedByUserId) {
+        const importedResult = await dynamo.send(
+          new QueryCommand({
+            TableName: DYNAMODB_TABLE,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            FilterExpression: "sourceShareId = :sourceShareId",
+            ExpressionAttributeValues: {
+              ":pk": `USER#${existingShare.importedByUserId}`,
+              ":sk": "IMPORTED_SHARE#",
+              ":sourceShareId": shareId,
+            },
+          })
+        );
+
+        const importedShares = importedResult.Items || [];
+
+        await Promise.all(
+          importedShares.map((importedShare) =>
+            dynamo.send(
+              new UpdateCommand({
+                TableName: DYNAMODB_TABLE,
+                Key: {
+                  PK: importedShare.PK,
+                  SK: importedShare.SK,
+                },
+                UpdateExpression:
+                  "SET childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, permission = :permission, note = :note, updatedAt = :updatedAt",
+                ExpressionAttributeValues: {
+                  ":childIds": payload.childIds,
+                  ":children": payload.children,
+                  ":sectionIds": payload.sectionIds,
+                  ":sectionPermissions": payload.sectionPermissions,
+                  ":permission": payload.permission || "read",
+                  ":note": payload.note || "",
+                  ":updatedAt": now,
+                },
+              })
+            )
+          )
+        );
+      }
+
+      return res.json({
+        success: true,
+        share: updatedShare,
+        message: "Le partage a été modifié.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 app.patch(
   "/api/profile-shares/:shareId/revoke",
   requireAuth,
