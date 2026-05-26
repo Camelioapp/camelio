@@ -4192,7 +4192,7 @@ app.post(
     try {
       const subscriptionResult = await dynamo.send(
         new GetCommand({
-          TableName: DYNAMODB_TABLE,
+          TableName: SUBSCRIPTIONS_TABLE,
           Key: {
             PK: getUserPk(req),
             SK: "SUBSCRIPTION",
