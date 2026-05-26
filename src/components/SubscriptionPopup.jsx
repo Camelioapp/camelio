@@ -14,25 +14,34 @@ const trialPlans = [
   {
     id: "solo",
     name: "Solo",
-    price: "5,95 $ CA / mois",
-    storage: "5 Go",
-    description: "Pour un parent qui veut centraliser ses souvenirs et documents.",
+    monthlyPrice: "5,95 $ CA / mois",
+    annualPrice: "Bientôt disponible",
+    description:
+      "Parfait pour un parent qui souhaite garder au même endroit les informations importantes de sa famille, sans complexité.",
+    salesPitch:
+      "Un espace simple et sécurisant pour retrouver rapidement les documents, photos, notes, souvenirs et informations essentielles de vos enfants.",
     highlights: ["5 Go de stockage", "Aucun invité", "Photos et documents familiaux"],
   },
   {
     id: "duo",
     name: "Duo",
-    price: "9,95 $ CA / mois",
-    storage: "10 Go",
-    description: "Pour partager avec une personne de confiance.",
+    monthlyPrice: "9,95 $ CA / mois",
+    annualPrice: "Bientôt disponible",
+    description:
+      "Pensé pour deux parents ou deux adultes de confiance qui veulent mieux se coordonner au quotidien.",
+    salesPitch:
+      "Partagez l’organisation familiale, les documents importants, les souvenirs et les informations utiles dans un espace privé, clair et accessible.",
     highlights: ["10 Go de stockage", "1 invité", "Partage de profil inclus"],
   },
   {
     id: "famille_plus",
     name: "Famille+",
-    price: "19,95 $ CA / mois",
-    storage: "50 Go",
-    description: "Pour une famille élargie avec plusieurs accès invités.",
+    monthlyPrice: "19,95 $ CA / mois",
+    annualPrice: "Bientôt disponible",
+    description:
+      "La formule la plus complète pour les familles qui veulent impliquer plusieurs personnes de confiance autour des enfants.",
+    salesPitch:
+      "Centralisez les calendriers, documents, photos, reçus, souvenirs et informations importantes avec plus de stockage et plusieurs accès invités.",
     highlights: ["50 Go de stockage", "5 invités", "Espace familial complet"],
   },
 ];
@@ -50,6 +59,7 @@ export default function SubscriptionPopup({
   const [successMessage, setSuccessMessage] = useState("");
   const [showAccessCode, setShowAccessCode] = useState(false);
   const [showGuestCode, setShowGuestCode] = useState(false);
+  const [billingCycle, setBillingCycle] = useState("monthly");
 
   useEffect(() => {
     let isMounted = true;
@@ -298,8 +308,40 @@ export default function SubscriptionPopup({
         </h2>
 
         <p className="mt-3 max-w-2xl text-[0.95rem] leading-6 text-[#6B6258]">
-          Votre profil parent est créé. Choisissez maintenant votre façon d’activer Camelio : un essai gratuit avec Stripe, un code promo Famille+ ou un code invité reçu par courriel.
+          Votre profil parent est créé. Choisissez maintenant votre façon d’activer Camelio : commencez avec 1 mois gratuit, utilisez un code promo Famille+ ou associez un code invité reçu par courriel.
         </p>
+
+        <div className="mt-5 inline-flex rounded-full border border-[#E7DCCB] bg-white p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setBillingCycle("monthly")}
+            className={`rounded-full px-4 py-2 text-xs font-black transition ${
+              billingCycle === "monthly"
+                ? "bg-[#8FA173] text-white shadow-sm"
+                : "text-[#6B6258] hover:bg-[#F4EFE6]"
+            }`}
+          >
+            Abonnement mensuel
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBillingCycle("annual")}
+            className={`rounded-full px-4 py-2 text-xs font-black transition ${
+              billingCycle === "annual"
+                ? "bg-[#C9C4BC] text-white shadow-sm"
+                : "text-[#6B6258] hover:bg-[#F4EFE6]"
+            }`}
+          >
+            Passer à un abonnement annuel
+          </button>
+        </div>
+
+        {billingCycle === "annual" ? (
+          <p className="mt-3 rounded-2xl border border-[#E7DCCB] bg-[#F8F3EA] px-4 py-3 text-sm font-semibold text-[#7C756D]">
+            Les abonnements annuels seront bientôt disponibles. Les tarifs affichés ci-dessous sont donc indiqués comme à venir.
+          </p>
+        ) : null}
 
         {error && (
           <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -317,11 +359,14 @@ export default function SubscriptionPopup({
           {trialPlans.map((plan) => (
             <div key={plan.id} className="rounded-3xl border border-[#E7DCCB] bg-white p-4 shadow-sm">
               <p className="text-sm font-black text-[#3F3B35]">{plan.name}</p>
-              <p className="mt-1 text-xl font-black text-[#8FA173]">{plan.price}</p>
-              <p className="mt-1 text-xs font-semibold text-[#7C756D]">
-                Essai gratuit de 1 mois
+              <p className={`mt-1 text-xl font-black ${billingCycle === "annual" ? "text-[#9A948C]" : "text-[#8FA173]"}`}>
+                {billingCycle === "annual" ? plan.annualPrice : plan.monthlyPrice}
               </p>
-              <p className="mt-3 text-xs leading-5 text-[#6B6258]">{plan.description}</p>
+              <p className="mt-1 text-xs font-semibold text-[#7C756D]">
+                {billingCycle === "annual" ? "Tarif annuel à venir" : "Commencez avec 1 mois gratuit"}
+              </p>
+              <p className="mt-3 text-xs font-bold leading-5 text-[#4F4A45]">{plan.description}</p>
+              <p className="mt-2 text-xs leading-5 text-[#6B6258]">{plan.salesPitch}</p>
 
               <div className="mt-4 space-y-2 text-xs text-[#565149]">
                 {plan.highlights.map((highlight) => (
@@ -334,13 +379,19 @@ export default function SubscriptionPopup({
 
               <button
                 type="button"
-                onClick={() => startCheckout(plan.id)}
-                disabled={Boolean(loadingType)}
-                className="mt-4 w-full rounded-2xl bg-[#8FA173] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => billingCycle === "monthly" && startCheckout(plan.id)}
+                disabled={Boolean(loadingType) || billingCycle === "annual"}
+                className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-sm transition disabled:cursor-not-allowed ${
+                  billingCycle === "annual"
+                    ? "bg-[#C9C4BC] opacity-80"
+                    : "bg-[#8FA173] hover:brightness-95 disabled:opacity-60"
+                }`}
               >
-                {loadingType === `trial-${plan.id}`
+                {billingCycle === "annual"
+                  ? "Bientôt disponible"
+                  : loadingType === `trial-${plan.id}`
                   ? "Redirection..."
-                  : `Choisir ${plan.name}`}
+                  : `Commencer 1 mois gratuit`}
               </button>
             </div>
           ))}
