@@ -713,6 +713,20 @@ if (!response.ok) {
     }
   }
 
+  async function copyGuestCode(share) {
+    if (!share?.guestAccessCode) {
+      setMessage("Aucun code invité disponible.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(share.guestAccessCode);
+      setMessage("Code invité copié.");
+    } catch {
+      setMessage("Impossible de copier le code automatiquement.");
+    }
+  }
+
   function renderWizardStep() {
     if (wizardStep === 1) {
       return (
@@ -1436,6 +1450,18 @@ if (!response.ok) {
                                 : "En attente"}
                           </p>
                         </div>
+
+                        <div className="rounded-2xl bg-white p-3 ring-1 ring-[#F0E6D8] md:col-span-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                            Code utilisateur invité
+                          </p>
+                          <p className="mt-1 break-all text-sm font-black text-[#4F4A45]">
+                            {share.guestAccessCode || "Non disponible"}
+                          </p>
+                          <p className="mt-1 text-xs text-[#8B8278]">
+                            Ce code est unique et associé au courriel {share.inviteeEmail}.
+                          </p>
+                        </div>
                       </div>
 
                       <div className="mt-4">
@@ -1464,6 +1490,15 @@ if (!response.ok) {
                         >
                           <Copy className="h-4 w-4" />
                           Copier le lien
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => copyGuestCode(share)}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-4 py-2 text-xs font-bold text-[#7D756E]"
+                        >
+                          <Copy className="h-4 w-4" />
+                          Copier le code
                         </button>
 
                         <button

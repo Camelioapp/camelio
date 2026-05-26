@@ -675,6 +675,9 @@ function cleanChildPayload(body = {}) {
 function cleanProfilePayload(body = {}) {
   return {
     displayName: body.displayName || "",
+    nickname: body.nickname || body.preferredNickname || "",
+    familyRole: body.familyRole || body.userRole || "",
+    profilePhoto: body.profilePhoto || body.avatar || "",
     phone: body.phone || "",
     preferredLanguage: body.preferredLanguage || "fr",
   };
@@ -1219,8 +1222,15 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
         req.session.user.name ||
         req.session.user.given_name ||
         "",
+      nickname: existingProfile.nickname || existingProfile.preferredNickname || "",
+      familyRole: existingProfile.familyRole || existingProfile.userRole || "",
+      profilePhoto: existingProfile.profilePhoto || existingProfile.avatar || "",
       phone: existingProfile.phone || "",
       preferredLanguage: existingProfile.preferredLanguage || "fr",
+      welcomeCompleted: Boolean(
+        existingProfile.welcomeCompleted ||
+          existingProfile.onboarding?.userWelcomeCompleted
+      ),
       onboardingCompleted: Boolean(existingProfile.onboardingCompleted),
       onboardingSkipped: Boolean(existingProfile.onboardingSkipped),
       onboardingCompletedAt: existingProfile.onboardingCompletedAt || null,
@@ -1297,6 +1307,9 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
         existingProfile.name ||
         "",
 
+      nickname: cleanedProfile.nickname || existingProfile.nickname || "",
+      familyRole: cleanedProfile.familyRole || existingProfile.familyRole || "",
+      profilePhoto: cleanedProfile.profilePhoto || existingProfile.profilePhoto || "",
       phone: cleanedProfile.phone || existingProfile.phone || "",
       preferredLanguage:
         cleanedProfile.preferredLanguage ||
@@ -1316,8 +1329,13 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
         : existingProfile.onboardingCompletedAt || null,
 
       onboarding: hasOnboardingUpdate
-        ? req.body?.onboarding || {}
+        ? { ...(existingProfile.onboarding || {}), ...(req.body?.onboarding || {}) }
         : existingProfile.onboarding || {},
+
+      welcomeCompleted:
+        req.body?.welcomeCompleted === true ||
+        req.body?.onboarding?.userWelcomeCompleted === true ||
+        Boolean(existingProfile.welcomeCompleted),
 
       createdAt: existingProfile.createdAt || now,
       updatedAt: now,
@@ -1581,6 +1599,7 @@ async function sendProfileShareConfirmationEmail(share) {
           <p>${escapeHtml(share.ownerName || "Un utilisateur Camelio")} t’a donné accès à des informations partagées dans Camelio.</p>
           <p><strong>Enfant(s) partagé(s) :</strong><br />${escapeHtml(childrenNames || "Non précisé")}</p>
           <p>Connecte-toi avec l’adresse <strong>${escapeHtml(share.inviteeEmail)}</strong> pour voir ton espace partagé.</p>
+          ${share.guestAccessCode ? `<p><strong>Code invité :</strong> ${escapeHtml(share.guestAccessCode)}</p>` : ""}
           <p style="margin: 24px 0;">
             <a href="${escapeHtml(dashboardUrl)}" style="display: inline-block; background: #A8B193; color: white; padding: 12px 18px; border-radius: 999px; text-decoration: none; font-weight: bold;">Ouvrir Camelio</a>
           </p>
@@ -1627,6 +1646,37 @@ async function createImportedProfileShareForUser({ share, targetUserId, connecte
   );
 
   return importedShare;
+}
+
+async function generateUniqueGuestAccessCode() {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const code = `INV-${generators
+      .random(8)
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(0, 8)
+      .toUpperCase()}`;
+
+    const result = await dynamo.send(
+      new ScanCommand({
+        TableName: DYNAMODB_TABLE,
+        FilterExpression: "#type = :type AND guestAccessCode = :guestAccessCode",
+        ExpressionAttributeNames: {
+          "#type": "type",
+        },
+        ExpressionAttributeValues: {
+          ":type": "profileShare",
+          ":guestAccessCode": code,
+        },
+        Limit: 1,
+      })
+    );
+
+    if (!result.Items || result.Items.length === 0) {
+      return code;
+    }
+  }
+
+  return `INV-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
 }
 
 async function findProfileShareByToken(invitationToken) {
@@ -1742,6 +1792,7 @@ async function sendProfileShareInvitationEmail(share) {
         <p>
           Clique sur le bouton ci-dessous pour accepter l’invitation :
         </p>
+        ${share.guestAccessCode ? `<p><strong>Code invité :</strong> ${escapeHtml(share.guestAccessCode)}</p>` : ""}
 
         <p style="margin: 24px 0;">
           <a
@@ -2026,6 +2077,7 @@ app.post(
       const now = new Date().toISOString();
       const shareId = req.body.id || randomUUID();
       const invitationToken = randomUUID();
+      const guestAccessCode = await generateUniqueGuestAccessCode();
       const invitationExpiresAt = createInvitationExpiry();
       const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
@@ -2044,6 +2096,8 @@ app.post(
         ...payload,
         status: "pending",
         invitationToken,
+        guestAccessCode,
+        guestAccessCodeEmail: payload.inviteeEmail,
         invitationExpiresAt,
         expiresAt: invitationExpiresAt,
         inviteUrl,
@@ -2376,6 +2430,7 @@ app.post(
       const { shareId } = req.params;
       const now = new Date().toISOString();
       const invitationToken = randomUUID();
+      const guestAccessCode = await generateUniqueGuestAccessCode();
       const invitationExpiresAt = createInvitationExpiry();
       const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
@@ -2863,6 +2918,139 @@ app.post(
         message: "L’accès partagé a été importé avec succès.",
         share: importedShare,
         sourceShare: updatedSourceResult.Attributes,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+
+app.post(
+  "/api/profile-shares/redeem-code",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const code = String(req.body?.code || "").trim().toUpperCase();
+      const connectedEmail = String(req.session.user?.email || "").trim().toLowerCase();
+
+      if (!code) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_code",
+          message: "Inscrivez un code invité.",
+        });
+      }
+
+      const result = await dynamo.send(
+        new ScanCommand({
+          TableName: DYNAMODB_TABLE,
+          FilterExpression: "#type = :type AND guestAccessCode = :guestAccessCode",
+          ExpressionAttributeNames: {
+            "#type": "type",
+          },
+          ExpressionAttributeValues: {
+            ":type": "profileShare",
+            ":guestAccessCode": code,
+          },
+        })
+      );
+
+      const share = (result.Items || [])[0];
+
+      if (!share || share.status === "revoked") {
+        return res.status(404).json({
+          success: false,
+          error: "code_not_found",
+          message: "Ce code invité est introuvable ou n’est plus valide.",
+        });
+      }
+
+      const invitedEmail = String(share.inviteeEmail || share.guestAccessCodeEmail || "")
+        .trim()
+        .toLowerCase();
+
+      if (!connectedEmail || connectedEmail !== invitedEmail) {
+        return res.status(403).json({
+          success: false,
+          error: "email_mismatch",
+          message: "Ce code invité est associé à une autre adresse courriel.",
+        });
+      }
+
+      if (share.ownerUserId === req.session.user.sub) {
+        return res.status(400).json({
+          success: false,
+          error: "cannot_import_own_share",
+          message: "Vous ne pouvez pas utiliser votre propre code invité.",
+        });
+      }
+
+      if (isExpiredIsoDate(share.invitationExpiresAt)) {
+        return res.status(410).json({
+          success: false,
+          error: "code_expired",
+          message: "Ce code invité est expiré. Demandez un nouveau code.",
+        });
+      }
+
+      const userPk = getUserPk(req);
+      const existingImports = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": userPk,
+            ":sk": "IMPORTED_SHARE#",
+          },
+        })
+      );
+
+      const alreadyImported = (existingImports.Items || []).find(
+        (item) => item.sourceShareId === share.id && item.status !== "revoked"
+      );
+
+      if (alreadyImported) {
+        return res.json({
+          success: true,
+          message: "Ce code invité est déjà associé à votre compte.",
+          share: alreadyImported,
+        });
+      }
+
+      const importedShare = await createImportedProfileShareForUser({
+        share,
+        targetUserId: req.session.user.sub,
+        connectedEmail,
+      });
+
+      const now = new Date().toISOString();
+
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: { PK: share.PK, SK: share.SK },
+          UpdateExpression:
+            "SET #status = :status, importedByUserId = :importedByUserId, importedByEmail = :importedByEmail, importedAt = :importedAt, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":status": "accepted",
+            ":importedByUserId": req.session.user.sub,
+            ":importedByEmail": connectedEmail,
+            ":importedAt": now,
+            ":updatedAt": now,
+          },
+          ReturnValues: "NONE",
+        })
+      );
+
+      return res.json({
+        success: true,
+        message: "Votre accès invité a été associé à votre compte.",
+        share: importedShare,
       });
     } catch (error) {
       next(error);
