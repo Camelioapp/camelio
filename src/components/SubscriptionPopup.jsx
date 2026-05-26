@@ -19,8 +19,10 @@ export default function SubscriptionPopup({
   const [loadingType, setLoadingType] = useState("");
   const [error, setError] = useState("");
   const [accessCode, setAccessCode] = useState("");
+  const [guestCode, setGuestCode] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [showAccessCode, setShowAccessCode] = useState(false);
+  const [showGuestCode, setShowGuestCode] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -183,6 +185,61 @@ export default function SubscriptionPopup({
     }
   };
 
+  const activateGuestCode = async () => {
+    const cleanCode = guestCode.trim().toUpperCase();
+
+    if (!cleanCode) {
+      setError("Veuillez inscrire le code invité reçu par courriel.");
+      return;
+    }
+
+    try {
+      setLoadingType("guest-code");
+      setError("");
+      setSuccessMessage("");
+
+      const response = await fetch(`${API_URL}/api/profile-shares/redeem-code`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          code: cleanCode,
+        }),
+      });
+
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            data.error ||
+            `Erreur serveur. Code HTTP : ${response.status}`
+        );
+      }
+
+      setSuccessMessage(
+        data.message || "Votre accès invité est maintenant associé à votre compte."
+      );
+
+      setTimeout(() => {
+        onClose();
+      }, 700);
+    } catch (err) {
+      console.error("Erreur activation code invité:", err);
+      setError(err.message || "Impossible d’associer ce code invité.");
+    } finally {
+      setLoadingType("");
+    }
+  };
+
   if (checkingSubscription) {
     return null;
   }
@@ -213,9 +270,9 @@ export default function SubscriptionPopup({
         </h2>
 
         <p className="mt-3 text-[0.95rem] leading-6 text-[#6B6258]">
-          Pour continuer, choisissez votre option d’abonnement. Vous pouvez
+          Pour continuer, choisissez votre option d’activation. Vous pouvez
           commencer avec un essai gratuit de 1 mois, passer directement à la
-          version payante ou utiliser un code d’accès.
+          version payante, utiliser un code d’accès ou associer un code invité.
         </p>
 
         <div className="mt-5 rounded-2xl bg-[#F8F3EA] p-4">
@@ -294,7 +351,7 @@ export default function SubscriptionPopup({
           >
             <span className="flex items-center gap-2 text-sm font-bold text-[#3F3B35]">
               <KeyRound className="h-4 w-4 text-[#8FA173]" />
-              J’ai un code d’accès
+              J’ai un code d’accès Camelio
             </span>
 
             <span className="text-[#8A8178]">
@@ -336,8 +393,66 @@ export default function SubscriptionPopup({
               </div>
 
               <p className="mt-2 text-xs leading-5 text-[#8A8178]">
-                Le code permet d’activer un accès gratuit sans passer par le
-                paiement Stripe.
+                Le code d’accès active un espace principal gratuit et crée une activation dans DynamoDB.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-[#E7DCCB] bg-white">
+          <button
+            type="button"
+            onClick={() => {
+              setShowGuestCode((current) => !current);
+              setError("");
+            }}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-bold text-[#3F3B35]">
+              <KeyRound className="h-4 w-4 text-[#8FA173]" />
+              J’ai un code invité reçu par courriel
+            </span>
+
+            <span className="text-[#8A8178]">
+              {showGuestCode ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </span>
+          </button>
+
+          {showGuestCode && (
+            <div className="border-t border-[#F0E7DB] px-4 pb-4 pt-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={guestCode}
+                  onChange={(event) =>
+                    setGuestCode(event.target.value.toUpperCase())
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      activateGuestCode();
+                    }
+                  }}
+                  placeholder="Ex. INV-ABC12345"
+                  className="min-w-0 flex-1 rounded-xl border border-[#E7DCCB] bg-[#FFFCF7] px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-[#3F3B35] outline-none transition focus:border-[#8FA173] focus:ring-2 focus:ring-[#8FA173]/20"
+                  disabled={Boolean(loadingType)}
+                />
+
+                <button
+                  type="button"
+                  onClick={activateGuestCode}
+                  disabled={Boolean(loadingType)}
+                  className="rounded-xl bg-[#3F3B35] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingType === "guest-code" ? "..." : "Associer"}
+                </button>
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-[#8A8178]">
+                Ce code est unique, associé à votre adresse courriel et lie votre compte à l’espace principal qui vous a invité.
               </p>
             </div>
           )}

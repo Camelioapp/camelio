@@ -24,7 +24,6 @@ export default function ParentWelcome({ profile, onCompleted }) {
   const [nickname, setNickname] = useState(profile?.nickname || "");
   const [familyRole, setFamilyRole] = useState(profile?.familyRole || "Papa");
   const [profilePhoto, setProfilePhoto] = useState(profile?.profilePhoto || "");
-  const [guestAccessCode, setGuestAccessCode] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -51,25 +50,6 @@ export default function ParentWelcome({ profile, onCompleted }) {
       setIsSaving(true);
       setMessage("");
       setError("");
-
-      const cleanCode = guestAccessCode.trim().toUpperCase();
-
-      if (cleanCode) {
-        const codeResponse = await fetch(`${API_BASE_URL}/api/profile-shares/redeem-code`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: cleanCode }),
-        });
-
-        const codeData = await codeResponse.json().catch(() => ({}));
-
-        if (!codeResponse.ok) {
-          throw new Error(codeData?.message || "Impossible d’associer ce code invité.");
-        }
-
-        setMessage(codeData?.message || "Code invité associé.");
-      }
 
       const response = await fetch(`${API_BASE_URL}/api/profile`, {
         method: "PUT",
@@ -118,7 +98,7 @@ export default function ParentWelcome({ profile, onCompleted }) {
               Bonjour, {initialName || "bienvenue dans Camelio"}
             </h2>
             <p className="mt-2 text-sm leading-6 text-[#6f665e]">
-              Prenons un court moment pour personnaliser votre compte et vérifier si vous avez un accès invité à associer.
+              Prenons un court moment pour créer votre profil parent. Ensuite, vous pourrez activer votre espace Camelio ou utiliser un code invité reçu par courriel.
             </p>
           </div>
         </div>
@@ -196,20 +176,14 @@ export default function ParentWelcome({ profile, onCompleted }) {
               </select>
             </label>
 
-            <label className="block rounded-[24px] border border-dashed border-[#d8c8b6] bg-white/70 p-4">
-              <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#a8b193]">
-                Code utilisateur invité
-              </span>
-              <input
-                value={guestAccessCode}
-                onChange={(event) => setGuestAccessCode(event.target.value.toUpperCase())}
-                placeholder="Exemple : INV-ABC12345"
-                className="mt-2 w-full rounded-2xl border border-[#eadfcf] bg-white px-4 py-3 text-sm font-semibold text-[#4f4a45] outline-none transition focus:border-[#a8b193]"
-              />
-              <p className="mt-2 text-xs leading-5 text-[#8b8278]">
-                Ce code est créé dans la section Partage de profil. Il est unique et associé à votre adresse courriel.
+            <div className="rounded-[24px] border border-dashed border-[#d8c8b6] bg-white/70 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#a8b193]">
+                Étape suivante
               </p>
-            </label>
+              <p className="mt-2 text-xs leading-5 text-[#8b8278]">
+                Après l’enregistrement, Camelio vous demandera d’activer votre espace avec un essai gratuit, un code d’accès ou un code invité reçu par courriel.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -220,7 +194,7 @@ export default function ParentWelcome({ profile, onCompleted }) {
             disabled={isSaving}
             className="inline-flex items-center justify-center rounded-full bg-[#a8b193] px-6 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#96a17f] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSaving ? "Enregistrement..." : "Continuer vers Camelio"}
+            {isSaving ? "Enregistrement..." : "Enregistrer mon profil"}
           </button>
         </div>
       </div>

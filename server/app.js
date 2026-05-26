@@ -592,6 +592,231 @@ function getOwnerId(req) {
   return req.session.user?.sub || "demo-user";
 }
 
+
+const ACCOUNT_PERMISSION_WEIGHT = {
+  read: 1,
+  edit: 2,
+  delete: 3,
+};
+
+function normalizeAccountPermission(value = "read") {
+  return ["read", "edit", "delete"].includes(value) ? value : "read";
+}
+
+function hasRequiredAccountPermission(currentPermission = "read", requiredPermission = "read") {
+  const currentWeight = ACCOUNT_PERMISSION_WEIGHT[normalizeAccountPermission(currentPermission)] || 1;
+  const requiredWeight = ACCOUNT_PERMISSION_WEIGHT[normalizeAccountPermission(requiredPermission)] || 1;
+  return currentWeight >= requiredWeight;
+}
+
+function isGuestAccountId(accountId = "") {
+  return String(accountId || "").startsWith("guest-");
+}
+
+function getImportedShareIdFromAccountId(accountId = "") {
+  return String(accountId || "").replace(/^guest-/, "").trim();
+}
+
+async function getCurrentUserProfile(req) {
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: DYNAMODB_TABLE,
+      Key: {
+        PK: getUserPk(req),
+        SK: "PROFILE",
+      },
+    })
+  );
+
+  return result.Item || null;
+}
+
+async function getActiveImportedShare(req) {
+  const profile = await getCurrentUserProfile(req);
+  const activeAccountId = String(profile?.activeAccountId || "");
+
+  if (!isGuestAccountId(activeAccountId)) {
+    return null;
+  }
+
+  const importedShareId = getImportedShareIdFromAccountId(activeAccountId);
+
+  if (!importedShareId) {
+    return null;
+  }
+
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: DYNAMODB_TABLE,
+      Key: {
+        PK: getUserPk(req),
+        SK: `IMPORTED_SHARE#${importedShareId}`,
+      },
+    })
+  );
+
+  const share = result.Item || null;
+
+  if (!share || share.status === "revoked") {
+    return null;
+  }
+
+  return share;
+}
+
+function getShareSectionPermission(share, sectionId) {
+  if (!share || !sectionId) return null;
+
+  const sectionIds = Array.isArray(share.sectionIds) ? share.sectionIds : [];
+
+  if (!sectionIds.includes(sectionId)) {
+    return null;
+  }
+
+  const permission = share.sectionPermissions?.[sectionId] || share.permission || "read";
+
+  return normalizeAccountPermission(permission);
+}
+
+async function getDataAccessContext(req, sectionId, requiredPermission = "read") {
+  const share = await getActiveImportedShare(req);
+
+  if (!share) {
+    return {
+      isGuest: false,
+      dataPk: getUserPk(req),
+      ownerId: getOwnerId(req),
+      share: null,
+      permission: "delete",
+    };
+  }
+
+  const permission = getShareSectionPermission(share, sectionId);
+
+  if (!permission || !hasRequiredAccountPermission(permission, requiredPermission)) {
+    const message =
+      requiredPermission === "read"
+        ? "Cette section n’est pas partagée avec votre compte invité."
+        : "Votre compte invité n’a pas les droits requis pour modifier cette section.";
+
+    const error = new Error(message);
+    error.statusCode = 403;
+    error.errorCode = "guest_permission_denied";
+    throw error;
+  }
+
+  if (!share.sourceOwnerUserId) {
+    const error = new Error("Le compte propriétaire associé à cet accès invité est introuvable.");
+    error.statusCode = 403;
+    error.errorCode = "missing_guest_owner";
+    throw error;
+  }
+
+  return {
+    isGuest: true,
+    dataPk: `USER#${share.sourceOwnerUserId}`,
+    ownerId: share.sourceOwnerUserId,
+    share,
+    permission,
+  };
+}
+
+function getSharedChildIds(share) {
+  return new Set(
+    (Array.isArray(share?.childIds) ? share.childIds : [])
+      .map((childId) => String(childId || ""))
+      .filter(Boolean)
+  );
+}
+
+function isChildAllowedForShare(share, childId) {
+  if (!share) return true;
+
+  const allowedChildIds = getSharedChildIds(share);
+
+  if (allowedChildIds.size === 0) return false;
+
+  return allowedChildIds.has(String(childId || ""));
+}
+
+function filterDocumentsForShare(documents = [], share) {
+  if (!share) return documents;
+
+  return documents.filter((document) =>
+    isChildAllowedForShare(share, document.childId)
+  );
+}
+
+function filterPhotosForShare(photos = [], share) {
+  if (!share) return photos;
+
+  const allowedChildIds = getSharedChildIds(share);
+
+  if (allowedChildIds.size === 0) return [];
+
+  return photos.filter((photo) => {
+    const photoChildIds = Array.isArray(photo.children) ? photo.children : [];
+    return photoChildIds.some((childId) => allowedChildIds.has(String(childId || "")));
+  });
+}
+
+function assertChildrenAllowedForShare(share, childIds = []) {
+  if (!share) return;
+
+  const cleanChildIds = Array.isArray(childIds) ? childIds : [];
+  const hasForbiddenChild = cleanChildIds.some(
+    (childId) => !isChildAllowedForShare(share, childId)
+  );
+
+  if (hasForbiddenChild) {
+    const error = new Error("Votre compte invité ne peut pas associer ce fichier à cet enfant.");
+    error.statusCode = 403;
+    error.errorCode = "guest_child_forbidden";
+    throw error;
+  }
+}
+
+
+async function loadSharedChildrenForImportedShare(share) {
+  if (!share?.sourceOwnerUserId) {
+    return Array.isArray(share?.children) ? share.children : [];
+  }
+
+  const childIds = Array.from(getSharedChildIds(share));
+
+  if (childIds.length === 0) {
+    return Array.isArray(share?.children) ? share.children : [];
+  }
+
+  const children = await Promise.all(
+    childIds.map(async (childId) => {
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: `USER#${share.sourceOwnerUserId}`,
+            SK: `CHILD#${childId}`,
+          },
+        })
+      );
+
+      const child = result.Item || null;
+
+      if (!child) return null;
+
+      return hydrateChildAvatarUrl(child, share.sourceOwnerUserId);
+    })
+  );
+
+  const freshChildren = children.filter(Boolean);
+
+  if (freshChildren.length > 0) {
+    return freshChildren;
+  }
+
+  return Array.isArray(share.children) ? share.children : [];
+}
+
 async function hydrateChildAvatarUrl(child, ownerId) {
   if (!child?.avatarS3Key) {
     return child;
@@ -3026,6 +3251,29 @@ app.post(
       });
 
       const now = new Date().toISOString();
+      const importedGuestAccountId = importedShare?.id
+        ? `guest-${importedShare.id}`
+        : "";
+
+      if (importedGuestAccountId) {
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: userPk,
+              SK: "PROFILE",
+            },
+            UpdateExpression:
+              "SET activeAccountId = :activeAccountId, welcomeCompleted = :welcomeCompleted, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":activeAccountId": importedGuestAccountId,
+              ":welcomeCompleted": true,
+              ":updatedAt": now,
+            },
+            ReturnValues: "NONE",
+          })
+        );
+      }
 
       await dynamo.send(
         new UpdateCommand({
@@ -3050,6 +3298,7 @@ app.post(
       return res.json({
         success: true,
         message: "Votre accès invité a été associé à votre compte.",
+        activeAccountId: importedGuestAccountId,
         share: importedShare,
       });
     } catch (error) {
@@ -3121,32 +3370,43 @@ app.get(
         storageGb: Number(subscription?.storageGb) || Number(STRIPE_STORAGE_GB) || 5,
       };
 
-      const guestAccounts = (importedSharesResult.Items || [])
+      const guestShares = (importedSharesResult.Items || [])
         .filter((share) => share.status !== "revoked")
-        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-        .map((share, index) => ({
-          accountId: `guest-${share.id || index}`,
-          label: share.sourceOwnerName
-            ? `Invité de ${share.sourceOwnerName}`
-            : "Invité (partagé)",
-          description: "Accès limité et partagé",
-          type: "guest",
-          role: "guest",
-          subscriptionRequired: false,
-          hasAccess: true,
-          subscriptionStatus: "not_required",
-          shareId: share.id,
-          sourceShareId: share.sourceShareId || "",
-          sourceOwnerUserId: share.sourceOwnerUserId || "",
-          sourceOwnerEmail: share.sourceOwnerEmail || "",
-          sourceOwnerName: share.sourceOwnerName || "",
-          children: share.children || [],
-          childIds: share.childIds || [],
-          sectionIds: share.sectionIds || [],
-          sectionPermissions: share.sectionPermissions || {},
-          permission: share.permission || "read",
-          share,
-        }));
+        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+
+      const guestAccounts = await Promise.all(
+        guestShares.map(async (share, index) => {
+          const sharedChildren = await loadSharedChildrenForImportedShare(share);
+          const hydratedShare = {
+            ...share,
+            children: sharedChildren,
+          };
+
+          return {
+            accountId: `guest-${share.id || index}`,
+            label: share.sourceOwnerName
+              ? `Invité de ${share.sourceOwnerName}`
+              : "Invité (partagé)",
+            description: "Accès limité et partagé",
+            type: "guest",
+            role: "guest",
+            subscriptionRequired: false,
+            hasAccess: true,
+            subscriptionStatus: "not_required",
+            shareId: share.id,
+            sourceShareId: share.sourceShareId || "",
+            sourceOwnerUserId: share.sourceOwnerUserId || "",
+            sourceOwnerEmail: share.sourceOwnerEmail || "",
+            sourceOwnerName: share.sourceOwnerName || "",
+            children: sharedChildren,
+            childIds: share.childIds || [],
+            sectionIds: share.sectionIds || [],
+            sectionPermissions: share.sectionPermissions || {},
+            permission: share.permission || "read",
+            share: hydratedShare,
+          };
+        })
+      );
 
       const accounts = [principalAccount, ...guestAccounts];
       const savedActiveAccountId = String(profile.activeAccountId || "");
@@ -4185,7 +4445,16 @@ app.post(
         });
       }
 
-      const ownerId = getOwnerId(req);
+      const accessContext = await getDataAccessContext(req, "documents", "edit");
+
+      if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, payload.childId)) {
+        return res.status(403).json({
+          error: "guest_child_forbidden",
+          message: "Votre compte invité ne peut pas ajouter un document pour cet enfant.",
+        });
+      }
+
+      const ownerId = accessContext.ownerId;
       const documentId = randomUUID();
       const now = new Date().toISOString();
       const cleanFileName = sanitizeFileName(payload.fileName);
@@ -4209,11 +4478,13 @@ app.post(
       });
 
       const document = {
-  PK: getUserPk(req),
+  PK: accessContext.dataPk,
   SK: `DOCUMENT#${documentId}`,
   id: documentId,
   type: "document",
   ownerId,
+  createdByUserId: req.session.user.sub,
+  createdFromAccountType: accessContext.isGuest ? "guest" : "principal",
   childId: payload.childId,
   childName: payload.childName,
   category: payload.category,
@@ -4247,18 +4518,22 @@ app.post(
 
 app.get("/api/documents", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getDataAccessContext(req, "documents", "read");
+
     const result = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": getUserPk(req),
+          ":pk": accessContext.dataPk,
           ":sk": "DOCUMENT#",
         },
       })
     );
 
-    const documents = (result.Items || []).sort((a, b) => {
+    const visibleDocuments = filterDocumentsForShare(result.Items || [], accessContext.share);
+
+    const documents = visibleDocuments.sort((a, b) => {
       return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
     });
 
@@ -4278,12 +4553,13 @@ app.get(
   async (req, res, next) => {
     try {
       const { documentId } = req.params;
+      const accessContext = await getDataAccessContext(req, "documents", "read");
 
       const result = await dynamo.send(
         new GetCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `DOCUMENT#${documentId}`,
           },
         })
@@ -4298,7 +4574,14 @@ app.get(
         });
       }
 
-      const ownerId = getOwnerId(req);
+      if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, document.childId)) {
+        return res.status(403).json({
+          error: "guest_child_forbidden",
+          message: "Accès refusé à ce document.",
+        });
+      }
+
+      const ownerId = accessContext.ownerId;
 
       if (!isSafeS3KeyForOwner(document.s3Key, ownerId)) {
         return res.status(403).json({
@@ -4335,12 +4618,13 @@ app.delete(
   async (req, res, next) => {
     try {
       const { documentId } = req.params;
+      const accessContext = await getDataAccessContext(req, "documents", "delete");
 
       const result = await dynamo.send(
         new GetCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `DOCUMENT#${documentId}`,
           },
         })
@@ -4355,7 +4639,14 @@ app.delete(
         });
       }
 
-      const ownerId = getOwnerId(req);
+      if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, document.childId)) {
+        return res.status(403).json({
+          error: "guest_child_forbidden",
+          message: "Accès refusé à ce document.",
+        });
+      }
+
+      const ownerId = accessContext.ownerId;
 
       if (!isSafeS3KeyForOwner(document.s3Key, ownerId)) {
         return res.status(403).json({
@@ -4375,7 +4666,7 @@ app.delete(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `DOCUMENT#${documentId}`,
           },
         })
@@ -4505,7 +4796,8 @@ app.post(
         });
       }
 
-      const ownerId = getOwnerId(req);
+      const accessContext = await getDataAccessContext(req, "photos", "edit");
+      const ownerId = accessContext.ownerId;
       const photoId = randomUUID();
       const cleanFileName = sanitizeFileName(fileName);
       const s3Key = `users/${ownerId}/photos/${photoId}-${cleanFileName}`;
@@ -4550,7 +4842,10 @@ app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) =
       });
     }
 
-    const ownerId = getOwnerId(req);
+    const accessContext = await getDataAccessContext(req, "photos", "edit");
+    assertChildrenAllowedForShare(accessContext.share, children);
+
+    const ownerId = accessContext.ownerId;
 
     if (!isSafeS3KeyForOwner(s3Key, ownerId)) {
       return res.status(403).json({
@@ -4562,10 +4857,13 @@ app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) =
     const now = new Date().toISOString();
 
     const photo = {
-      PK: getUserPk(req),
+      PK: accessContext.dataPk,
       SK: `PHOTO#${id}`,
       id,
       type: "photo",
+      ownerId,
+      createdByUserId: req.session.user.sub,
+      createdFromAccountType: accessContext.isGuest ? "guest" : "principal",
       title,
       album,
       children: Array.isArray(children) ? children : [],
@@ -4599,21 +4897,24 @@ app.get(
   validateS3Config,
   async (req, res, next) => {
     try {
+      const accessContext = await getDataAccessContext(req, "photos", "read");
+
       const result = await dynamo.send(
         new QueryCommand({
           TableName: DYNAMODB_TABLE,
           KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
           ExpressionAttributeValues: {
-            ":pk": getUserPk(req),
+            ":pk": accessContext.dataPk,
             ":sk": "PHOTO#",
           },
         })
       );
 
-      const ownerId = getOwnerId(req);
+      const ownerId = accessContext.ownerId;
+      const visiblePhotos = filterPhotosForShare(result.Items || [], accessContext.share);
 
       const photos = await Promise.all(
-        (result.Items || []).map(async (photo) => {
+        visiblePhotos.map(async (photo) => {
           if (!isSafeS3KeyForOwner(photo.s3Key, ownerId)) {
             return {
               ...photo,
@@ -4659,12 +4960,13 @@ app.delete(
   async (req, res, next) => {
     try {
       const { photoId } = req.params;
+      const accessContext = await getDataAccessContext(req, "photos", "delete");
 
       const result = await dynamo.send(
         new GetCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `PHOTO#${photoId}`,
           },
         })
@@ -4679,7 +4981,9 @@ app.delete(
         });
       }
 
-      const ownerId = getOwnerId(req);
+      assertChildrenAllowedForShare(accessContext.share, photo.children || []);
+
+      const ownerId = accessContext.ownerId;
 
       if (!isSafeS3KeyForOwner(photo.s3Key, ownerId)) {
         return res.status(403).json({
@@ -4699,7 +5003,7 @@ app.delete(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `PHOTO#${photoId}`,
           },
         })
@@ -4922,9 +5226,11 @@ app.delete(
 app.use((err, req, res, next) => {
   console.error("ERREUR SERVEUR:", err);
 
-  return res.status(500).json({
-    error: "server_error",
-    message: IS_PRODUCTION ? "Erreur serveur." : err.message,
+  const statusCode = Number(err.statusCode) || 500;
+
+  return res.status(statusCode).json({
+    error: err.errorCode || (statusCode === 500 ? "server_error" : "request_error"),
+    message: statusCode === 500 && IS_PRODUCTION ? "Erreur serveur." : err.message,
   });
 });
 

@@ -523,7 +523,20 @@ export default function Dashboard({
             email: nextWelcomeProfile.email || current.email,
             userId: nextWelcomeProfile.userId || current.userId || "",
           }));
-          setShowUserWelcome(nextWelcomeProfile.welcomeCompleted !== true);
+
+          const welcomeIsCompleted = nextWelcomeProfile.welcomeCompleted === true;
+          setShowUserWelcome(!welcomeIsCompleted);
+
+          if (!welcomeIsCompleted) {
+            setSharedAccess({
+              isLoading: false,
+              hasSharedAccess: false,
+              shares: [],
+            });
+            setShowSubscriptionPopup(false);
+            setShowFirstStep(false);
+            return;
+          }
         }
 
         if (selectedAccount?.type === "guest") {
@@ -1169,13 +1182,21 @@ export default function Dashboard({
 
   const subscriptionPopup =
     showSubscriptionPopup &&
+    !showUserWelcome &&
     !sharedAccess.isLoading &&
     !sharedAccess.hasSharedAccess ? (
-      <SubscriptionPopup onClose={() => setShowSubscriptionPopup(false)} />
+      <SubscriptionPopup
+        onClose={() => {
+          setShowSubscriptionPopup(false);
+          loadAccountsAndAccess();
+        }}
+      />
     ) : null;
 
   const firstStepPopup =
     showFirstStep &&
+    !showUserWelcome &&
+    !showSubscriptionPopup &&
     !sharedAccess.isLoading &&
     !sharedAccess.hasSharedAccess ? (
       <FirstStep
@@ -1233,9 +1254,9 @@ export default function Dashboard({
   if (activeSection !== "home") {
     return (
       <>
+        {parentWelcomePopup}
         {subscriptionPopup}
         {firstStepPopup}
-        {parentWelcomePopup}
         <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
           <div className="mx-auto max-w-6xl p-3 md:p-6">
             <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
@@ -1270,9 +1291,9 @@ export default function Dashboard({
 
   return (
     <>
+      {parentWelcomePopup}
       {subscriptionPopup}
       {firstStepPopup}
-      {parentWelcomePopup}
       <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
         <div className="mx-auto max-w-6xl p-3 md:p-6">
           <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
