@@ -888,9 +888,9 @@ app.get("/health", (req, res) => {
 app.get("/api/version", (req, res) => {
   res.json({
     success: true,
-    version: "profile-sharing-token-import-2026-05-25",
+    version: "profile-sharing-option-a-email-pending-2026-05-25",
     message:
-      "Cette version utilise token + courriel connecté pour les invitations.",
+      "Cette version crée une invitation durable par courriel et rattache automatiquement les accès partagés au compte invité.",
   });
 });
 
@@ -1100,20 +1100,36 @@ app.get("/callback", async (req, res, next) => {
   }
 });
 
-app.get("/me", (req, res) => {
-  if (!req.session.user) {
-    return res.json({
-      authenticated: false,
-      user: null,
-      referralCode: null,
-    });
-  }
+app.get("/me", async (req, res, next) => {
+  try {
+    if (!req.session.user) {
+      return res.json({
+        authenticated: false,
+        user: null,
+        referralCode: null,
+      });
+    }
 
-  return res.json({
-    authenticated: true,
-    user: req.session.user,
-    referralCode: getReferralCode(req),
-  });
+    let sharedAccess = {
+      attachedCount: 0,
+      shares: [],
+    };
+
+    try {
+      sharedAccess = await attachPendingProfileShareInvitations(req);
+    } catch (error) {
+      console.error("Erreur rattachement invitations en attente:", error);
+    }
+
+    return res.json({
+      authenticated: true,
+      user: req.session.user,
+      referralCode: getReferralCode(req),
+      sharedAccess,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/logout", (req, res) => {
@@ -1458,6 +1474,254 @@ async function findProfileShareByToken(invitationToken) {
   return null;
 }
 
+
+function normalizeInvitationEmail(email = "") {
+  return String(email || "").trim().toLowerCase();
+}
+
+function getInvitationEmailPk(email = "") {
+  return `INVITATION_EMAIL#${normalizeInvitationEmail(email)}`;
+}
+
+async function findUserProfileByEmail(email = "") {
+  const normalizedEmail = normalizeInvitationEmail(email);
+
+  if (!normalizedEmail) return null;
+
+  let lastEvaluatedKey;
+
+  do {
+    const result = await dynamo.send(
+      new ScanCommand({
+        TableName: DYNAMODB_TABLE,
+        FilterExpression: "#type = :type AND email = :email",
+        ExpressionAttributeNames: {
+          "#type": "type",
+        },
+        ExpressionAttributeValues: {
+          ":type": "profile",
+          ":email": normalizedEmail,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+
+    const profile = (result.Items || [])[0];
+
+    if (profile) return profile;
+
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return null;
+}
+
+async function getImportedShareBySource(userPk, sourceShareId) {
+  if (!userPk || !sourceShareId) return null;
+
+  const result = await dynamo.send(
+    new QueryCommand({
+      TableName: DYNAMODB_TABLE,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": userPk,
+        ":sk": "IMPORTED_SHARE#",
+      },
+    })
+  );
+
+  return (result.Items || []).find(
+    (item) => item.sourceShareId === sourceShareId && item.status !== "revoked"
+  ) || null;
+}
+
+async function createImportedShareForUser({ userPk, userId, userEmail, share }) {
+  if (!userPk || !userId || !share?.id) return null;
+
+  const existingImport = await getImportedShareBySource(userPk, share.id);
+
+  if (existingImport) return existingImport;
+
+  const now = new Date().toISOString();
+  const importedShareId = randomUUID();
+
+  const importedShare = {
+    PK: userPk,
+    SK: `IMPORTED_SHARE#${importedShareId}`,
+    id: importedShareId,
+    type: "importedProfileShare",
+
+    sourceShareId: share.id,
+    sourceOwnerUserId: share.ownerUserId,
+    sourceOwnerEmail: share.ownerEmail || "",
+    sourceOwnerName: share.ownerName || "",
+
+    inviteeUserId: userId,
+    inviteeEmail: normalizeInvitationEmail(userEmail || share.inviteeEmail || ""),
+
+    children: share.children || [],
+    childIds: share.childIds || [],
+    sectionIds: share.sectionIds || [],
+    sectionPermissions: share.sectionPermissions || {},
+    permission: share.permission || "read",
+
+    status: "accepted",
+    importedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: DYNAMODB_TABLE,
+      Item: importedShare,
+    })
+  );
+
+  return importedShare;
+}
+
+async function upsertPendingProfileShareInvitation(share) {
+  const inviteeEmail = normalizeInvitationEmail(share?.inviteeEmail || "");
+
+  if (!share?.id || !inviteeEmail) return null;
+
+  const now = new Date().toISOString();
+  const pendingInvitation = {
+    PK: getInvitationEmailPk(inviteeEmail),
+    SK: `SHARE#${share.id}`,
+    type: "pendingProfileShareInvitation",
+    inviteeEmail,
+    sourceShareId: share.id,
+    sourceOwnerUserId: share.ownerUserId,
+    ownerEmail: share.ownerEmail || "",
+    ownerName: share.ownerName || "",
+    invitationToken: share.invitationToken || "",
+    inviteUrl: share.inviteUrl || "",
+    status: share.status === "revoked" ? "revoked" : "pending",
+    expiresAt: share.invitationExpiresAt || share.expiresAt || null,
+    createdAt: share.createdAt || now,
+    updatedAt: now,
+  };
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: DYNAMODB_TABLE,
+      Item: pendingInvitation,
+    })
+  );
+
+  return pendingInvitation;
+}
+
+async function attachPendingProfileShareInvitations(req) {
+  const user = req.session.user;
+  const inviteeEmail = normalizeInvitationEmail(user?.email || "");
+
+  if (!user?.sub || !inviteeEmail) {
+    return {
+      attachedCount: 0,
+      shares: [],
+    };
+  }
+
+  const userPk = getUserPk(req);
+
+  const pendingResult = await dynamo.send(
+    new QueryCommand({
+      TableName: DYNAMODB_TABLE,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": getInvitationEmailPk(inviteeEmail),
+        ":sk": "SHARE#",
+      },
+    })
+  );
+
+  const attachedShares = [];
+
+  for (const pending of pendingResult.Items || []) {
+    if (pending.status === "revoked") continue;
+
+    const sourceResult = await dynamo.send(
+      new GetCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: `USER#${pending.sourceOwnerUserId}`,
+          SK: `SHARE#${pending.sourceShareId}`,
+        },
+      })
+    );
+
+    const share = sourceResult.Item;
+
+    if (!share || share.status === "revoked") continue;
+
+    if (normalizeInvitationEmail(share.inviteeEmail) !== inviteeEmail) continue;
+
+    const importedShare = await createImportedShareForUser({
+      userPk,
+      userId: user.sub,
+      userEmail: inviteeEmail,
+      share,
+    });
+
+    if (importedShare) {
+      attachedShares.push(importedShare);
+    }
+
+    const now = new Date().toISOString();
+
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: pending.PK,
+          SK: pending.SK,
+        },
+        UpdateExpression:
+          "SET #status = :status, acceptedByUserId = :acceptedByUserId, acceptedAt = :acceptedAt, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "accepted",
+          ":acceptedByUserId": user.sub,
+          ":acceptedAt": now,
+          ":updatedAt": now,
+        },
+      })
+    );
+
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: share.PK,
+          SK: share.SK,
+        },
+        UpdateExpression:
+          "SET #status = :status, importedByUserId = :importedByUserId, importedByEmail = :importedByEmail, importedAt = :importedAt, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "accepted",
+          ":importedByUserId": user.sub,
+          ":importedByEmail": inviteeEmail,
+          ":importedAt": now,
+          ":updatedAt": now,
+        },
+      })
+    );
+  }
+
+  return {
+    attachedCount: attachedShares.length,
+    shares: attachedShares,
+  };
+}
+
 function sanitizePublicInvitation(share) {
   if (!share) return null;
 
@@ -1675,6 +1939,28 @@ app.post(
           Item: share,
         })
       );
+
+      await upsertPendingProfileShareInvitation(share);
+
+      try {
+        const existingInviteeProfile = await findUserProfileByEmail(
+          share.inviteeEmail
+        );
+
+        if (existingInviteeProfile?.PK && existingInviteeProfile?.cognitoSub) {
+          await createImportedShareForUser({
+            userPk: existingInviteeProfile.PK,
+            userId: existingInviteeProfile.cognitoSub,
+            userEmail: share.inviteeEmail,
+            share,
+          });
+        }
+      } catch (linkError) {
+        console.error(
+          "Erreur rattachement immédiat de l'accès invité:",
+          linkError
+        );
+      }
 
       try {
         await sendProfileShareInvitationEmail(share);
@@ -2058,16 +2344,9 @@ app.get(
       return res.json({
         success: true,
         invitation: sanitizePublicInvitation(share),
-        alreadyAccepted: false,
       });
     } catch (error) {
-      console.error("Erreur lecture invitation Camelio:", error);
-
-      return res.status(500).json({
-        success: false,
-        error: "invitation_server_error",
-        message: error?.message || "Erreur serveur.",
-      });
+      next(error);
     }
   }
 );
@@ -2156,14 +2435,6 @@ app.post(
         });
       }
 
-      if (share.status === "accepted") {
-        return res.status(409).json({
-          success: false,
-          error: "invitation_already_accepted",
-          message: "Cette invitation a déjà été acceptée.",
-        });
-      }
-
       if (isExpiredIsoDate(share.invitationExpiresAt)) {
         return res.status(410).json({
           success: false,
@@ -2172,13 +2443,8 @@ app.post(
         });
       }
 
-      const connectedEmail = String(req.session.user?.email || "")
-        .trim()
-        .toLowerCase();
-
-      const invitedEmail = String(share.inviteeEmail || "")
-        .trim()
-        .toLowerCase();
+      const connectedEmail = normalizeInvitationEmail(req.session.user?.email || "");
+      const invitedEmail = normalizeInvitationEmail(share.inviteeEmail || "");
 
       if (!connectedEmail || connectedEmail !== invitedEmail) {
         return res.status(403).json({
@@ -2197,41 +2463,16 @@ app.post(
         });
       }
 
+      await upsertPendingProfileShareInvitation(share);
+
+      const importedShare = await createImportedShareForUser({
+        userPk: getUserPk(req),
+        userId: req.session.user.sub,
+        userEmail: connectedEmail,
+        share,
+      });
+
       const now = new Date().toISOString();
-      const importedShareId = randomUUID();
-
-      const importedShare = {
-        PK: getUserPk(req),
-        SK: `IMPORTED_SHARE#${importedShareId}`,
-        id: importedShareId,
-        type: "importedProfileShare",
-
-        sourceShareId: share.id,
-        sourceOwnerUserId: share.ownerUserId,
-        sourceOwnerEmail: share.ownerEmail || "",
-        sourceOwnerName: share.ownerName || "",
-
-        inviteeUserId: req.session.user.sub,
-        inviteeEmail: connectedEmail,
-
-        children: share.children || [],
-        childIds: share.childIds || [],
-        sectionIds: share.sectionIds || [],
-        sectionPermissions: share.sectionPermissions || {},
-        permission: share.permission || "read",
-
-        status: "accepted",
-        importedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: importedShare,
-        })
-      );
 
       const updatedSourceResult = await dynamo.send(
         new UpdateCommand({
@@ -2256,6 +2497,27 @@ app.post(
         })
       );
 
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getInvitationEmailPk(connectedEmail),
+            SK: `SHARE#${share.id}`,
+          },
+          UpdateExpression:
+            "SET #status = :status, acceptedByUserId = :acceptedByUserId, acceptedAt = :acceptedAt, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":status": "accepted",
+            ":acceptedByUserId": req.session.user.sub,
+            ":acceptedAt": now,
+            ":updatedAt": now,
+          },
+        })
+      );
+
       return res.json({
         success: true,
         message: "L’accès partagé a été importé avec succès.",
@@ -2274,6 +2536,12 @@ app.get(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      try {
+        await attachPendingProfileShareInvitations(req);
+      } catch (attachError) {
+        console.error("Erreur rattachement invitations en attente:", attachError);
+      }
+
       const result = await dynamo.send(
         new QueryCommand({
           TableName: DYNAMODB_TABLE,

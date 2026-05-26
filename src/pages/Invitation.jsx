@@ -7,8 +7,7 @@ import {
   UserPlus,
 } from "lucide-react";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://api.camelio.app";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
 function getTokenFromUrl() {
   const params = new URLSearchParams(window.location.search || "");
@@ -98,10 +97,7 @@ export default function Invitation({
 
       if (!response.ok) {
         throw new Error(
-          getErrorMessage(
-            data,
-            "Cette invitation est introuvable ou expirée."
-          )
+          getErrorMessage(data, "Cette invitation est introuvable ou expirée.")
         );
       }
 
@@ -110,7 +106,6 @@ export default function Invitation({
       if (data?.alreadyAccepted && authenticated) {
         clearInvitationToken();
         window.location.href = "/";
-        return;
       }
     } catch (loadError) {
       console.error("Erreur chargement invitation:", loadError);
@@ -157,7 +152,6 @@ export default function Invitation({
       }
 
       clearInvitationToken();
-
       setMessage("L’accès partagé a été ajouté à votre compte.");
 
       await onSessionRefresh();
@@ -189,6 +183,10 @@ export default function Invitation({
 
   const invitedEmail = invitation?.inviteeEmail || "";
   const connectedEmail = user?.email || "";
+  const childrenNames = (invitation?.children || [])
+    .map((child) => child.name)
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <div className="relative z-10 min-h-screen bg-[#fbf7ef] px-4 py-10 text-[#4f4a45]">
@@ -208,8 +206,47 @@ export default function Invitation({
             </h1>
 
             <p className="mt-3 text-sm leading-6 text-[#6f685f]">
-              Pour protéger les informations familiales, l’invitation fonctionne
-              seulement avec l’adresse courriel à laquelle elle a été envoyée.
+              Ce petit assistant vous guide pour créer ou utiliser un compte
+              Camelio, puis activer uniquement les sections partagées avec vous.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-3 md:grid-cols-3">
+          <div className="rounded-3xl border border-[#eadfcf] bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#a8b193]">
+              Étape 1
+            </p>
+            <p className="mt-2 text-sm font-bold text-[#4f4a45]">
+              Choisir un compte
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[#7d756e]">
+              Connectez-vous ou créez un profil avec le courriel invité.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-[#eadfcf] bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#a8b193]">
+              Étape 2
+            </p>
+            <p className="mt-2 text-sm font-bold text-[#4f4a45]">
+              Code invité
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[#7d756e]">
+              L’accès invité est lié au partage reçu, sans ouvrir tout le compte
+              principal.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-[#eadfcf] bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#a8b193]">
+              Étape 3
+            </p>
+            <p className="mt-2 text-sm font-bold text-[#4f4a45]">
+              Espace partagé
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[#7d756e]">
+              Vous verrez seulement les enfants, documents et sections partagés.
             </p>
           </div>
         </div>
@@ -255,11 +292,7 @@ export default function Invitation({
                 ) : null}
 
                 <p>
-                  <strong>Enfant(s) :</strong>{" "}
-                  {(invitation.children || [])
-                    .map((child) => child.name)
-                    .filter(Boolean)
-                    .join(", ") || "Non précisé"}
+                  <strong>Enfant(s) :</strong> {childrenNames || "Non précisé"}
                 </p>
 
                 <p>
@@ -272,7 +305,8 @@ export default function Invitation({
               <div className="rounded-3xl border border-[#eadfcf] bg-white p-5">
                 <p className="text-sm leading-6 text-[#6f685f]">
                   Connectez-vous ou créez votre compte avec l’adresse courriel
-                  invitée pour accéder à l’espace partagé.
+                  invitée. L’accès sera ensuite rattaché automatiquement à ce
+                  compte.
                 </p>
 
                 <div className="mt-5 flex flex-col gap-3 sm:flex-row">

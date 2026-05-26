@@ -36,6 +36,7 @@ export default function App() {
     authenticated: false,
     user: null,
     referralCode: null,
+    sharedAccess: null,
   });
 
   const [parentProfile, setParentProfile] = useState({
@@ -72,6 +73,7 @@ export default function App() {
         authenticated: Boolean(data?.authenticated),
         user: data?.user || null,
         referralCode: data?.referralCode || null,
+        sharedAccess: data?.sharedAccess || null,
       };
 
       setAuth(nextAuth);
@@ -94,6 +96,7 @@ export default function App() {
         authenticated: false,
         user: null,
         referralCode: null,
+        sharedAccess: null,
       });
     } finally {
       setIsLoading(false);
