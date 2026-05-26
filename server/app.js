@@ -2546,7 +2546,7 @@ app.patch(
         });
       }
 
-      if (payload.childIds.length === 0) {
+      if (!Array.isArray(payload.childIds) || payload.childIds.length === 0) {
         return res.status(400).json({
           success: false,
           error: "missing_children",
@@ -2554,7 +2554,7 @@ app.patch(
         });
       }
 
-      if (payload.sectionIds.length === 0) {
+      if (!Array.isArray(payload.sectionIds) || payload.sectionIds.length === 0) {
         return res.status(400).json({
           success: false,
           error: "missing_sections",
@@ -2590,7 +2590,10 @@ app.patch(
             SK: `SHARE#${shareId}`,
           },
           UpdateExpression:
-            "SET inviteeName = :inviteeName, inviteeEmail = :inviteeEmail, childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, permission = :permission, note = :note, updatedAt = :updatedAt",
+            "SET inviteeName = :inviteeName, inviteeEmail = :inviteeEmail, childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, #permission = :permission, note = :note, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#permission": "permission",
+          },
           ExpressionAttributeValues: {
             ":inviteeName": payload.inviteeName || "",
             ":inviteeEmail": payload.inviteeEmail,
@@ -2634,7 +2637,10 @@ app.patch(
                   SK: importedShare.SK,
                 },
                 UpdateExpression:
-                  "SET childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, permission = :permission, note = :note, updatedAt = :updatedAt",
+                  "SET childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, #permission = :permission, note = :note, updatedAt = :updatedAt",
+                ExpressionAttributeNames: {
+                  "#permission": "permission",
+                },
                 ExpressionAttributeValues: {
                   ":childIds": payload.childIds,
                   ":children": payload.children,
@@ -2656,7 +2662,15 @@ app.patch(
         message: "Le partage a été modifié.",
       });
     } catch (error) {
-      next(error);
+      console.error("Erreur modification partage:", error);
+
+      return res.status(500).json({
+        success: false,
+        error: "share_update_failed",
+        message:
+          error?.message ||
+          "Impossible de modifier le partage pour le moment.",
+      });
     }
   }
 );
