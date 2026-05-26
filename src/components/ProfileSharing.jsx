@@ -801,7 +801,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
                   type="button"
                   onClick={inviteToCreateAccount}
                   disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#EADFCF] bg-white px-5 py-3 text-sm font-bold text-[#7D756E] disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                 >
                   <Mail className="h-4 w-4" />
                   Inviter à créer un compte
@@ -816,6 +816,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
                   <UserPlus className="h-4 w-4" />
                   Créer le compte pour elle
                 </button>
+
               </div>
             </div>
           )}
