@@ -1284,18 +1284,6 @@ export default function Dashboard({
                         onSelect={selectAccount}
                       />
 
-                      {!sharedAccess.hasSharedAccess ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!sharedAccess.hasSharedAccess) openSection("children");
-                          }}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
-                          aria-label="Ajouter un enfant"
-                        >
-                          <Plus size={22} strokeWidth={1.8} />
-                        </button>
-                      ) : null}
                     </div>
                   </div>
 
