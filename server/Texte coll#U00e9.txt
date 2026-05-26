@@ -32,8 +32,6 @@ const {
 const {
   CognitoIdentityProviderClient,
   AdminDeleteUserCommand,
-  AdminCreateUserCommand,
-  ListUsersCommand,
 } = require("@aws-sdk/client-cognito-identity-provider");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
@@ -62,8 +60,6 @@ const EMAIL_REPLY_TO =
   "info@camelio.app";
 
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
-const SUBSCRIPTIONS_TABLE =
-  process.env.SUBSCRIPTIONS_TABLE || "CamelioSubscriptions";
 const SESSION_TABLE = process.env.SESSION_TABLE || "CamelioSessions";
 
 const COGNITO_ISSUER = process.env.COGNITO_ISSUER;
@@ -180,24 +176,24 @@ app.post(
     try {
       switch (event.type) {
         case "customer.subscription.created":
-case "customer.subscription.updated":
-case "customer.subscription.deleted": {
-  const stripeSubscription = event.data.object;
+        case "customer.subscription.updated":
+        case "customer.subscription.deleted": {
+          const stripeSubscription = event.data.object;
 
-  const updatedSubscription = await upsertSubscriptionFromStripe(
-    stripeSubscription
-  );
+          const updatedSubscription = await upsertSubscriptionFromStripe(
+            stripeSubscription
+          );
 
-  console.log("Stripe subscription reçue:", {
-    eventType: event.type,
-    stripeSubscriptionId: stripeSubscription.id,
-    status: stripeSubscription.status,
-    hasCamelioUserId: Boolean(stripeSubscription.metadata?.userId),
-    updated: Boolean(updatedSubscription),
-  });
+          console.log("Stripe subscription synchronisée:", {
+            eventType: event.type,
+            stripeSubscriptionId: stripeSubscription.id,
+            status: stripeSubscription.status,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            updated: Boolean(updatedSubscription),
+          });
 
-  break;
-}
+          break;
+        }
 
         default:
           console.log(`Webhook Stripe ignoré: ${event.type}`);
@@ -404,9 +400,6 @@ function validateAwsConfig(req, res, next) {
   if (!process.env.DYNAMODB_TABLE && IS_PRODUCTION) {
     missing.push("DYNAMODB_TABLE");
   }
-  if (!process.env.SUBSCRIPTIONS_TABLE && IS_PRODUCTION) {
-    missing.push("SUBSCRIPTIONS_TABLE");
-  }
 
   if (!process.env.AWS_ACCESS_KEY_ID && !IS_PRODUCTION) {
     missing.push("AWS_ACCESS_KEY_ID");
@@ -528,13 +521,13 @@ function getUserPk(req) {
 async function upsertSubscriptionFromStripe(stripeSubscription) {
   const userId = stripeSubscription.metadata?.userId;
 
-if (!userId) {
-  console.warn(
-    "Webhook Stripe ignoré : aucun userId dans metadata de l'abonnement.",
-    stripeSubscription.id
-  );
-  return null;
-}
+  if (!userId) {
+    console.warn(
+      "Webhook Stripe ignoré : aucun userId dans metadata de l'abonnement.",
+      stripeSubscription.id
+    );
+    return null;
+  }
 
   const now = new Date().toISOString();
 
@@ -576,7 +569,7 @@ if (!userId) {
 
   await dynamo.send(
     new PutCommand({
-      TableName: SUBSCRIPTIONS_TABLE,
+      TableName: DYNAMODB_TABLE,
       Item: subscriptionItem,
     })
   );
@@ -986,7 +979,6 @@ app.get("/aws-check", (req, res) => {
   res.json({
     awsRegion: process.env.AWS_REGION || null,
     dynamodbTable: process.env.DYNAMODB_TABLE || null,
-    subscriptionsTable: process.env.SUBSCRIPTIONS_TABLE || null,
     s3Bucket: process.env.S3_DOCUMENTS_BUCKET || null,
     hasAccessKey: Boolean(process.env.AWS_ACCESS_KEY_ID),
     hasSecretKey: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
@@ -1431,204 +1423,6 @@ function buildProfileShareInviteUrl(invitationToken) {
   return inviteLink.toString();
 }
 
-function normalizeInviteeEmail(value = "") {
-  return String(value || "").trim().toLowerCase();
-}
-
-function buildCamelioAccueilUrl() {
-  return new URL("/accueil", APP_URL).toString();
-}
-
-function buildCamelioSignupUrl() {
-  return new URL("/signup", APP_URL).toString();
-}
-
-async function findDynamoProfileByEmail(email) {
-  const cleanEmail = normalizeInviteeEmail(email);
-  if (!cleanEmail) return null;
-
-  let lastEvaluatedKey;
-
-  do {
-    const result = await dynamo.send(
-      new ScanCommand({
-        TableName: DYNAMODB_TABLE,
-        FilterExpression: "#type = :type AND email = :email",
-        ExpressionAttributeNames: {
-          "#type": "type",
-        },
-        ExpressionAttributeValues: {
-          ":type": "profile",
-          ":email": cleanEmail,
-        },
-        ExclusiveStartKey: lastEvaluatedKey,
-      })
-    );
-
-    const profile = (result.Items || [])[0];
-
-    if (profile) {
-      const userId = profile.cognitoSub || String(profile.PK || "").replace(/^USER#/, "");
-
-      return {
-        found: true,
-        source: "dynamodb",
-        userId,
-        email: profile.email || cleanEmail,
-        name: profile.displayName || profile.name || profile.email || cleanEmail,
-        profile,
-      };
-    }
-
-    lastEvaluatedKey = result.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return null;
-}
-
-async function findCognitoUserByEmail(email) {
-  const cleanEmail = normalizeInviteeEmail(email);
-
-  if (!cleanEmail || !COGNITO_USER_POOL_ID) return null;
-
-  const safeEmail = cleanEmail.replace(/"/g, '\\"');
-
-  const result = await cognitoIdentityProvider.send(
-    new ListUsersCommand({
-      UserPoolId: COGNITO_USER_POOL_ID,
-      Filter: `email = "${safeEmail}"`,
-      Limit: 1,
-    })
-  );
-
-  const user = (result.Users || [])[0];
-
-  if (!user) return null;
-
-  const attributes = Object.fromEntries(
-    (user.Attributes || []).map((attribute) => [attribute.Name, attribute.Value])
-  );
-
-  return {
-    found: true,
-    source: "cognito",
-    userId: attributes.sub || user.Username,
-    email: attributes.email || cleanEmail,
-    name: attributes.name || attributes.given_name || attributes.email || cleanEmail,
-    cognitoUsername: user.Username,
-    userStatus: user.UserStatus,
-  };
-}
-
-async function findCamelioUserByEmail(email) {
-  const cleanEmail = normalizeInviteeEmail(email);
-  if (!cleanEmail) return null;
-
-  const profileMatch = await findDynamoProfileByEmail(cleanEmail);
-  if (profileMatch) return profileMatch;
-
-  const cognitoMatch = await findCognitoUserByEmail(cleanEmail);
-  if (cognitoMatch) return cognitoMatch;
-
-  return null;
-}
-
-function createTemporaryPassword() {
-  return `Cam-${randomUUID().replace(/-/g, "").slice(0, 14)}aA1!`;
-}
-
-async function sendCreateAccountInvitationEmail({ email, name = "" }) {
-  const signupUrl = buildCamelioSignupUrl();
-  const accueilUrl = buildCamelioAccueilUrl();
-
-  return sendEmailWithResend({
-    to: email,
-    subject: "Invitation à créer ton compte Camelio",
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
-        <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
-          <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">Camelio</p>
-          <h2 style="margin: 0 0 16px; color: #4F4A45;">Tu es invité à créer ton compte Camelio 😊</h2>
-          <p>${escapeHtml(name || "Bonjour")}, une personne souhaite te partager un accès familial dans Camelio.</p>
-          <p>Crée d’abord ton compte avec cette adresse courriel : <strong>${escapeHtml(email)}</strong>.</p>
-          <p>Une fois ton compte créé, la personne pourra te retrouver dans la recherche Camelio et te donner les accès souhaités.</p>
-          <p style="margin: 24px 0;">
-            <a href="${escapeHtml(signupUrl)}" style="display: inline-block; background: #A8B193; color: white; padding: 12px 18px; border-radius: 999px; text-decoration: none; font-weight: bold;">Créer mon compte Camelio</a>
-          </p>
-          <p style="font-size: 12px; color: #8B8278;">Page d’accueil : ${escapeHtml(accueilUrl)}</p>
-        </div>
-      </div>
-    `,
-    text: `Tu es invité à créer ton compte Camelio avec l’adresse ${email}. Crée ton compte ici : ${signupUrl}`,
-  });
-}
-
-async function sendProfileShareConfirmationEmail(share) {
-  const dashboardUrl = new URL("/", APP_URL).toString();
-  const childrenNames = (share.children || [])
-    .map((child) => child.name)
-    .filter(Boolean)
-    .join(", ");
-
-  return sendEmailWithResend({
-    to: share.inviteeEmail,
-    subject: "Ton accès partagé Camelio est prêt",
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
-        <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
-          <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">Camelio</p>
-          <h2 style="margin: 0 0 16px; color: #4F4A45;">Ton accès partagé est prêt 😊</h2>
-          <p>${escapeHtml(share.ownerName || "Un utilisateur Camelio")} t’a donné accès à des informations partagées dans Camelio.</p>
-          <p><strong>Enfant(s) partagé(s) :</strong><br />${escapeHtml(childrenNames || "Non précisé")}</p>
-          <p>Connecte-toi avec l’adresse <strong>${escapeHtml(share.inviteeEmail)}</strong> pour voir ton espace partagé.</p>
-          <p style="margin: 24px 0;">
-            <a href="${escapeHtml(dashboardUrl)}" style="display: inline-block; background: #A8B193; color: white; padding: 12px 18px; border-radius: 999px; text-decoration: none; font-weight: bold;">Ouvrir Camelio</a>
-          </p>
-        </div>
-      </div>
-    `,
-    text: `Ton accès partagé Camelio est prêt. Connecte-toi ici : ${dashboardUrl}`,
-  });
-}
-
-async function createImportedProfileShareForUser({ share, targetUserId, connectedEmail = "" }) {
-  if (!share || !targetUserId) return null;
-
-  const now = new Date().toISOString();
-  const importedShareId = randomUUID();
-
-  const importedShare = {
-    PK: `USER#${targetUserId}`,
-    SK: `IMPORTED_SHARE#${importedShareId}`,
-    id: importedShareId,
-    type: "importedProfileShare",
-    sourceShareId: share.id,
-    sourceOwnerUserId: share.ownerUserId,
-    sourceOwnerEmail: share.ownerEmail || "",
-    sourceOwnerName: share.ownerName || "",
-    inviteeUserId: targetUserId,
-    inviteeEmail: connectedEmail || share.inviteeEmail || "",
-    children: share.children || [],
-    childIds: share.childIds || [],
-    sectionIds: share.sectionIds || [],
-    sectionPermissions: share.sectionPermissions || {},
-    permission: share.permission || "read",
-    status: "accepted",
-    importedAt: now,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await dynamo.send(
-    new PutCommand({
-      TableName: DYNAMODB_TABLE,
-      Item: importedShare,
-    })
-  );
-
-  return importedShare;
-}
-
 async function findProfileShareByToken(invitationToken) {
   const token = String(invitationToken || "").trim();
 
@@ -1776,187 +1570,6 @@ async function sendProfileShareInvitationEmail(share) {
   });
 }
 
-
-app.get(
-  "/api/profile-shares/users/search",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const email = String(req.query.email || "").trim().toLowerCase();
-
-      if (!email || !email.includes("@")) {
-        return res.status(400).json({
-          success: false,
-          found: false,
-          error: "invalid_email",
-          message: "Courriel invalide.",
-        });
-      }
-
-      const result = await dynamo.send(
-        new ScanCommand({
-          TableName: DYNAMODB_TABLE,
-          FilterExpression:
-            "(#type = :profileType OR #type = :userInviteType) AND email = :email",
-          ExpressionAttributeNames: {
-            "#type": "type",
-          },
-          ExpressionAttributeValues: {
-            ":profileType": "profile",
-            ":userInviteType": "userInvite",
-            ":email": email,
-          },
-        })
-      );
-
-      const profile = (result.Items || []).find((item) => {
-        return String(item.email || "").trim().toLowerCase() === email;
-      });
-
-      if (!profile) {
-        return res.json({
-          success: true,
-          found: false,
-          user: null,
-          message: "Aucun compte Camelio trouvé avec ce courriel.",
-        });
-      }
-
-      const userId =
-        profile.cognitoSub ||
-        profile.userId ||
-        String(profile.PK || "").replace("USER#", "");
-
-      return res.json({
-        success: true,
-        found: true,
-        user: {
-          userId,
-          email: profile.email || email,
-          name:
-            profile.name ||
-            profile.displayName ||
-            profile.given_name ||
-            "",
-          source: "profile",
-        },
-      });
-    } catch (error) {
-      console.error("Erreur recherche utilisateur partage:", error);
-
-      return res.status(500).json({
-        success: false,
-        found: false,
-        error: "user_search_failed",
-        message: error?.message || "Erreur serveur.",
-      });
-    }
-  }
-);
-
-app.post(
-  "/api/profile-shares/users/invite-create-account",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const email = normalizeInviteeEmail(req.body?.email || "");
-      const name = String(req.body?.name || "").trim();
-
-      if (!email || !email.includes("@")) {
-        return res.status(400).json({
-          success: false,
-          error: "invalid_email",
-          message: "Le courriel est invalide.",
-        });
-      }
-
-      const existingUser = await findCamelioUserByEmail(email);
-
-      if (existingUser) {
-        return res.json({
-          success: true,
-          alreadyExists: true,
-          user: existingUser,
-          message: "Un compte existe déjà avec ce courriel.",
-        });
-      }
-
-      await sendCreateAccountInvitationEmail({ email, name });
-
-      return res.json({
-        success: true,
-        message: "Invitation à créer un compte envoyée par courriel.",
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.post(
-  "/api/profile-shares/users/create-cognito",
-  requireAuth,
-  validateAwsConfig,
-  validateCognitoAdminConfig,
-  async (req, res, next) => {
-    try {
-      const email = normalizeInviteeEmail(req.body?.email || "");
-      const name = String(req.body?.name || "").trim();
-
-      if (!email || !email.includes("@")) {
-        return res.status(400).json({
-          success: false,
-          error: "invalid_email",
-          message: "Le courriel est invalide.",
-        });
-      }
-
-      const existingUser = await findCamelioUserByEmail(email);
-
-      if (existingUser) {
-        return res.json({
-          success: true,
-          alreadyExists: true,
-          user: existingUser,
-          message: "Un compte existe déjà avec ce courriel.",
-        });
-      }
-
-      try {
-        await cognitoIdentityProvider.send(
-          new AdminCreateUserCommand({
-            UserPoolId: COGNITO_USER_POOL_ID,
-            Username: email,
-            UserAttributes: [
-              { Name: "email", Value: email },
-              ...(name ? [{ Name: "name", Value: name }] : []),
-            ],
-            DesiredDeliveryMediums: ["EMAIL"],
-            TemporaryPassword: createTemporaryPassword(),
-          })
-        );
-      } catch (error) {
-        if (error?.name !== "UsernameExistsException") {
-          throw error;
-        }
-      }
-
-      const createdUser = await findCamelioUserByEmail(email);
-
-      return res.json({
-        success: true,
-        user: createdUser,
-        message:
-          "Compte créé dans Cognito. La personne doit compléter son accès avec le courriel reçu.",
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
 app.get(
   "/api/profile-shares",
   requireAuth,
@@ -2063,77 +1676,6 @@ app.post(
         })
       );
 
-      const targetUserId = String(req.body?.targetUserId || req.body?.inviteeUserId || "").trim();
-
-      if (targetUserId) {
-        const importedShare = await createImportedProfileShareForUser({
-          share,
-          targetUserId,
-          connectedEmail: share.inviteeEmail,
-        });
-
-        share = {
-          ...share,
-          status: "accepted",
-          importedByUserId: targetUserId,
-          importedByEmail: share.inviteeEmail,
-          importedAt: new Date().toISOString(),
-          emailStatus: "pending",
-          updatedAt: new Date().toISOString(),
-        };
-
-        await dynamo.send(
-          new UpdateCommand({
-            TableName: DYNAMODB_TABLE,
-            Key: {
-              PK: share.PK,
-              SK: share.SK,
-            },
-            UpdateExpression:
-              "SET #status = :status, importedByUserId = :importedByUserId, importedByEmail = :importedByEmail, importedAt = :importedAt, emailStatus = :emailStatus, updatedAt = :updatedAt",
-            ExpressionAttributeNames: {
-              "#status": "status",
-            },
-            ExpressionAttributeValues: {
-              ":status": share.status,
-              ":importedByUserId": share.importedByUserId,
-              ":importedByEmail": share.importedByEmail,
-              ":importedAt": share.importedAt,
-              ":emailStatus": share.emailStatus,
-              ":updatedAt": share.updatedAt,
-            },
-            ReturnValues: "NONE",
-          })
-        );
-
-        try {
-          await sendProfileShareConfirmationEmail(share);
-          share = { ...share, emailStatus: "sent", emailError: "", updatedAt: new Date().toISOString() };
-          await dynamo.send(
-            new UpdateCommand({
-              TableName: DYNAMODB_TABLE,
-              Key: { PK: share.PK, SK: share.SK },
-              UpdateExpression: "SET emailStatus = :emailStatus, emailError = :emailError, updatedAt = :updatedAt",
-              ExpressionAttributeValues: {
-                ":emailStatus": share.emailStatus,
-                ":emailError": share.emailError,
-                ":updatedAt": share.updatedAt,
-              },
-              ReturnValues: "NONE",
-            })
-          );
-        } catch (emailError) {
-          share = { ...share, emailStatus: "failed", emailError: emailError?.message || "Erreur d’envoi courriel.", updatedAt: new Date().toISOString() };
-        }
-
-        return res.status(201).json({
-          success: true,
-          share,
-          importedShare,
-          message: "L’accès partagé a été créé pour l’utilisateur sélectionné.",
-        });
-      }
-
       try {
         await sendProfileShareInvitationEmail(share);
 
@@ -2205,12 +1747,13 @@ app.post(
     } catch (error) {
       console.error("Erreur création invitation Camelio:", error);
 
-      return res.json({
-  success: true,
-  found: false,
-  user: null,
-  message: "Aucun compte Camelio trouvé avec ce courriel.",
-});
+      return res.status(500).json({
+        error: "profile_share_creation_failed",
+        shareCreated: Boolean(share),
+        share,
+        message: error?.message || "L’invitation n’a pas pu être créée.",
+        details: error?.message || null,
+      });
     }
   }
 );
@@ -2520,160 +2063,7 @@ app.get(
     }
   }
 );
-app.patch(
-  "/api/profile-shares/:shareId",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const { shareId } = req.params;
-      const payload = cleanProfileSharePayload(req.body || {});
-      const now = new Date().toISOString();
 
-      if (!shareId) {
-        return res.status(400).json({
-          success: false,
-          error: "missing_share_id",
-          message: "Identifiant du partage manquant.",
-        });
-      }
-
-      if (!payload.inviteeEmail || !payload.inviteeEmail.includes("@")) {
-        return res.status(400).json({
-          success: false,
-          error: "invalid_email",
-          message: "Le courriel d’invitation est invalide.",
-        });
-      }
-
-      if (!Array.isArray(payload.childIds) || payload.childIds.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: "missing_children",
-          message: "Sélectionnez au moins un enfant à partager.",
-        });
-      }
-
-      if (!Array.isArray(payload.sectionIds) || payload.sectionIds.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: "missing_sections",
-          message: "Sélectionnez au moins une section à partager.",
-        });
-      }
-
-      const existingResult = await dynamo.send(
-        new GetCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: getUserPk(req),
-            SK: `SHARE#${shareId}`,
-          },
-        })
-      );
-
-      const existingShare = existingResult.Item;
-
-      if (!existingShare || existingShare.status === "revoked") {
-        return res.status(404).json({
-          success: false,
-          error: "share_not_found",
-          message: "Ce partage est introuvable.",
-        });
-      }
-
-      const updateResult = await dynamo.send(
-        new UpdateCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: getUserPk(req),
-            SK: `SHARE#${shareId}`,
-          },
-          UpdateExpression:
-            "SET inviteeName = :inviteeName, inviteeEmail = :inviteeEmail, childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, #permission = :permission, note = :note, updatedAt = :updatedAt",
-          ExpressionAttributeNames: {
-            "#permission": "permission",
-          },
-          ExpressionAttributeValues: {
-            ":inviteeName": payload.inviteeName || "",
-            ":inviteeEmail": payload.inviteeEmail,
-            ":childIds": payload.childIds,
-            ":children": payload.children,
-            ":sectionIds": payload.sectionIds,
-            ":sectionPermissions": payload.sectionPermissions,
-            ":permission": payload.permission || "read",
-            ":note": payload.note || "",
-            ":updatedAt": now,
-          },
-          ReturnValues: "ALL_NEW",
-        })
-      );
-
-      const updatedShare = updateResult.Attributes;
-
-      if (existingShare.importedByUserId) {
-        const importedResult = await dynamo.send(
-          new QueryCommand({
-            TableName: DYNAMODB_TABLE,
-            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-            FilterExpression: "sourceShareId = :sourceShareId",
-            ExpressionAttributeValues: {
-              ":pk": `USER#${existingShare.importedByUserId}`,
-              ":sk": "IMPORTED_SHARE#",
-              ":sourceShareId": shareId,
-            },
-          })
-        );
-
-        const importedShares = importedResult.Items || [];
-
-        await Promise.all(
-          importedShares.map((importedShare) =>
-            dynamo.send(
-              new UpdateCommand({
-                TableName: DYNAMODB_TABLE,
-                Key: {
-                  PK: importedShare.PK,
-                  SK: importedShare.SK,
-                },
-                UpdateExpression:
-                  "SET childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, #permission = :permission, note = :note, updatedAt = :updatedAt",
-                ExpressionAttributeNames: {
-                  "#permission": "permission",
-                },
-                ExpressionAttributeValues: {
-                  ":childIds": payload.childIds,
-                  ":children": payload.children,
-                  ":sectionIds": payload.sectionIds,
-                  ":sectionPermissions": payload.sectionPermissions,
-                  ":permission": payload.permission || "read",
-                  ":note": payload.note || "",
-                  ":updatedAt": now,
-                },
-              })
-            )
-          )
-        );
-      }
-
-      return res.json({
-        success: true,
-        share: updatedShare,
-        message: "Le partage a été modifié.",
-      });
-    } catch (error) {
-      console.error("Erreur modification partage:", error);
-
-      return res.status(500).json({
-        success: false,
-        error: "share_update_failed",
-        message:
-          error?.message ||
-          "Impossible de modifier le partage pour le moment.",
-      });
-    }
-  }
-);
 app.patch(
   "/api/profile-shares/:shareId/revoke",
   requireAuth,
@@ -2870,186 +2260,6 @@ app.post(
   }
 );
 
-
-
-app.get(
-  "/api/accounts",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const userPk = getUserPk(req);
-      const now = new Date().toISOString();
-
-      const [profileResult, subscriptionResult, importedSharesResult] =
-        await Promise.all([
-          dynamo.send(
-            new GetCommand({
-              TableName: DYNAMODB_TABLE,
-              Key: {
-                PK: userPk,
-                SK: "PROFILE",
-              },
-            })
-          ),
-          dynamo.send(
-            new GetCommand({
-              TableName: SUBSCRIPTIONS_TABLE,
-              Key: {
-                PK: userPk,
-                SK: "SUBSCRIPTION",
-              },
-            })
-          ),
-          dynamo.send(
-            new QueryCommand({
-              TableName: DYNAMODB_TABLE,
-              KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-              ExpressionAttributeValues: {
-                ":pk": userPk,
-                ":sk": "IMPORTED_SHARE#",
-              },
-            })
-          ),
-        ]);
-
-      const profile = profileResult.Item || {};
-      const subscription = subscriptionResult.Item || null;
-      const activeStatuses = ["trialing", "active"];
-      const hasPrincipalAccess = Boolean(
-        subscription && activeStatuses.includes(subscription.status)
-      );
-
-      const principalAccount = {
-        accountId: `principal-${req.session.user.sub}`,
-        label: "Compte principal",
-        description: "Vos données personnelles",
-        type: "principal",
-        role: "owner",
-        subscriptionRequired: true,
-        hasAccess: hasPrincipalAccess,
-        subscriptionStatus: subscription?.status || "none",
-        plan: subscription?.plan || null,
-        storageGb: Number(subscription?.storageGb) || Number(STRIPE_STORAGE_GB) || 5,
-      };
-
-      const guestAccounts = (importedSharesResult.Items || [])
-        .filter((share) => share.status !== "revoked")
-        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-        .map((share, index) => ({
-          accountId: `guest-${share.id || index}`,
-          label: share.sourceOwnerName
-            ? `Invité de ${share.sourceOwnerName}`
-            : "Invité (partagé)",
-          description: "Accès limité et partagé",
-          type: "guest",
-          role: "guest",
-          subscriptionRequired: false,
-          hasAccess: true,
-          subscriptionStatus: "not_required",
-          shareId: share.id,
-          sourceShareId: share.sourceShareId || "",
-          sourceOwnerUserId: share.sourceOwnerUserId || "",
-          sourceOwnerEmail: share.sourceOwnerEmail || "",
-          sourceOwnerName: share.sourceOwnerName || "",
-          children: share.children || [],
-          childIds: share.childIds || [],
-          sectionIds: share.sectionIds || [],
-          sectionPermissions: share.sectionPermissions || {},
-          permission: share.permission || "read",
-          share,
-        }));
-
-      const accounts = [principalAccount, ...guestAccounts];
-      const savedActiveAccountId = String(profile.activeAccountId || "");
-      const savedAccountExists = accounts.some(
-        (account) => account.accountId === savedActiveAccountId
-      );
-
-      const defaultActiveAccountId = savedAccountExists
-        ? savedActiveAccountId
-        : guestAccounts[0]?.accountId || principalAccount.accountId;
-
-      if (!savedAccountExists && profile.PK && profile.SK) {
-        try {
-          await dynamo.send(
-            new UpdateCommand({
-              TableName: DYNAMODB_TABLE,
-              Key: {
-                PK: userPk,
-                SK: "PROFILE",
-              },
-              UpdateExpression:
-                "SET activeAccountId = :activeAccountId, updatedAt = :updatedAt",
-              ExpressionAttributeValues: {
-                ":activeAccountId": defaultActiveAccountId,
-                ":updatedAt": now,
-              },
-              ReturnValues: "NONE",
-            })
-          );
-        } catch (updateError) {
-          console.warn("Impossible de sauvegarder le compte actif par défaut:", updateError?.message || updateError);
-        }
-      }
-
-      return res.json({
-        success: true,
-        accounts,
-        activeAccountId: defaultActiveAccountId,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.put(
-  "/api/accounts/active",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const requestedAccountId = String(req.body?.accountId || "").trim();
-
-      if (!requestedAccountId) {
-        return res.status(400).json({
-          success: false,
-          error: "missing_account_id",
-          message: "Le compte actif est requis.",
-        });
-      }
-
-      const userPk = getUserPk(req);
-      const now = new Date().toISOString();
-
-      await dynamo.send(
-        new UpdateCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: userPk,
-            SK: "PROFILE",
-          },
-          UpdateExpression:
-            "SET activeAccountId = :activeAccountId, updatedAt = :updatedAt",
-          ExpressionAttributeValues: {
-            ":activeAccountId": requestedAccountId,
-            ":updatedAt": now,
-          },
-          ReturnValues: "NONE",
-        })
-      );
-
-      return res.json({
-        success: true,
-        activeAccountId: requestedAccountId,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
 app.get(
   "/api/profile-shares/imported",
   requireAuth,
@@ -3066,6 +2276,21 @@ app.get(
           },
         })
       );
+
+      const importedShares = (result.Items || []).filter(
+        (share) => share.status !== "revoked"
+      );
+
+      return res.json({
+        success: true,
+        hasSharedAccess: importedShares.length > 0,
+        shares: importedShares,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
       const importedShares = (result.Items || []).filter(
         (share) => share.status !== "revoked"
@@ -3423,7 +2648,7 @@ app.get(
 
       const result = await dynamo.send(
         new GetCommand({
-          TableName: SUBSCRIPTIONS_TABLE,
+          TableName: DYNAMODB_TABLE,
           Key: {
             PK: getUserPk(req),
             SK: "SUBSCRIPTION",
@@ -3539,7 +2764,7 @@ app.get(
 
       await dynamo.send(
         new PutCommand({
-          TableName: SUBSCRIPTIONS_TABLE,
+          TableName: DYNAMODB_TABLE,
           Item: syncedSubscription,
         })
       );
@@ -3572,7 +2797,7 @@ app.get(
     try {
       const subscriptionResult = await dynamo.send(
         new GetCommand({
-          TableName: SUBSCRIPTIONS_TABLE,
+          TableName: DYNAMODB_TABLE,
           Key: {
             PK: getUserPk(req),
             SK: "SUBSCRIPTION",
@@ -3703,7 +2928,7 @@ app.post(
 
       await dynamo.send(
         new PutCommand({
-          TableName: SUBSCRIPTIONS_TABLE,
+          TableName: DYNAMODB_TABLE,
           Item: subscriptionItem,
         })
       );
@@ -3768,60 +2993,58 @@ app.post(
       const codeOwner = codeOwners[submittedCode] || "Non défini";
       let stripeCustomerId = "";
 
-      if (stripe) {
-  try {
-    const existingSubscriptionResult = await dynamo.send(
-      new GetCommand({
-        TableName: SUBSCRIPTIONS_TABLE,
-        Key: {
-          PK: getUserPk(req),
-          SK: "SUBSCRIPTION",
-        },
-      })
-    );
+      try {
+        const existingSubscriptionResult = await dynamo.send(
+          new GetCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getUserPk(req),
+              SK: "SUBSCRIPTION",
+            },
+          })
+        );
 
-    const existingSubscription = existingSubscriptionResult.Item || null;
+        const existingSubscription = existingSubscriptionResult.Item || null;
 
-    if (existingSubscription?.stripeCustomerId) {
-      stripeCustomerId = existingSubscription.stripeCustomerId;
+        if (existingSubscription?.stripeCustomerId) {
+          stripeCustomerId = existingSubscription.stripeCustomerId;
 
-      await stripe.customers.update(stripeCustomerId, {
-        email: req.session.user.email || undefined,
-        name: req.session.user.name || undefined,
-        metadata: {
-          userId: req.session.user.sub,
-          userEmail: req.session.user.email || "",
-          source: "Camelio",
-          plan: "free_access_code",
-          access_code: submittedCode,
-          access_code_owner: codeOwner,
-          activated_at: now,
-        },
-      });
-    } else {
-      const customer = await stripe.customers.create({
-        email: req.session.user.email || undefined,
-        name: req.session.user.name || undefined,
-        metadata: {
-          userId: req.session.user.sub,
-          userEmail: req.session.user.email || "",
-          source: "Camelio",
-          plan: "free_access_code",
-          access_code: submittedCode,
-          access_code_owner: codeOwner,
-          activated_at: now,
-        },
-      });
+          await stripe.customers.update(stripeCustomerId, {
+            email: req.session.user.email || undefined,
+            name: req.session.user.name || undefined,
+            metadata: {
+              userId: req.session.user.sub,
+              userEmail: req.session.user.email || "",
+              source: "Camelio",
+              plan: "free_access_code",
+              access_code: submittedCode,
+              access_code_owner: codeOwner,
+              activated_at: now,
+            },
+          });
+        } else {
+          const customer = await stripe.customers.create({
+            email: req.session.user.email || undefined,
+            name: req.session.user.name || undefined,
+            metadata: {
+              userId: req.session.user.sub,
+              userEmail: req.session.user.email || "",
+              source: "Camelio",
+              plan: "free_access_code",
+              access_code: submittedCode,
+              access_code_owner: codeOwner,
+              activated_at: now,
+            },
+          });
 
-      stripeCustomerId = customer.id;
-    }
-  } catch (stripeError) {
-    console.error(
-      "Erreur création ou mise à jour client Stripe pour code gratuit:",
-      stripeError
-    );
-  }
-}
+          stripeCustomerId = customer.id;
+        }
+      } catch (stripeError) {
+        console.error(
+          "Erreur création ou mise à jour client Stripe pour code gratuit:",
+          stripeError
+        );
+      }
 
       const subscriptionItem = {
         PK: getUserPk(req),
@@ -3849,7 +3072,7 @@ app.post(
 
       await dynamo.send(
         new PutCommand({
-          TableName: SUBSCRIPTIONS_TABLE,
+          TableName: DYNAMODB_TABLE,
           Item: subscriptionItem,
         })
       );
@@ -4433,6 +3656,7 @@ app.delete(
 app.post(
   "/create-checkout-session",
   requireAuth,
+  validateStripeConfig,
   async (req, res) => {
     try {
       const lookupKey = req.body?.lookup_key || STRIPE_PRICE_LOOKUP_KEY;
@@ -4526,7 +3750,7 @@ app.post(
     try {
       const subscriptionResult = await dynamo.send(
         new GetCommand({
-          TableName: SUBSCRIPTIONS_TABLE,
+          TableName: DYNAMODB_TABLE,
           Key: {
             PK: getUserPk(req),
             SK: "SUBSCRIPTION",

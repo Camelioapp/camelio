@@ -6,6 +6,10 @@ import {
   List,
   UserRound,
   Settings,
+  ChevronDown,
+  Check,
+  Crown,
+  UsersRound,
 } from "lucide-react";
 
 import SubscriptionPopup from "./SubscriptionPopup";
@@ -317,6 +321,97 @@ function FamilyFloatingBubbles() {
   );
 }
 
+
+function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const activeAccount =
+    accounts.find((account) => account.accountId === activeAccountId) ||
+    accounts[0] ||
+    null;
+
+  if (!activeAccount || accounts.length <= 1) {
+    return activeAccount ? (
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#eadfcf] bg-white/90 px-4 py-2 text-xs font-bold text-[#6f665e] shadow-sm">
+        {activeAccount.type === "guest" ? (
+          <UsersRound className="h-4 w-4 text-[#b58bbd]" />
+        ) : (
+          <Crown className="h-4 w-4 text-[#8f9874]" />
+        )}
+        <span>{activeAccount.type === "guest" ? "Invité" : "Compte principal"}</span>
+      </div>
+    ) : null;
+  }
+
+  return (
+    <div className="relative z-30">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="inline-flex items-center gap-2 rounded-full border border-[#d8c8b6] bg-white/95 px-4 py-2 text-xs font-bold text-[#5f564e] shadow-sm transition hover:bg-[#fffdf8]"
+        aria-label="Sélectionner le compte Camelio"
+      >
+        {activeAccount.type === "guest" ? (
+          <UsersRound className="h-4 w-4 text-[#b58bbd]" />
+        ) : (
+          <Crown className="h-4 w-4 text-[#8f9874]" />
+        )}
+        <span className="max-w-[150px] truncate sm:max-w-[190px]">
+          {activeAccount.type === "guest" ? "Invité" : "Compte principal"}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 text-[#8b8278] transition ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute right-0 mt-3 w-[290px] overflow-hidden rounded-[24px] border border-[#eadfcf] bg-white p-2 shadow-[0_18px_42px_rgba(79,74,69,0.16)]">
+          {accounts.map((account) => {
+            const isActive = account.accountId === activeAccountId;
+            const Icon = account.type === "guest" ? UsersRound : Crown;
+
+            return (
+              <button
+                key={account.accountId}
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onSelect(account.accountId);
+                }}
+                className={`flex w-full items-center gap-3 rounded-[18px] px-3 py-3 text-left transition ${
+                  isActive ? "bg-[#fff7fb]" : "hover:bg-[#fffdf8]"
+                }`}
+              >
+                <span
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                    account.type === "guest"
+                      ? "bg-[#f4e8f4] text-[#b58bbd]"
+                      : "bg-[#eef0e7] text-[#8f9874]"
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-[#4f4a45]">
+                    {account.type === "guest" ? "Invité (partagé)" : "Compte principal"}
+                  </span>
+                  <span className="block truncate text-xs font-medium text-[#8b8278]">
+                    {account.description || account.label}
+                  </span>
+                </span>
+
+                {isActive ? <Check className="h-5 w-5 shrink-0 text-[#8f9874]" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Dashboard({
   parentProfile: parentProfileFromApp = {
     name: "",
@@ -330,6 +425,12 @@ export default function Dashboard({
   const [viewMode, setViewMode] = useState("grid");
   const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false);
   const [showFirstStep, setShowFirstStep] = useState(false);
+  const [accountAccess, setAccountAccess] = useState({
+    isLoading: true,
+    accounts: [],
+    activeAccountId: "",
+  });
+
   const [sharedAccess, setSharedAccess] = useState({
     isLoading: true,
     hasSharedAccess: false,
@@ -337,6 +438,16 @@ export default function Dashboard({
   });
 
   const parentProfile = parentProfileFromApp;
+
+  const activeAccount = useMemo(() => {
+    return (
+      accountAccess.accounts.find(
+        (account) => account.accountId === accountAccess.activeAccountId
+      ) || accountAccess.accounts[0] || null
+    );
+  }, [accountAccess.accounts, accountAccess.activeAccountId]);
+
+  const activeAccountIsGuest = activeAccount?.type === "guest";
 
   const setParentProfile = (updatedProfile) => {
     if (typeof updatedProfile === "function") {
@@ -361,26 +472,43 @@ export default function Dashboard({
   };
 
   useEffect(() => {
-    const checkAccessAndSubscription = async () => {
+    const loadAccountsAndAccess = async () => {
       try {
-        const sharedResponse = await fetch(
-          `${API_BASE_URL}/api/profile-shares/imported`,
-          {
-            method: "GET",
-            credentials: "include",
-            cache: "no-store",
-          }
-        );
+        const accountsResponse = await fetch(`${API_BASE_URL}/api/accounts`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
 
-        const sharedData = await sharedResponse.json().catch(() => ({}));
+        const accountsData = await accountsResponse.json().catch(() => ({}));
 
-        if (sharedResponse.ok && sharedData.hasSharedAccess) {
+        if (!accountsResponse.ok) {
+          throw new Error(
+            accountsData?.message || "Impossible de charger les comptes."
+          );
+        }
+
+        const accounts = Array.isArray(accountsData.accounts)
+          ? accountsData.accounts
+          : [];
+
+        const selectedAccount =
+          accounts.find(
+            (account) => account.accountId === accountsData.activeAccountId
+          ) || accounts[0] || null;
+
+        setAccountAccess({
+          isLoading: false,
+          accounts,
+          activeAccountId: selectedAccount?.accountId || "",
+        });
+
+        if (selectedAccount?.type === "guest") {
           setSharedAccess({
             isLoading: false,
             hasSharedAccess: true,
-            shares: Array.isArray(sharedData.shares) ? sharedData.shares : [],
+            shares: selectedAccount.share ? [selectedAccount.share] : [],
           });
-
           setShowSubscriptionPopup(false);
           setShowFirstStep(false);
           return;
@@ -395,9 +523,10 @@ export default function Dashboard({
         const response = await fetch(`${API_BASE_URL}/api/subscription`, {
           method: "GET",
           credentials: "include",
+          cache: "no-store",
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
           console.error("Erreur vérification abonnement:", data);
@@ -415,9 +544,10 @@ export default function Dashboard({
         const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
           method: "GET",
           credentials: "include",
+          cache: "no-store",
         });
 
-        const profileData = await profileResponse.json();
+        const profileData = await profileResponse.json().catch(() => ({}));
 
         if (!profileResponse.ok) {
           console.error("Erreur vérification profil:", profileData);
@@ -430,6 +560,10 @@ export default function Dashboard({
         setShowFirstStep(!onboardingCompleted);
       } catch (error) {
         console.error("Erreur vérification accès ou abonnement:", error);
+        setAccountAccess((current) => ({
+          ...current,
+          isLoading: false,
+        }));
         setSharedAccess((current) => ({
           ...current,
           isLoading: false,
@@ -438,8 +572,85 @@ export default function Dashboard({
       }
     };
 
-    checkAccessAndSubscription();
+    loadAccountsAndAccess();
   }, []);
+
+  async function selectAccount(accountId) {
+    const selectedAccount = accountAccess.accounts.find(
+      (account) => account.accountId === accountId
+    );
+
+    if (!selectedAccount) return;
+
+    setAccountAccess((current) => ({
+      ...current,
+      activeAccountId: accountId,
+    }));
+
+    setActiveSection("home");
+    setChildren([]);
+    setIsLoadingChildren(true);
+
+    try {
+      await fetch(`${API_BASE_URL}/api/accounts/active`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ accountId }),
+      });
+    } catch (error) {
+      console.error("Erreur sauvegarde compte actif:", error);
+    }
+
+    if (selectedAccount.type === "guest") {
+      setSharedAccess({
+        isLoading: false,
+        hasSharedAccess: true,
+        shares: selectedAccount.share ? [selectedAccount.share] : [],
+      });
+      setShowSubscriptionPopup(false);
+      setShowFirstStep(false);
+      return;
+    }
+
+    setSharedAccess({
+      isLoading: false,
+      hasSharedAccess: false,
+      shares: [],
+    });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/subscription`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      const hasAccess = response.ok && data.hasAccess;
+
+      setShowSubscriptionPopup(!hasAccess);
+
+      if (!hasAccess) {
+        setShowFirstStep(false);
+        return;
+      }
+
+      const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      const profileData = await profileResponse.json().catch(() => ({}));
+      setShowFirstStep(profileData?.profile?.onboardingCompleted !== true);
+    } catch (error) {
+      console.error("Erreur vérification compte principal:", error);
+      setShowSubscriptionPopup(true);
+    }
+  }
 
   const defaultSectionOrder = useMemo(() => {
     return sections
@@ -555,22 +766,13 @@ export default function Dashboard({
 
   useEffect(() => {
     const loadChildren = async () => {
+      if (accountAccess.isLoading || !activeAccount) return;
+
       try {
         setIsLoadingChildren(true);
 
-        const sharedResponse = await fetch(
-          `${API_BASE_URL}/api/profile-shares/imported`,
-          {
-            method: "GET",
-            credentials: "include",
-            cache: "no-store",
-          }
-        );
-
-        const sharedData = await sharedResponse.json().catch(() => ({}));
-
-        if (sharedResponse.ok && sharedData.hasSharedAccess) {
-          const shares = Array.isArray(sharedData.shares) ? sharedData.shares : [];
+        if (activeAccount.type === "guest") {
+          const shares = activeAccount.share ? [activeAccount.share] : [];
 
           setSharedAccess({
             isLoading: false,
@@ -582,12 +784,19 @@ export default function Dashboard({
           return;
         }
 
+        setSharedAccess({
+          isLoading: false,
+          hasSharedAccess: false,
+          shares: [],
+        });
+
         const response = await fetch(`${API_BASE_URL}/api/children`, {
           method: "GET",
           credentials: "include",
+          cache: "no-store",
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
           console.error("Erreur chargement enfants:", data);
@@ -607,7 +816,7 @@ export default function Dashboard({
     };
 
     loadChildren();
-  }, []);
+  }, [accountAccess.isLoading, activeAccount?.accountId]);
 
   const activeSectionData = useMemo(() => {
     if (activeSection === "guest-settings") {
@@ -1068,18 +1277,26 @@ export default function Dashboard({
                       </h2>
                     </div>
 
-                    {!sharedAccess.hasSharedAccess ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!sharedAccess.hasSharedAccess) openSection("children");
-                        }}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
-                        aria-label="Ajouter un enfant"
-                      >
-                        <Plus size={22} strokeWidth={1.8} />
-                      </button>
-                    ) : null}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <AccountSwitcher
+                        accounts={accountAccess.accounts}
+                        activeAccountId={accountAccess.activeAccountId}
+                        onSelect={selectAccount}
+                      />
+
+                      {!sharedAccess.hasSharedAccess ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!sharedAccess.hasSharedAccess) openSection("children");
+                          }}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#eadfcf] bg-[#fffdf8] text-[#8f9874] shadow-sm transition hover:scale-105 hover:bg-[#faf4ec]"
+                          aria-label="Ajouter un enfant"
+                        >
+                          <Plus size={22} strokeWidth={1.8} />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   {isLoadingChildren ? (
