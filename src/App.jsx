@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import Dashboard from "./components/Dashboard.jsx";
+import WelcomeScreen from "./components/WelcomeScreen.jsx";
 import Login from "./pages/Login.jsx";
 import Invitation from "./pages/Invitation.jsx";
 import LandingPage from "./LandingPage.jsx";
@@ -189,7 +190,7 @@ export default function App() {
   }
 
   if (!auth.authenticated) {
-    return <Login onLogin={goToLogin} onSignup={goToSignup} />;
+    return <WelcomeScreen onLogin={goToLogin} onSignup={goToSignup} />;
   }
 
   return (
