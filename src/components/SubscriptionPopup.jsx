@@ -2,10 +2,12 @@ import React, { useEffect, useState } from "react";
 import {
   Sparkles,
   CheckCircle2,
+  XCircle,
   KeyRound,
   ChevronDown,
   ChevronUp,
   LogOut,
+  UsersRound,
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
@@ -16,33 +18,27 @@ const trialPlans = [
     name: "Solo",
     monthlyPrice: "5,95 $ CA / mois",
     annualPrice: "Bientôt disponible",
-    description:
-      "Parfait pour un parent qui souhaite garder au même endroit les informations importantes de sa famille, sans complexité.",
-    salesPitch:
-      "Un espace simple et sécurisant pour retrouver rapidement les documents, photos, notes, souvenirs et informations essentielles de vos enfants.",
-    highlights: ["5 Go de stockage", "Aucun invité", "Photos et documents familiaux"],
+    subtitle: "Pour commencer simplement.",
+    included: ["5 Go de stockage", "Photos et documents", "Souvenirs et notes"],
+    excluded: ["Accès invité", "Partage avancé"],
   },
   {
     id: "duo",
     name: "Duo",
     monthlyPrice: "9,95 $ CA / mois",
     annualPrice: "Bientôt disponible",
-    description:
-      "Pensé pour deux parents ou deux adultes de confiance qui veulent mieux se coordonner au quotidien.",
-    salesPitch:
-      "Partagez l’organisation familiale, les documents importants, les souvenirs et les informations utiles dans un espace privé, clair et accessible.",
-    highlights: ["10 Go de stockage", "1 invité", "Partage de profil inclus"],
+    subtitle: "Pour partager avec une personne de confiance.",
+    included: ["10 Go de stockage", "1 accès invité", "Partage de profil"],
+    excluded: ["Plusieurs invités"],
   },
   {
     id: "famille_plus",
     name: "Famille+",
     monthlyPrice: "19,95 $ CA / mois",
     annualPrice: "Bientôt disponible",
-    description:
-      "La formule la plus complète pour les familles qui veulent impliquer plusieurs personnes de confiance autour des enfants.",
-    salesPitch:
-      "Centralisez les calendriers, documents, photos, reçus, souvenirs et informations importantes avec plus de stockage et plusieurs accès invités.",
-    highlights: ["50 Go de stockage", "5 invités", "Espace familial complet"],
+    subtitle: "Pour une famille élargie et mieux organisée.",
+    included: ["50 Go de stockage", "5 accès invités", "Espace familial complet"],
+    excluded: [],
   },
 ];
 
@@ -288,7 +284,7 @@ export default function SubscriptionPopup({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/35 px-4 py-6">
-      <div className="relative max-h-[92vh] w-full max-w-[760px] overflow-y-auto rounded-[2rem] bg-[#FFFCF7] p-6 shadow-2xl ring-1 ring-black/5">
+      <div className="relative max-h-[92vh] w-full max-w-[980px] overflow-y-auto rounded-[2rem] bg-[#FFFCF7] p-6 shadow-2xl ring-1 ring-black/5">
         <button
           type="button"
           onClick={handleLogout}
@@ -299,19 +295,21 @@ export default function SubscriptionPopup({
           <span>Quitter</span>
         </button>
 
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF4E8] text-[#8FA173]">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EEF4E8] text-[#8FA173]">
           <Sparkles className="h-7 w-7" />
         </div>
 
-        <h2 className="text-[1.55rem] font-bold leading-tight text-[#3F3B35]">
-          Activez votre espace Camelio
-        </h2>
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-[1.55rem] font-bold leading-tight text-[#3F3B35]">
+            Activez votre espace Camelio
+          </h2>
 
-        <p className="mt-3 max-w-2xl text-[0.95rem] leading-6 text-[#6B6258]">
-          Votre profil parent est créé. Choisissez maintenant votre façon d’activer Camelio : commencez avec 1 mois gratuit, utilisez un code promo Famille+ ou associez un code invité reçu par courriel.
-        </p>
+          <p className="mt-3 text-[0.95rem] leading-6 text-[#6B6258]">
+            Votre profil est créé. Choisissez un forfait avec 1 mois gratuit, utilisez un code promo ou associez un accès invité reçu par courriel.
+          </p>
+        </div>
 
-        <div className="mt-5 inline-flex rounded-full border border-[#E7DCCB] bg-white p-1 shadow-sm">
+        <div className="mx-auto mt-5 flex w-fit rounded-full border border-[#E7DCCB] bg-white p-1 shadow-sm">
           <button
             type="button"
             onClick={() => setBillingCycle("monthly")}
@@ -333,13 +331,13 @@ export default function SubscriptionPopup({
                 : "text-[#6B6258] hover:bg-[#F4EFE6]"
             }`}
           >
-            Passer à un abonnement annuel
+            Abonnement annuel
           </button>
         </div>
 
         {billingCycle === "annual" ? (
-          <p className="mt-3 rounded-2xl border border-[#E7DCCB] bg-[#F8F3EA] px-4 py-3 text-sm font-semibold text-[#7C756D]">
-            Les abonnements annuels seront bientôt disponibles. Les tarifs affichés ci-dessous sont donc indiqués comme à venir.
+          <p className="mx-auto mt-3 max-w-2xl rounded-2xl border border-[#E7DCCB] bg-[#F8F3EA] px-4 py-3 text-center text-sm font-semibold text-[#7C756D]">
+            Les abonnements annuels seront bientôt disponibles. Les tarifs annuels sont affichés comme à venir et les boutons sont désactivés pour le moment.
           </p>
         ) : null}
 
@@ -355,150 +353,182 @@ export default function SubscriptionPopup({
           </p>
         )}
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {trialPlans.map((plan) => (
-            <div key={plan.id} className="rounded-3xl border border-[#E7DCCB] bg-white p-4 shadow-sm">
-              <p className="text-sm font-black text-[#3F3B35]">{plan.name}</p>
-              <p className={`mt-1 text-xl font-black ${billingCycle === "annual" ? "text-[#9A948C]" : "text-[#8FA173]"}`}>
-                {billingCycle === "annual" ? plan.annualPrice : plan.monthlyPrice}
-              </p>
-              <p className="mt-1 text-xs font-semibold text-[#7C756D]">
-                {billingCycle === "annual" ? "Tarif annuel à venir" : "Commencez avec 1 mois gratuit"}
-              </p>
-              <p className="mt-3 text-xs font-bold leading-5 text-[#4F4A45]">{plan.description}</p>
-              <p className="mt-2 text-xs leading-5 text-[#6B6258]">{plan.salesPitch}</p>
+            <div key={plan.id} className="flex rounded-3xl border border-[#E7DCCB] bg-white p-4 shadow-sm">
+              <div className="flex w-full flex-col">
+                <p className="text-sm font-black text-[#3F3B35]">{plan.name}</p>
+                <p className={`mt-1 text-xl font-black ${billingCycle === "annual" ? "text-[#9A948C]" : "text-[#8FA173]"}`}>
+                  {billingCycle === "annual" ? plan.annualPrice : plan.monthlyPrice}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-[#7C756D]">
+                  {billingCycle === "annual" ? "Tarif annuel à venir" : "1 mois gratuit inclus"}
+                </p>
+                <p className="mt-3 min-h-[42px] text-xs font-semibold leading-5 text-[#4F4A45]">
+                  {plan.subtitle}
+                </p>
 
-              <div className="mt-4 space-y-2 text-xs text-[#565149]">
-                {plan.highlights.map((highlight) => (
-                  <div key={highlight} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-[#8FA173]" />
-                    <span>{highlight}</span>
-                  </div>
-                ))}
+                <div className="mt-3 space-y-2 text-xs text-[#565149]">
+                  {plan.included.map((item) => (
+                    <div key={item} className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-[#8FA173]" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+
+                  {plan.excluded.map((item) => (
+                    <div key={item} className="flex items-center gap-2 text-[#9A948C]">
+                      <XCircle className="h-4 w-4 shrink-0 text-[#C9C4BC]" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => billingCycle === "monthly" && startCheckout(plan.id)}
+                  disabled={Boolean(loadingType) || billingCycle === "annual"}
+                  className={`mt-auto w-full rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-sm transition disabled:cursor-not-allowed ${
+                    billingCycle === "annual"
+                      ? "bg-[#C9C4BC] opacity-80"
+                      : "bg-[#8FA173] hover:brightness-95 disabled:opacity-60"
+                  }`}
+                >
+                  {billingCycle === "annual"
+                    ? "Bientôt disponible"
+                    : loadingType === `trial-${plan.id}`
+                    ? "Redirection..."
+                    : "Commencer 1 mois gratuit"}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <div className="flex rounded-3xl border border-[#B5A7C8]/60 bg-[#FBF8FF] p-4 shadow-sm ring-1 ring-[#B5A7C8]/10">
+            <div className="flex w-full flex-col">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#B5A7C8]/20 text-[#8B78A5]">
+                <UsersRound className="h-5 w-5" />
+              </div>
+
+              <p className="text-sm font-black text-[#3F3B35]">Invité</p>
+              <p className="mt-1 text-xl font-black text-[#8B78A5]">Code d’accès</p>
+              <p className="mt-1 text-xs font-semibold text-[#7C756D]">
+                Aucun paiement requis
+              </p>
+              <p className="mt-3 min-h-[42px] text-xs font-semibold leading-5 text-[#4F4A45]">
+                Pour rejoindre un espace familial partagé avec un code reçu par courriel.
+              </p>
+
+              <div className="mt-3 space-y-2 text-xs text-[#565149]">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-[#8B78A5]" />
+                  <span>Accès lié au compte principal</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-[#8B78A5]" />
+                  <span>Permissions définies par le parent</span>
+                </div>
+                <div className="flex items-center gap-2 text-[#9A948C]">
+                  <XCircle className="h-4 w-4 shrink-0 text-[#C9C4BC]" />
+                  <span>Pas d’abonnement Stripe</span>
+                </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => billingCycle === "monthly" && startCheckout(plan.id)}
-                disabled={Boolean(loadingType) || billingCycle === "annual"}
-                className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-sm transition disabled:cursor-not-allowed ${
-                  billingCycle === "annual"
-                    ? "bg-[#C9C4BC] opacity-80"
-                    : "bg-[#8FA173] hover:brightness-95 disabled:opacity-60"
-                }`}
+                onClick={() => {
+                  setShowGuestCode((current) => !current);
+                  setError("");
+                }}
+                disabled={Boolean(loadingType)}
+                className="mt-auto w-full rounded-2xl bg-[#B5A7C8] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {billingCycle === "annual"
-                  ? "Bientôt disponible"
-                  : loadingType === `trial-${plan.id}`
-                  ? "Redirection..."
-                  : `Commencer 1 mois gratuit`}
+                {showGuestCode ? "Fermer le code invité" : "Entrer mon code invité"}
               </button>
             </div>
-          ))}
+          </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <div className="rounded-2xl border border-[#E7DCCB] bg-white">
-            <button
-              type="button"
-              onClick={() => {
-                setShowAccessCode((current) => !current);
-                setError("");
-              }}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            >
-              <span className="flex items-center gap-2 text-sm font-bold text-[#3F3B35]">
-                <KeyRound className="h-4 w-4 text-[#8FA173]" />
-                J’ai un code promo Camelio
-              </span>
+        {showGuestCode && (
+          <div className="mt-4 rounded-2xl border border-[#B5A7C8]/60 bg-[#FBF8FF] px-4 pb-4 pt-3">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={guestCode}
+                onChange={(event) => setGuestCode(event.target.value.toUpperCase())}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") activateGuestCode();
+                }}
+                placeholder="Ex. INV-ABC12345"
+                className="min-w-0 flex-1 rounded-xl border border-[#B5A7C8]/50 bg-white px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-[#3F3B35] outline-none transition focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#B5A7C8]/20"
+                disabled={Boolean(loadingType)}
+              />
 
-              <span className="text-[#8A8178]">
-                {showAccessCode ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={activateGuestCode}
+                disabled={Boolean(loadingType)}
+                className="rounded-xl bg-[#8B78A5] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loadingType === "guest-code" ? "Association..." : "Associer mon accès"}
+              </button>
+            </div>
 
-            {showAccessCode && (
-              <div className="border-t border-[#F0E7DB] px-4 pb-4 pt-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={accessCode}
-                    onChange={(event) => setAccessCode(event.target.value.toUpperCase())}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") activateAccessCode();
-                    }}
-                    placeholder="Ex. PROMOMELANIE"
-                    className="min-w-0 flex-1 rounded-xl border border-[#E7DCCB] bg-[#FFFCF7] px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-[#3F3B35] outline-none transition focus:border-[#8FA173] focus:ring-2 focus:ring-[#8FA173]/20"
-                    disabled={Boolean(loadingType)}
-                  />
-
-                  <button
-                    type="button"
-                    onClick={activateAccessCode}
-                    disabled={Boolean(loadingType)}
-                    className="rounded-xl bg-[#3F3B35] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {loadingType === "code" ? "..." : "Activer"}
-                  </button>
-                </div>
-
-                <p className="mt-2 text-xs leading-5 text-[#8A8178]">
-                  Le code promo active un espace principal Famille+ dans DynamoDB, sans sélectionner de forfait Stripe.
-                </p>
-              </div>
-            )}
+            <p className="mt-2 text-xs leading-5 text-[#8A8178]">
+              Ce code est unique, associé à votre adresse courriel et lie votre profil au compte principal qui vous a invité.
+            </p>
           </div>
+        )}
 
-          <div className="rounded-2xl border border-[#E7DCCB] bg-white">
-            <button
-              type="button"
-              onClick={() => {
-                setShowGuestCode((current) => !current);
-                setError("");
-              }}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            >
-              <span className="flex items-center gap-2 text-sm font-bold text-[#3F3B35]">
-                <KeyRound className="h-4 w-4 text-[#8FA173]" />
-                J’ai un code invité reçu par courriel
-              </span>
+        <div className="mx-auto mt-5 max-w-xl rounded-2xl border border-[#E7DCCB] bg-white">
+          <button
+            type="button"
+            onClick={() => {
+              setShowAccessCode((current) => !current);
+              setError("");
+            }}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-bold text-[#3F3B35]">
+              <KeyRound className="h-4 w-4 text-[#8FA173]" />
+              J’ai un code promo Camelio
+            </span>
 
-              <span className="text-[#8A8178]">
-                {showGuestCode ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </span>
-            </button>
+            <span className="text-[#8A8178]">
+              {showAccessCode ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </span>
+          </button>
 
-            {showGuestCode && (
-              <div className="border-t border-[#F0E7DB] px-4 pb-4 pt-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={guestCode}
-                    onChange={(event) => setGuestCode(event.target.value.toUpperCase())}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") activateGuestCode();
-                    }}
-                    placeholder="Ex. INV-ABC12345"
-                    className="min-w-0 flex-1 rounded-xl border border-[#E7DCCB] bg-[#FFFCF7] px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-[#3F3B35] outline-none transition focus:border-[#8FA173] focus:ring-2 focus:ring-[#8FA173]/20"
-                    disabled={Boolean(loadingType)}
-                  />
+          {showAccessCode && (
+            <div className="border-t border-[#F0E7DB] px-4 pb-4 pt-3">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={accessCode}
+                  onChange={(event) => setAccessCode(event.target.value.toUpperCase())}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") activateAccessCode();
+                  }}
+                  placeholder="Ex. PROMOMELANIE"
+                  className="min-w-0 flex-1 rounded-xl border border-[#E7DCCB] bg-[#FFFCF7] px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-[#3F3B35] outline-none transition focus:border-[#8FA173] focus:ring-2 focus:ring-[#8FA173]/20"
+                  disabled={Boolean(loadingType)}
+                />
 
-                  <button
-                    type="button"
-                    onClick={activateGuestCode}
-                    disabled={Boolean(loadingType)}
-                    className="rounded-xl bg-[#3F3B35] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {loadingType === "guest-code" ? "..." : "Associer"}
-                  </button>
-                </div>
-
-                <p className="mt-2 text-xs leading-5 text-[#8A8178]">
-                  Ce code est unique, associé à votre adresse courriel et lie votre compte au compte principal qui vous a invité.
-                </p>
+                <button
+                  type="button"
+                  onClick={activateAccessCode}
+                  disabled={Boolean(loadingType)}
+                  className="rounded-xl bg-[#3F3B35] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingType === "code" ? "Activation..." : "Activer"}
+                </button>
               </div>
-            )}
-          </div>
+
+              <p className="mt-2 text-xs leading-5 text-[#8A8178]">
+                Le code promo active un espace principal Famille+ dans DynamoDB, sans sélectionner de forfait Stripe.
+              </p>
+            </div>
+          )}
         </div>
 
         <p className="mt-4 text-center text-xs leading-5 text-[#8A8178]">
