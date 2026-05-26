@@ -1336,56 +1336,71 @@ export default function Dashboard({
                               const photo = child.image || child.photo || "";
                               const initials = getInitials(child);
                               const childTheme = getChildColorTheme(child.color);
+                              const floatDelay = index * 0.45;
+                              const floatDuration = 4.8 + (index % 3) * 0.7;
+                              const floatAmplitude = index % 2 === 0 ? -7 : 7;
 
                               return (
-                                <button
+                                <motion.button
                                   key={child.id || child.name}
                                   type="button"
                                   onClick={() => openSection("children")}
-                                  className={`group relative isolate flex w-[118px] shrink-0 flex-col items-center ${
-                                    index === 0 ? "" : "-ml-7 sm:-ml-8 md:-ml-9"
+                                  className={`group relative isolate flex w-[118px] shrink-0 items-center justify-center pb-4 sm:w-[138px] md:w-[156px] ${
+                                    index === 0 ? "" : "-ml-7 sm:-ml-9 md:-ml-11"
                                   }`}
+                                  style={{ zIndex: children.length + index }}
+                                  animate={{
+                                    y: [0, floatAmplitude, 0, -floatAmplitude * 0.45, 0],
+                                    rotate: [0, index % 2 === 0 ? -1.2 : 1.2, 0, index % 2 === 0 ? 0.8 : -0.8, 0],
+                                  }}
+                                  transition={{
+                                    duration: floatDuration,
+                                    delay: floatDelay,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                  }}
+                                  whileHover={{ y: -8, scale: 1.035 }}
+                                  whileTap={{ scale: 0.98 }}
                                 >
                                   <div
-                                    className="relative z-10 flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03] sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+                                    className="relative flex h-[112px] w-[112px] items-center justify-center overflow-visible rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
                                     style={{
                                       backgroundColor: childTheme.soft,
                                       color: childTheme.text,
-                                      zIndex: children.length + index,
                                     }}
                                   >
-                                    {photo ? (
-                                      <PhotoImage
-                                        src={photo}
-                                        alt={child.name}
-                                        position={child.photoPosition}
-                                        zoom={child.photoZoom || 1}
-                                        className="h-full w-full"
-                                      />
-                                    ) : initials ? (
-                                      initials
-                                    ) : (
-                                      <UserRound className="h-10 w-10" />
-                                    )}
-                                  </div>
+                                    <div className="absolute inset-0 overflow-hidden rounded-full">
+                                      {photo ? (
+                                        <PhotoImage
+                                          src={photo}
+                                          alt={child.name}
+                                          position={child.photoPosition}
+                                          zoom={child.photoZoom || 1}
+                                          className="h-full w-full"
+                                        />
+                                      ) : initials ? (
+                                        <div className="flex h-full w-full items-center justify-center">
+                                          {initials}
+                                        </div>
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center">
+                                          <UserRound className="h-10 w-10" />
+                                        </div>
+                                      )}
+                                    </div>
 
-                                  <div
-                                    className={`relative z-50 -mt-3 min-w-[104px] max-w-[112px] rounded-[14px] px-4 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:-mt-4 sm:min-w-[118px] sm:max-w-[132px] sm:rounded-[16px] sm:text-lg md:-mt-5 md:min-w-[126px] md:text-xl ${
-                                      index === 0
-                                        ? "-translate-x-3 sm:-translate-x-4"
-                                        : index === 1
-                                          ? "translate-x-3 sm:translate-x-4"
-                                          : ""
-                                    }`}
-                                    style={{
-                                      backgroundColor: childTheme.dot,
-                                    }}
-                                  >
-                                    <span className="relative z-50 block truncate">
-                                      {child.name}
-                                    </span>
+                                    <div
+                                      className="absolute left-1/2 bottom-[-15px] z-20 w-[104px] -translate-x-1/2 rounded-[14px] px-3 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:bottom-[-17px] sm:w-[118px] sm:rounded-[16px] sm:text-lg md:bottom-[-18px] md:w-[128px] md:text-xl"
+                                      style={{
+                                        backgroundColor: childTheme.dot,
+                                      }}
+                                    >
+                                      <span className="block truncate">
+                                        {child.name}
+                                      </span>
+                                    </div>
                                   </div>
-                                </button>
+                                </motion.button>
                               );
                             })}
                           </div>
