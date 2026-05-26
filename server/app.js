@@ -1777,25 +1777,74 @@ app.get(
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      const email = normalizeInviteeEmail(req.query.email || "");
+      const email = String(req.query.email || "").trim().toLowerCase();
 
       if (!email || !email.includes("@")) {
         return res.status(400).json({
           success: false,
+          found: false,
           error: "invalid_email",
-          message: "Ajoutez un courriel valide pour rechercher l’utilisateur.",
+          message: "Courriel invalide.",
         });
       }
 
-      const user = await findCamelioUserByEmail(email);
+      const result = await dynamo.send(
+        new ScanCommand({
+          TableName: DYNAMODB_TABLE,
+          FilterExpression:
+            "(#type = :profileType OR #type = :userInviteType) AND email = :email",
+          ExpressionAttributeNames: {
+            "#type": "type",
+          },
+          ExpressionAttributeValues: {
+            ":profileType": "profile",
+            ":userInviteType": "userInvite",
+            ":email": email,
+          },
+        })
+      );
+
+      const profile = (result.Items || []).find((item) => {
+        return String(item.email || "").trim().toLowerCase() === email;
+      });
+
+      if (!profile) {
+        return res.json({
+          success: true,
+          found: false,
+          user: null,
+          message: "Aucun compte Camelio trouvé avec ce courriel.",
+        });
+      }
+
+      const userId =
+        profile.cognitoSub ||
+        profile.userId ||
+        String(profile.PK || "").replace("USER#", "");
 
       return res.json({
         success: true,
-        found: Boolean(user),
-        user,
+        found: true,
+        user: {
+          userId,
+          email: profile.email || email,
+          name:
+            profile.name ||
+            profile.displayName ||
+            profile.given_name ||
+            "",
+          source: "profile",
+        },
       });
     } catch (error) {
-      next(error);
+      console.error("Erreur recherche utilisateur partage:", error);
+
+      return res.status(500).json({
+        success: false,
+        found: false,
+        error: "user_search_failed",
+        message: error?.message || "Erreur serveur.",
+      });
     }
   }
 );
@@ -2150,13 +2199,12 @@ app.post(
     } catch (error) {
       console.error("Erreur création invitation Camelio:", error);
 
-      return res.status(500).json({
-        error: "profile_share_creation_failed",
-        shareCreated: Boolean(share),
-        share,
-        message: error?.message || "L’invitation n’a pas pu être créée.",
-        details: error?.message || null,
-      });
+      return res.json({
+  success: true,
+  found: false,
+  user: null,
+  message: "Aucun compte Camelio trouvé avec ce courriel.",
+});
     }
   }
 );

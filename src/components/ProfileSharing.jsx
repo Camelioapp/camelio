@@ -315,59 +315,77 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   }
 
   async function searchUserByEmail() {
-    if (!canSearch) {
-      setWizardProblem("Ajoute un courriel valide avant de rechercher.");
+  if (!canSearch) {
+    setWizardProblem("Ajoute un courriel valide avant de rechercher.");
+    return;
+  }
+
+  try {
+    setSearchStatus("loading");
+    setWizardMessage("");
+    setWizardError("");
+    setFoundUser(null);
+    setSelectedUser(null);
+
+    const cleanEmail = searchEmail.trim().toLowerCase();
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/profile-shares/users/search?email=${encodeURIComponent(
+        cleanEmail
+      )}`,
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    // Cas normal : aucun utilisateur trouvé
+    if (
+      response.status === 404 ||
+      data?.found === false ||
+      data?.error === "user_not_found"
+    ) {
+      setSearchStatus("not-found");
+      setWizardStep(2);
+      setWizardMessage("");
+      setWizardError("");
+      setSearchName("");
       return;
     }
 
-    try {
-      setSearchStatus("loading");
-      setWizardMessage("");
-      setWizardError("");
-      setFoundUser(null);
-      setSelectedUser(null);
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/profile-shares/users/search?email=${encodeURIComponent(
-          searchEmail.trim().toLowerCase()
-        )}`,
-        {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        }
-      );
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(
-          data?.message || "Impossible de rechercher cet utilisateur."
-        );
-      }
-
-      if (data?.found && data?.user) {
-        setFoundUser(data.user);
-        setSelectedUser(data.user);
-        setSearchName(data.user.name || "");
-        setSearchStatus("found");
-        setWizardStep(2);
-        setWizardInfo("Utilisateur trouvé. Vous pouvez continuer.");
-      } else {
-        setSearchStatus("not-found");
-        setWizardStep(2);
-        setWizardProblem(
-          "Aucun compte Camelio trouvé avec ce courriel. La personne doit créer un compte avant de recevoir un accès."
-        );
-      }
-    } catch (error) {
-      console.error("Erreur recherche utilisateur:", error);
-      setSearchStatus("error");
-      setWizardProblem(
-        error?.message || "Impossible de rechercher cet utilisateur."
+    if (!response.ok) {
+      throw new Error(
+        data?.message || "Impossible de rechercher cet utilisateur."
       );
     }
+
+    if (data?.found && data?.user) {
+      setFoundUser(data.user);
+      setSelectedUser(data.user);
+      setSearchName(data.user.name || "");
+      setSearchStatus("found");
+      setWizardStep(2);
+      setWizardInfo("Utilisateur trouvé. Vous pouvez continuer.");
+      return;
+    }
+
+    // Cas normal : réponse OK, mais aucun compte
+    setSearchStatus("not-found");
+    setWizardStep(2);
+    setWizardMessage("");
+    setWizardError("");
+    setSearchName("");
+  } catch (error) {
+    console.error("Erreur recherche utilisateur:", error);
+    setSearchStatus("error");
+    setWizardProblem(
+      error?.message || "Impossible de rechercher cet utilisateur."
+    );
   }
+}
 
   async function inviteToCreateAccount() {
     try {
@@ -733,14 +751,19 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
           ) : (
             <div className="rounded-3xl border border-[#EADFCF] bg-white p-5">
               <h3 className="text-lg font-bold text-[#4F4A45]">
-                Aucun compte trouvé
-              </h3>
+  Aucun compte Camelio trouvé
+</h3>
 
-              <p className="mt-2 text-sm leading-6 text-[#7D756E]">
-                La personne doit d’abord avoir un compte Camelio. Tu peux lui
-                envoyer une invitation à créer son compte, ou créer un compte
-                Cognito pour elle.
-              </p>
+<p className="mt-2 text-sm leading-6 text-[#7D756E]">
+  Aucun utilisateur n’a été trouvé avec ce courriel. La personne doit d’abord
+  avoir un compte Camelio avant que tu puisses lui donner un accès partagé.
+</p>
+
+<p className="mt-2 text-sm leading-6 text-[#7D756E]">
+  Tu peux lui envoyer une invitation à créer son compte, ou créer le compte
+  pour elle. Une fois le compte créé, tu pourras le rechercher à nouveau et le
+  sélectionner.
+</p>
 
               <label className="mt-4 block text-sm font-semibold text-[#4F4A45]">
                 Nom de la personne, optionnel
