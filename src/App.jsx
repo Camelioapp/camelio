@@ -32,6 +32,7 @@ function saveTokenIfPresent() {
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
+
   const [auth, setAuth] = useState({
     authenticated: false,
     user: null,
@@ -89,7 +90,12 @@ export default function App() {
       }
     } catch (error) {
       console.error("Erreur vérification session:", error);
-      setAuth({ authenticated: false, user: null, referralCode: null });
+
+      setAuth({
+        authenticated: false,
+        user: null,
+        referralCode: null,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -133,11 +139,6 @@ export default function App() {
   }
 
   const invitationToken = getTokenFromUrl() || getSavedInvitationToken();
-
-  if (path === "/" && !auth.authenticated) {
-    window.history.replaceState(null, "", "/accueil");
-    return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
-  }
 
   if (path === "/invitation") {
     return (
@@ -188,7 +189,6 @@ export default function App() {
   }
 
   if (!auth.authenticated) {
-    window.history.replaceState(null, "", "/accueil");
     return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
   }
 
