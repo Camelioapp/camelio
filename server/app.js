@@ -3082,6 +3082,107 @@ app.get(
   }
 );
 
+
+app.delete(
+  "/api/profile-shares/imported/:shareId",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const shareId = String(req.params.shareId || "").trim();
+      const confirmation = String(req.body?.confirmation || "")
+        .trim()
+        .toLowerCase();
+
+      if (!shareId) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_share_id",
+          message: "L’accès invité est introuvable.",
+        });
+      }
+
+      if (confirmation !== "retirer") {
+        return res.status(400).json({
+          success: false,
+          error: "invalid_confirmation",
+          message: "Veuillez inscrire le mot retirer pour confirmer.",
+        });
+      }
+
+      const userPk = getUserPk(req);
+      const now = new Date().toISOString();
+
+      const existingResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: userPk,
+            SK: `IMPORTED_SHARE#${shareId}`,
+          },
+        })
+      );
+
+      if (!existingResult.Item || existingResult.Item.status === "revoked") {
+        return res.status(404).json({
+          success: false,
+          error: "guest_access_not_found",
+          message: "Cet accès invité est déjà retiré ou introuvable.",
+        });
+      }
+
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: userPk,
+            SK: `IMPORTED_SHARE#${shareId}`,
+          },
+          UpdateExpression:
+            "SET #status = :status, removedAt = :removedAt, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":status": "revoked",
+            ":removedAt": now,
+            ":updatedAt": now,
+          },
+          ReturnValues: "NONE",
+        })
+      );
+
+      const principalAccountId = `principal-${req.session.user.sub}`;
+
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: userPk,
+            SK: "PROFILE",
+          },
+          UpdateExpression:
+            "SET activeAccountId = :activeAccountId, updatedAt = :updatedAt",
+          ExpressionAttributeValues: {
+            ":activeAccountId": principalAccountId,
+            ":updatedAt": now,
+          },
+          ReturnValues: "NONE",
+        })
+      );
+
+      return res.json({
+        success: true,
+        message: "Votre accès invité a été retiré.",
+        activeAccountId: principalAccountId,
+        redirectUrl: "/",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 app.get(
   "/api/children",
   requireAuth,

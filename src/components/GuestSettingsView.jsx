@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   LogOut,
   Settings,
@@ -6,6 +6,7 @@ import {
   Trash2,
   X,
   AlertTriangle,
+  UserRound,
 } from "lucide-react";
 
 const API_BASE_URL =
@@ -26,48 +27,81 @@ export default function GuestSettingsView({
   userEmail = "",
   onBack = () => {},
 }) {
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [confirmation, setConfirmation] = useState("");
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
+  const [removeLoading, setRemoveLoading] = useState(false);
+  const [removeError, setRemoveError] = useState("");
+
+  const invitedByName = useMemo(() => {
+    return String(
+      sharedProfile?.sourceOwnerName ||
+        sharedProfile?.ownerName ||
+        sharedProfile?.sharedByName ||
+        ""
+    ).trim();
+  }, [sharedProfile]);
+
+  const invitedByEmail = useMemo(() => {
+    return String(
+      sharedProfile?.sourceOwnerEmail ||
+        sharedProfile?.ownerEmail ||
+        sharedProfile?.sharedByEmail ||
+        ""
+    ).trim();
+  }, [sharedProfile]);
+
+  const invitedByLabel =
+    invitedByName || invitedByEmail || "la personne qui vous a invité";
+
+  const shareId = String(sharedProfile?.id || sharedProfile?.shareId || "").trim();
 
   const handleLogout = () => {
     window.location.href = `${API_BASE_URL}/logout`;
   };
 
-  const handleDeleteAccount = async () => {
-    try {
-      setDeleteLoading(true);
-      setDeleteError("");
+  const handleRemoveGuestAccess = async () => {
+    if (!shareId) {
+      setRemoveError(
+        "Impossible de retrouver l’accès invité à retirer. Déconnectez-vous, puis reconnectez-vous avant de réessayer."
+      );
+      return;
+    }
 
-      const response = await fetch(`${API_BASE_URL}/api/account`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          confirmation,
-        }),
-      });
+    try {
+      setRemoveLoading(true);
+      setRemoveError("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile-shares/imported/${encodeURIComponent(
+          shareId
+        )}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            confirmation,
+          }),
+        }
+      );
 
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
-          data.message || data.error || "Impossible de supprimer le compte."
+          data.message || data.error || "Impossible de retirer cet accès invité."
         );
       }
 
-      localStorage.clear();
-
-      window.location.href = data.redirectUrl || "https://camelio.app";
+      window.location.href = data.redirectUrl || "/";
     } catch (error) {
-      setDeleteError(
-        error.message || "Une erreur est survenue lors de la suppression."
+      setRemoveError(
+        error.message || "Une erreur est survenue lors du retrait de l’accès invité."
       );
     } finally {
-      setDeleteLoading(false);
+      setRemoveLoading(false);
     }
   };
 
@@ -120,20 +154,39 @@ export default function GuestSettingsView({
               limités aux sections autorisées par la personne qui vous a invité.
             </p>
 
-            {userEmail ? (
-              <p className="mt-3 break-all rounded-2xl bg-[#FFFDF8] px-4 py-3 text-sm font-semibold text-[#4F4A45] ring-1 ring-[#EADFCF]">
-                {userEmail}
-              </p>
-            ) : null}
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl bg-[#FFFDF8] px-4 py-3 ring-1 ring-[#EADFCF]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                  Connecté avec
+                </p>
 
-            {sharedProfile?.ownerName ? (
-              <p className="mt-3 text-sm text-[#7D756E]">
-                Partagé par :{" "}
-                <span className="font-bold text-[#4F4A45]">
-                  {sharedProfile.ownerName}
-                </span>
-              </p>
-            ) : null}
+                <p className="mt-1 break-all text-sm font-semibold text-[#4F4A45]">
+                  {userEmail || "Courriel non disponible"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-[#FFFDF8] px-4 py-3 ring-1 ring-[#EADFCF]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                  Invité par
+                </p>
+
+                <div className="mt-1 flex items-start gap-2">
+                  <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-[#A8B193]" />
+
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-bold text-[#4F4A45]">
+                      {invitedByLabel}
+                    </p>
+
+                    {invitedByName && invitedByEmail ? (
+                      <p className="mt-0.5 break-all text-xs font-semibold text-[#7D756E]">
+                        {invitedByEmail}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </SimpleCard>
@@ -175,13 +228,13 @@ export default function GuestSettingsView({
             </p>
 
             <p className="mt-1 font-bold text-[#8F4F4F]">
-              Supprimer mon compte
+              Retirer mon compte invité associé à {invitedByLabel}
             </p>
 
             <p className="mt-1 text-sm leading-6 text-[#8F4F4F]">
-              Cette action supprime votre compte de connexion et les données
-              associées à votre utilisateur. Elle ne supprime pas les données du
-              parent qui vous a donné accès.
+              Cette action retire seulement votre accès invité à cet espace
+              partagé. Elle ne supprime pas votre compte de connexion et ne
+              supprime aucune donnée du parent qui vous a donné accès.
             </p>
           </div>
         </div>
@@ -190,17 +243,17 @@ export default function GuestSettingsView({
           type="button"
           onClick={() => {
             setConfirmation("");
-            setDeleteError("");
-            setShowDeleteModal(true);
+            setRemoveError("");
+            setShowRemoveModal(true);
           }}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-[#A94444] bg-white px-4 py-3 text-sm font-bold text-[#A94444] transition hover:bg-[#A94444] hover:text-white"
         >
           <Trash2 className="h-4 w-4" />
-          Supprimer mon compte
+          Retirer mon accès invité
         </button>
       </SimpleCard>
 
-      {showDeleteModal && (
+      {showRemoveModal && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/45 px-4 py-6">
           <div className="w-full max-w-lg rounded-[2rem] bg-white p-5 shadow-2xl ring-1 ring-[#EFE4D6]">
             <div className="flex items-start justify-between gap-4">
@@ -211,20 +264,21 @@ export default function GuestSettingsView({
 
                 <div>
                   <h3 className="text-lg font-bold text-[#8F4F4F]">
-                    Supprimer le compte
+                    Retirer l’accès invité
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-[#5F5A50]">
-                    Cette action est permanente. Pour confirmer, inscrivez
-                    exactement le mot suivant :
+                    Vous êtes sur le point de retirer votre accès invité associé
+                    à <span className="font-bold">{invitedByLabel}</span>.
+                    Cette action ne supprime pas votre compte Camelio.
                   </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => setShowDeleteModal(false)}
-                disabled={deleteLoading}
+                onClick={() => setShowRemoveModal(false)}
+                disabled={removeLoading}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FFF4E4] text-[#3F3D38] ring-1 ring-[#E8D8BE] transition hover:bg-[#F4DFC0] disabled:opacity-50"
                 aria-label="Fermer"
               >
@@ -233,29 +287,33 @@ export default function GuestSettingsView({
             </div>
 
             <div className="mt-4 rounded-2xl border border-[#E8B8B8] bg-[#FFF8F8] p-4">
-              <p className="rounded-xl bg-white px-3 py-2 text-sm font-black text-[#8F4F4F] ring-1 ring-[#E8B8B8]">
-                supprimer
+              <p className="text-sm leading-6 text-[#8F4F4F]">
+                Pour confirmer, inscrivez exactement le mot suivant :
+              </p>
+
+              <p className="mt-2 rounded-xl bg-white px-3 py-2 text-sm font-black text-[#8F4F4F] ring-1 ring-[#E8B8B8]">
+                retirer
               </p>
 
               <input
                 className="mt-3 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]"
                 value={confirmation}
                 onChange={(event) => setConfirmation(event.target.value)}
-                placeholder="Inscrire supprimer"
-                disabled={deleteLoading}
+                placeholder="Inscrire retirer"
+                disabled={removeLoading}
               />
 
-              {deleteError ? (
+              {removeError ? (
                 <p className="mt-3 rounded-2xl bg-[#F8E1E1] px-4 py-3 text-sm font-bold text-[#9A4F4F] ring-1 ring-[#E8B8B8]">
-                  {deleteError}
+                  {removeError}
                 </p>
               ) : null}
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => setShowDeleteModal(false)}
-                  disabled={deleteLoading}
+                  onClick={() => setShowRemoveModal(false)}
+                  disabled={removeLoading}
                   className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#3F3D38] ring-1 ring-[#D8C8AF] transition hover:bg-[#FFF4E4] disabled:opacity-50"
                 >
                   Annuler
@@ -263,16 +321,16 @@ export default function GuestSettingsView({
 
                 <button
                   type="button"
-                  onClick={handleDeleteAccount}
+                  onClick={handleRemoveGuestAccess}
                   disabled={
-                    deleteLoading ||
-                    confirmation.trim().toLowerCase() !== "supprimer"
+                    removeLoading ||
+                    confirmation.trim().toLowerCase() !== "retirer"
                   }
                   className="rounded-2xl bg-[#A94444] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#923A3A] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {deleteLoading
-                    ? "Suppression en cours..."
-                    : "Supprimer définitivement"}
+                  {removeLoading
+                    ? "Retrait en cours..."
+                    : "Retirer définitivement"}
                 </button>
               </div>
             </div>
