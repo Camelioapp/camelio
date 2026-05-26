@@ -140,6 +140,10 @@ export default function App() {
 
   const invitationToken = getTokenFromUrl() || getSavedInvitationToken();
 
+  if (path === "/accueil") {
+    return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
+  }
+
   if (path === "/invitation") {
     return (
       <Invitation
@@ -170,10 +174,6 @@ export default function App() {
     );
   }
 
-  if (path === "/accueil") {
-    return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
-  }
-
   if (path === "/login") {
     if (!auth.authenticated) {
       return <Login onLogin={goToLogin} onSignup={goToSignup} />;
@@ -189,7 +189,7 @@ export default function App() {
   }
 
   if (!auth.authenticated) {
-    return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
+    return <Login onLogin={goToLogin} onSignup={goToSignup} />;
   }
 
   return (
