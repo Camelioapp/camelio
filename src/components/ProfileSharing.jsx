@@ -592,17 +592,30 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
         }
       );
 
-      const data = await response.json().catch(() => null);
+      const responseText = await response.text();
 
-      if (!response.ok) {
-        throw new Error(
-          data?.message ||
-            data?.error ||
-            (isEditing
-              ? "Impossible de modifier le partage."
-              : "Impossible de créer le partage.")
-        );
-      }
+let data = {};
+try {
+  data = responseText ? JSON.parse(responseText) : {};
+} catch {
+  data = { rawResponse: responseText };
+}
+
+if (!response.ok) {
+  console.error("Erreur sauvegarde partage:", {
+    status: response.status,
+    statusText: response.statusText,
+    url: response.url,
+    data,
+  });
+
+  throw new Error(
+    data?.message ||
+      data?.error ||
+      data?.rawResponse ||
+      `Erreur ${response.status} pendant l’enregistrement du partage.`
+  );
+}
 
       if (data?.share) {
         setShares((current) => [
