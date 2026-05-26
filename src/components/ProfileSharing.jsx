@@ -816,16 +816,6 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
                   <UserPlus className="h-4 w-4" />
                   Créer le compte pour elle
                 </button>
-
-                <button
-                  type="button"
-                  onClick={searchUserByEmail}
-                  disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Rechercher à nouveau
-                </button>
               </div>
             </div>
           )}
