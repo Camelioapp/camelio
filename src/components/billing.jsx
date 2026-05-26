@@ -33,12 +33,17 @@ function ProductDisplay() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(
-          data.message ||
-            data.error ||
-            `Impossible de créer la session Stripe. Code : ${response.status}`
-        );
-      }
+  console.error("Erreur backend abonnement:", {
+    status: response.status,
+    data,
+  });
+
+  throw new Error(
+    data.message ||
+      data.error ||
+      `Erreur serveur. Code HTTP : ${response.status}`
+  );
+}
 
       if (!data.url) {
         throw new Error("Aucune URL Stripe reçue.");
