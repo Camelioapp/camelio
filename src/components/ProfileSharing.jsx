@@ -992,33 +992,19 @@ if (!response.ok) {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-[#EADFCF] bg-white p-5">
-            <label className="text-sm font-semibold text-[#4F4A45]">
-              Message de confirmation, optionnel
-            </label>
-
-            <textarea
-              className="mt-2 min-h-[120px] w-full rounded-3xl border border-[#EADFCF] px-4 py-3 text-sm outline-none focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Ex. Je t’ai donné accès au calendrier et aux documents importants."
-            />
-          </div>
-
           <div className="flex justify-end">
             <button
-              type="button"
-              onClick={createShare}
-              disabled={!canChooseAccess || isSaving}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-              {isSaving
-                ? "Enregistrement..."
-                : editingShareId
-                  ? "Enregistrer les modifications"
-                  : "Créer le partage"}
-            </button>
+  type="button"
+  onClick={createShare}
+  disabled={!canChooseAccess || isSaving}
+  className="inline-flex items-center justify-center rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+>
+  {isSaving
+    ? "Enregistrement..."
+    : editingShareId
+      ? "Enregistrer les modifications"
+      : "Créer le partage"}
+</button>
           </div>
         </div>
       );
