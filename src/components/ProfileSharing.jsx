@@ -4,7 +4,6 @@ import {
   ChevronDown,
   Copy,
   Eye,
-  Mail,
   Pencil,
   Search,
   Send,
