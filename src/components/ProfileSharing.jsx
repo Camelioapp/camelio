@@ -847,7 +847,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
                   disabled={isSaving}
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                 >
-                  <Mail className="h-4 w-4" />
+                
                   Inviter à créer un compte
                 </button>
 
