@@ -3,7 +3,9 @@ import {
   CheckCircle2,
   Loader2,
   LockKeyhole,
+  Home,
   LogIn,
+  LogOut,
   UserPlus,
 } from "lucide-react";
 
@@ -181,6 +183,16 @@ export default function Invitation({
     window.location.href = `${API_BASE_URL}/signup`;
   }
 
+  function handleGoToDashboard() {
+    clearInvitationToken();
+    window.location.href = "/";
+  }
+
+  function handleLogout() {
+    clearInvitationToken();
+    window.location.href = `${API_BASE_URL}/logout`;
+  }
+
   const invitedEmail = invitation?.inviteeEmail || "";
   const connectedEmail = user?.email || "";
   const childrenNames = (invitation?.children || [])
@@ -191,24 +203,48 @@ export default function Invitation({
   return (
     <div className="relative z-10 min-h-screen bg-[#fbf7ef] px-4 py-10 text-[#4f4a45]">
       <div className="relative z-20 mx-auto max-w-2xl rounded-[32px] border border-[#eadfcf] bg-[#fffdf8] p-6 shadow-sm md:p-8">
-        <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#eef0e7] text-[#8f9874]">
-            <LockKeyhole className="h-7 w-7" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#eef0e7] text-[#8f9874]">
+              <LockKeyhole className="h-7 w-7" />
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a8b193]">
+                Invitation Camelio
+              </p>
+
+              <h1 className="mt-1 text-2xl font-bold text-[#4f4a45]">
+                Vous avez reçu un accès partagé
+              </h1>
+
+              <p className="mt-3 text-sm leading-6 text-[#6f685f]">
+                Ce petit assistant vous guide pour créer ou utiliser un compte
+                Camelio, puis activer uniquement les sections partagées avec vous.
+              </p>
+            </div>
           </div>
 
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a8b193]">
-              Invitation Camelio
-            </p>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+            {authenticated ? (
+              <button
+                type="button"
+                onClick={handleGoToDashboard}
+                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#a8b193] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-95"
+              >
+                <Home className="h-4 w-4" />
+                Tableau de bord
+              </button>
+            ) : null}
 
-            <h1 className="mt-1 text-2xl font-bold text-[#4f4a45]">
-              Vous avez reçu un accès partagé
-            </h1>
-
-            <p className="mt-3 text-sm leading-6 text-[#6f685f]">
-              Ce petit assistant vous guide pour créer ou utiliser un compte
-              Camelio, puis activer uniquement les sections partagées avec vous.
-            </p>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#eadfcf] bg-white px-4 py-2 text-xs font-bold text-[#7d756e] shadow-sm transition hover:bg-[#faf4ec]"
+            >
+              <LogOut className="h-4 w-4" />
+              Me déconnecter
+            </button>
           </div>
         </div>
 
@@ -263,6 +299,28 @@ export default function Invitation({
         {error ? (
           <div className="mt-8 rounded-3xl border border-[#f1c9c9] bg-[#fff0ef] p-5 text-sm font-semibold text-[#b9544a]">
             {error}
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              {authenticated ? (
+                <button
+                  type="button"
+                  onClick={handleGoToDashboard}
+                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#a8b193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                >
+                  <Home className="h-4 w-4" />
+                  Aller au tableau de bord
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#f1c9c9] bg-white px-5 py-3 text-sm font-bold text-[#b9544a] shadow-sm transition hover:bg-[#fff7f7]"
+              >
+                <LogOut className="h-4 w-4" />
+                Me déconnecter
+              </button>
+            </div>
           </div>
         ) : null}
 
