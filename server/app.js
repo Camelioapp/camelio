@@ -736,6 +736,73 @@ async function getCurrentUserProfile(req) {
   return result.Item || null;
 }
 
+async function getSourceProfileShareForImportedShare(importedShare) {
+  if (!importedShare?.sourceOwnerUserId || !importedShare?.sourceShareId) {
+    return null;
+  }
+
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: DYNAMODB_TABLE,
+      Key: {
+        PK: `USER#${importedShare.sourceOwnerUserId}`,
+        SK: `SHARE#${importedShare.sourceShareId}`,
+      },
+    })
+  );
+
+  return result.Item || null;
+}
+
+async function revokeImportedShareLocally(importedShare, reason = "owner_revoked") {
+  if (!importedShare?.PK || !importedShare?.SK || importedShare.status === "revoked") {
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: importedShare.PK,
+          SK: importedShare.SK,
+        },
+        UpdateExpression:
+          "SET #status = :status, revokedAt = :revokedAt, revokedReason = :revokedReason, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "revoked",
+          ":revokedAt": now,
+          ":revokedReason": reason,
+          ":updatedAt": now,
+        },
+        ReturnValues: "NONE",
+      })
+    );
+  } catch (error) {
+    console.warn("Impossible de révoquer localement l’accès invité:", error?.message || error);
+  }
+}
+
+async function isImportedShareStillActive(importedShare) {
+  if (!importedShare || importedShare.status === "revoked") {
+    return false;
+  }
+
+  const sourceShare = await getSourceProfileShareForImportedShare(importedShare);
+
+  if (!sourceShare || sourceShare.status === "revoked") {
+    await revokeImportedShareLocally(importedShare, "owner_revoked");
+    return false;
+  }
+
+  return true;
+}
+
 async function getActiveImportedShare(req) {
   const profile = await getCurrentUserProfile(req);
   const activeAccountId = String(profile?.activeAccountId || "");
@@ -762,7 +829,7 @@ async function getActiveImportedShare(req) {
 
   const share = result.Item || null;
 
-  if (!share || share.status === "revoked") {
+  if (!(await isImportedShareStillActive(share))) {
     return null;
   }
 
@@ -784,9 +851,20 @@ function getShareSectionPermission(share, sectionId) {
 }
 
 async function getDataAccessContext(req, sectionId, requiredPermission = "read") {
+  const profile = await getCurrentUserProfile(req);
+  const activeAccountId = String(profile?.activeAccountId || "");
   const share = await getActiveImportedShare(req);
 
   if (!share) {
+    if (isGuestAccountId(activeAccountId)) {
+      const error = new Error(
+        "Cet accès invité a été retiré ou révoqué. Sélectionnez un autre compte ou demandez une nouvelle invitation."
+      );
+      error.statusCode = 403;
+      error.errorCode = "guest_access_revoked";
+      throw error;
+    }
+
     return {
       isGuest: false,
       dataPk: getUserPk(req),
@@ -2590,10 +2668,7 @@ app.post(
       const now = new Date().toISOString();
       const shareId = req.body.id || randomUUID();
       const invitationToken = randomUUID();
-      const providedGuestAccessCode = String(req.body?.guestAccessCode || "")
-        .trim()
-        .toUpperCase();
-      const guestAccessCode = providedGuestAccessCode || (await generateUniqueGuestAccessCode());
+      const guestAccessCode = await generateUniqueGuestAccessCode();
       const invitationExpiresAt = createInvitationExpiry();
       const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
@@ -3283,9 +3358,32 @@ app.patch(
         })
       );
 
+      const revokedShare = result.Attributes;
+
+      if (revokedShare?.importedByUserId) {
+        const importedResult = await dynamo.send(
+          new QueryCommand({
+            TableName: DYNAMODB_TABLE,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            FilterExpression: "sourceShareId = :sourceShareId",
+            ExpressionAttributeValues: {
+              ":pk": `USER#${revokedShare.importedByUserId}`,
+              ":sk": "IMPORTED_SHARE#",
+              ":sourceShareId": shareId,
+            },
+          })
+        );
+
+        await Promise.all(
+          (importedResult.Items || []).map((importedShare) =>
+            revokeImportedShareLocally(importedShare, "owner_revoked")
+          )
+        );
+      }
+
       return res.json({
         success: true,
-        share: result.Attributes,
+        share: revokedShare,
         message: "L’accès partagé a été révoqué.",
       });
     } catch (error) {
@@ -3698,9 +3796,17 @@ app.get(
         storageGb: Number(subscription?.storageGb) || Number(STRIPE_STORAGE_GB) || 5,
       };
 
-      const guestShares = (importedSharesResult.Items || [])
-        .filter((share) => share.status !== "revoked")
-        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      const activeGuestShares = [];
+
+      for (const share of importedSharesResult.Items || []) {
+        if (await isImportedShareStillActive(share)) {
+          activeGuestShares.push(share);
+        }
+      }
+
+      const guestShares = activeGuestShares.sort((a, b) =>
+        String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
+      );
 
       const guestAccounts = await Promise.all(
         guestShares.map(async (share, index) => {
