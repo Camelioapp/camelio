@@ -197,13 +197,23 @@ export default function SubscriptionPopup({
         );
       }
 
+      if (data?.activeAccountId) {
+        try {
+          localStorage.setItem("camelio_active_account_id", data.activeAccountId);
+        } catch (storageError) {
+          console.warn("Impossible de mémoriser le compte invité actif:", storageError);
+        }
+      }
+
       setHasAccess(true);
-      setSuccessMessage(data.message || "Votre accès invité est maintenant associé à votre compte.");
+      setSuccessMessage(
+        data.message || "Votre accès invité est maintenant associé à votre compte partagé."
+      );
 
       setTimeout(() => {
         onClose();
-        window.location.reload();
-      }, 800);
+        window.location.replace("/");
+      }, 900);
     } catch (err) {
       console.error("Erreur activation code invité:", err);
       setError(err.message || "Impossible d’associer ce code invité.");

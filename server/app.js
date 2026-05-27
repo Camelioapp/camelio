@@ -803,26 +803,48 @@ async function isImportedShareStillActive(importedShare) {
   return true;
 }
 
-async function getActiveImportedShare(req) {
-  const profile = await getCurrentUserProfile(req);
-  const activeAccountId = String(profile?.activeAccountId || "");
+async function setActiveGuestAccountId(req, importedShareId = "") {
+  const cleanImportedShareId = String(importedShareId || "").trim();
 
-  if (!isGuestAccountId(activeAccountId)) {
-    return null;
+  if (!cleanImportedShareId) return;
+
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: getUserPk(req),
+          SK: "PROFILE",
+        },
+        UpdateExpression:
+          "SET activeAccountId = :activeAccountId, welcomeCompleted = :welcomeCompleted, updatedAt = :updatedAt",
+        ExpressionAttributeValues: {
+          ":activeAccountId": `guest-${cleanImportedShareId}`,
+          ":welcomeCompleted": true,
+          ":updatedAt": new Date().toISOString(),
+        },
+        ReturnValues: "NONE",
+      })
+    );
+  } catch (error) {
+    console.warn(
+      "Impossible de définir le compte invité actif:",
+      error?.message || error
+    );
   }
+}
 
-  const importedShareId = getImportedShareIdFromAccountId(activeAccountId);
+async function getImportedShareByIdForUserPk(userPk, importedShareId = "") {
+  const cleanImportedShareId = String(importedShareId || "").trim();
 
-  if (!importedShareId) {
-    return null;
-  }
+  if (!cleanImportedShareId) return null;
 
   const result = await dynamo.send(
     new GetCommand({
       TableName: DYNAMODB_TABLE,
       Key: {
-        PK: getUserPk(req),
-        SK: `IMPORTED_SHARE#${importedShareId}`,
+        PK: userPk,
+        SK: `IMPORTED_SHARE#${cleanImportedShareId}`,
       },
     })
   );
@@ -834,6 +856,76 @@ async function getActiveImportedShare(req) {
   }
 
   return share;
+}
+
+async function getActiveImportedShare(req) {
+  const userPk = getUserPk(req);
+  const profile = await getCurrentUserProfile(req);
+  const activeAccountId = String(profile?.activeAccountId || "");
+
+  if (isGuestAccountId(activeAccountId)) {
+    const importedShareId = getImportedShareIdFromAccountId(activeAccountId);
+    const activeShare = await getImportedShareByIdForUserPk(userPk, importedShareId);
+
+    if (activeShare) return activeShare;
+  }
+
+  const subscriptionResult = await dynamo.send(
+    new GetCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: userPk,
+        SK: "SUBSCRIPTION",
+      },
+    })
+  );
+
+  const subscription = subscriptionResult.Item || null;
+
+  if (subscription?.status === "guest" && subscription?.importedShareId) {
+    const subscriptionShare = await getImportedShareByIdForUserPk(
+      userPk,
+      subscription.importedShareId
+    );
+
+    if (subscriptionShare) {
+      await setActiveGuestAccountId(req, subscriptionShare.id);
+      return subscriptionShare;
+    }
+  }
+
+  const importedSharesResult = await dynamo.send(
+    new QueryCommand({
+      TableName: DYNAMODB_TABLE,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": userPk,
+        ":sk": "IMPORTED_SHARE#",
+      },
+    })
+  );
+
+  const activeShares = [];
+
+  for (const share of importedSharesResult.Items || []) {
+    if (await isImportedShareStillActive(share)) {
+      activeShares.push(share);
+    }
+  }
+
+  activeShares.sort((a, b) =>
+    String(b.importedAt || b.createdAt || "").localeCompare(
+      String(a.importedAt || a.createdAt || "")
+    )
+  );
+
+  const fallbackShare = activeShares[0] || null;
+
+  if (fallbackShare && subscription?.status === "guest") {
+    await setActiveGuestAccountId(req, fallbackShare.id);
+  }
+
+  return fallbackShare;
 }
 
 function getShareSectionPermission(share, sectionId) {
@@ -3753,9 +3845,77 @@ app.post(
       );
 
       if (alreadyImported) {
+        const now = new Date().toISOString();
+        const importedGuestAccountId = alreadyImported?.id
+          ? `guest-${alreadyImported.id}`
+          : "";
+
+        await ensureSubscriptionPlaceholder(req);
+
+        await dynamo.send(
+          new PutCommand({
+            TableName: SUBSCRIPTIONS_TABLE,
+            Item: {
+              PK: getUserPk(req),
+              SK: "SUBSCRIPTION",
+              type: "subscription",
+              userId: req.session.user.sub,
+              email: connectedEmail,
+              status: "guest",
+              plan: null,
+              accountType: "guest",
+              subscriptionRequired: false,
+              source: "guest_invitation_code",
+              guestAccessCode: code,
+              linkedOwnerAccountId: share.ownerUserId || share.sourceOwnerUserId || "",
+              linkedOwnerEmail: share.ownerEmail || share.sourceOwnerEmail || "",
+              linkedOwnerName: share.ownerName || share.sourceOwnerName || "",
+              importedShareId: alreadyImported?.id || "",
+              sourceShareId: share.id || alreadyImported.sourceShareId || "",
+              storageGb: 0,
+              stripeCustomerId: "",
+              stripeSubscriptionId: "",
+              stripeCheckoutSessionId: "",
+              trialEnd: null,
+              trialEndsAt: null,
+              currentPeriodEnd: null,
+              cancelAtPeriodEnd: false,
+              activatedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            },
+          })
+        );
+
+        if (importedGuestAccountId) {
+          await dynamo.send(
+            new UpdateCommand({
+              TableName: DYNAMODB_TABLE,
+              Key: {
+                PK: userPk,
+                SK: "PROFILE",
+              },
+              UpdateExpression:
+                "SET activeAccountId = :activeAccountId, welcomeCompleted = :welcomeCompleted, updatedAt = :updatedAt",
+              ExpressionAttributeValues: {
+                ":activeAccountId": importedGuestAccountId,
+                ":welcomeCompleted": true,
+                ":updatedAt": now,
+              },
+              ReturnValues: "NONE",
+            })
+          );
+        }
+
         return res.json({
           success: true,
-          message: "Ce code invité est déjà associé à votre compte.",
+          message: "Ce code invité est maintenant associé à votre compte partagé.",
+          accountType: "guest",
+          status: "guest",
+          hasAccess: true,
+          reloadAccounts: true,
+          activeAccountId: importedGuestAccountId,
+          importedShareId: alreadyImported?.id || "",
           share: alreadyImported,
         });
       }
@@ -3850,8 +4010,13 @@ app.post(
 
       return res.json({
         success: true,
-        message: "Votre accès invité a été associé à votre compte.",
+        message: "Votre accès invité a été associé à votre compte partagé.",
+        accountType: "guest",
+        status: "guest",
+        hasAccess: true,
+        reloadAccounts: true,
         activeAccountId: importedGuestAccountId,
+        importedShareId: importedShare?.id || "",
         share: importedShare,
       });
     } catch (error) {
@@ -3975,11 +4140,22 @@ app.get(
         (account) => account.accountId === savedActiveAccountId
       );
 
-      const defaultActiveAccountId = savedAccountExists
+      const subscriptionGuestAccount =
+        subscription?.status === "guest"
+          ? guestAccounts.find(
+              (account) =>
+                account.shareId &&
+                String(account.shareId) === String(subscription.importedShareId || "")
+            ) || guestAccounts[0]
+          : null;
+
+      const defaultActiveAccountId = subscriptionGuestAccount
+        ? subscriptionGuestAccount.accountId
+        : savedAccountExists
         ? savedActiveAccountId
         : guestAccounts[0]?.accountId || principalAccount.accountId;
 
-      if (!savedAccountExists && profile.PK && profile.SK) {
+      if ((subscriptionGuestAccount || !savedAccountExists) && profile.PK && profile.SK) {
         try {
           await dynamo.send(
             new UpdateCommand({
