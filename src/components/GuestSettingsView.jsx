@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   LogOut,
   Settings,
@@ -7,6 +7,8 @@ import {
   X,
   AlertTriangle,
   UserRound,
+  Pencil,
+  Save,
 } from "lucide-react";
 
 const API_BASE_URL =
@@ -26,11 +28,22 @@ export default function GuestSettingsView({
   sharedProfile = null,
   userEmail = "",
   onBack = () => {},
+  onUpdated = () => {},
 }) {
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [removeLoading, setRemoveLoading] = useState(false);
   const [removeError, setRemoveError] = useState("");
+  const [shareLabel, setShareLabel] = useState(
+    sharedProfile?.customShareLabel ||
+      sharedProfile?.shareLabel ||
+      sharedProfile?.label ||
+      sharedProfile?.guestAccessCode ||
+      "Accès invité"
+  );
+  const [labelLoading, setLabelLoading] = useState(false);
+  const [labelMessage, setLabelMessage] = useState("");
+  const [labelError, setLabelError] = useState("");
 
   const invitedByName = useMemo(() => {
     return String(
@@ -54,6 +67,67 @@ export default function GuestSettingsView({
     invitedByName || invitedByEmail || "la personne qui vous a invité";
 
   const shareId = String(sharedProfile?.id || sharedProfile?.shareId || "").trim();
+
+  useEffect(() => {
+    setShareLabel(
+      sharedProfile?.customShareLabel ||
+        sharedProfile?.shareLabel ||
+        sharedProfile?.label ||
+        sharedProfile?.guestAccessCode ||
+        "Accès invité"
+    );
+    setLabelMessage("");
+    setLabelError("");
+  }, [
+    sharedProfile?.id,
+    sharedProfile?.customShareLabel,
+    sharedProfile?.shareLabel,
+    sharedProfile?.label,
+    sharedProfile?.guestAccessCode,
+  ]);
+
+  const handleSaveShareLabel = async () => {
+    const cleanLabel = shareLabel.trim();
+
+    if (!sharedProfile?.id) {
+      setLabelError("Cet accès invité est introuvable.");
+      return;
+    }
+
+    if (!cleanLabel) {
+      setLabelError("Inscrivez un nom pour ce partage.");
+      return;
+    }
+
+    try {
+      setLabelLoading(true);
+      setLabelMessage("");
+      setLabelError("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile-shares/imported/${sharedProfile.id}/label`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: cleanLabel }),
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.message || "Impossible de modifier le nom du partage.");
+      }
+
+      setLabelMessage("Le nom du partage a été modifié.");
+      onUpdated();
+    } catch (error) {
+      setLabelError(error.message || "Impossible de modifier le nom du partage.");
+    } finally {
+      setLabelLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     window.location.href = `${API_BASE_URL}/logout`;
@@ -187,6 +261,58 @@ export default function GuestSettingsView({
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </SimpleCard>
+
+      <SimpleCard>
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F4E8F4] text-[#9A7CB0]">
+            <Pencil className="h-5 w-5" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-[#3F3B35]">Nom du partage</p>
+            <p className="mt-1 text-sm leading-6 text-[#6B6258]">
+              Ce nom apparaît dans le sélecteur de compte pour distinguer vos différents accès invités.
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+              <input
+                value={shareLabel}
+                onChange={(event) => {
+                  setShareLabel(event.target.value);
+                  setLabelMessage("");
+                  setLabelError("");
+                }}
+                className="w-full rounded-2xl border border-[#EADFCF] bg-[#FFFDF8] px-4 py-3 text-sm font-semibold text-[#4F4A45] outline-none transition focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]"
+                placeholder="Ex. Famille Emma"
+                maxLength={80}
+                disabled={labelLoading}
+              />
+
+              <button
+                type="button"
+                onClick={handleSaveShareLabel}
+                disabled={labelLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#B5A7C8] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:opacity-60"
+              >
+                <Save className="h-4 w-4" />
+                {labelLoading ? "Enregistrement..." : "Enregistrer"}
+              </button>
+            </div>
+
+            {labelMessage ? (
+              <p className="mt-3 rounded-2xl bg-[#F3F6ED] px-4 py-3 text-sm font-bold text-[#6F785F] ring-1 ring-[#D8E0C7]">
+                {labelMessage}
+              </p>
+            ) : null}
+
+            {labelError ? (
+              <p className="mt-3 rounded-2xl bg-[#FFF0EF] px-4 py-3 text-sm font-bold text-[#A94444] ring-1 ring-[#F1C9C9]">
+                {labelError}
+              </p>
+            ) : null}
           </div>
         </div>
       </SimpleCard>

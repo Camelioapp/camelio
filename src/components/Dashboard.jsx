@@ -352,7 +352,7 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
         ) : (
           <Crown className="h-4 w-4 text-[#8f9874]" />
         )}
-        <span>{activeAccount.type === "guest" ? "Invité" : "Compte principal"}</span>
+        <span>{activeAccount.type === "guest" ? activeAccount.label || "Invité" : "Compte principal"}</span>
       </div>
     ) : null;
   }
@@ -371,7 +371,7 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
           <Crown className="h-4 w-4 text-[#8f9874]" />
         )}
         <span className="max-w-[150px] truncate sm:max-w-[190px]">
-          {activeAccount.type === "guest" ? "Invité" : "Compte principal"}
+          {activeAccount.type === "guest" ? activeAccount.label || "Invité" : "Compte principal"}
         </span>
         <ChevronDown
           className={`h-4 w-4 text-[#8b8278] transition ${
@@ -410,7 +410,7 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
 
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold text-[#4f4a45]">
-                    {account.type === "guest" ? "Invité (partagé)" : "Compte principal"}
+                    {account.type === "guest" ? account.label || "Invité (partagé)" : "Compte principal"}
                   </span>
                   <span className="block truncate text-xs font-medium text-[#8b8278]">
                     {account.description || account.label}
@@ -466,6 +466,10 @@ export default function Dashboard({
   }, [accountAccess.accounts, accountAccess.activeAccountId]);
 
   const activeAccountIsGuest = activeAccount?.type === "guest";
+
+  const activeGuestShare = activeAccountIsGuest
+    ? activeAccount?.share || sharedAccess.shares?.[0] || null
+    : null;
 
   const setParentProfile = (updatedProfile) => {
     if (typeof updatedProfile === "function") {
@@ -1084,8 +1088,9 @@ export default function Dashboard({
         return (
           <GuestSettingsView
             userEmail={parentProfile.email}
-            sharedProfile={sharedAccess.shares?.[0] || null}
+            sharedProfile={activeGuestShare}
             onBack={goHome}
+            onUpdated={loadAccountsAndAccess}
           />
         );
 

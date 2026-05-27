@@ -2013,7 +2013,12 @@ function cleanProfileSharePayload(body = {}) {
       ? "edit"
       : "read";
 
+  const rawShareLabel = String(
+    body.shareLabel || body.label || body.guestShareLabel || ""
+  ).trim();
+
   return {
+    shareLabel: rawShareLabel.slice(0, 80),
     inviteeName: String(body.inviteeName || "").trim(),
     inviteeEmail,
     childIds,
@@ -2221,6 +2226,8 @@ async function createImportedProfileShareForUser({ share, targetUserId, connecte
     sourceOwnerUserId: share.ownerUserId,
     sourceOwnerEmail: share.ownerEmail || "",
     sourceOwnerName: share.ownerName || "",
+    shareLabel: share.shareLabel || share.label || share.guestAccessCode || "",
+    customShareLabel: "",
     inviteeUserId: targetUserId,
     inviteeEmail: connectedEmail || share.inviteeEmail || "",
     children: share.children || [],
@@ -2889,6 +2896,7 @@ app.post(
       const invitationToken = randomUUID();
       const providedGuestAccessCode = normalizeGuestAccessCodeInput(req.body?.guestAccessCode || "");
       const guestAccessCode = providedGuestAccessCode || (await generateUniqueGuestAccessCode());
+      const shareLabel = payload.shareLabel || guestAccessCode;
       const shouldSkipInvitationEmail = req.body?.skipInvitationEmail === true || req.body?.inviteEmailAlreadySent === true;
       const invitationExpiresAt = createInvitationExpiry();
       const inviteUrl = buildProfileShareInviteUrl(invitationToken);
@@ -2906,6 +2914,8 @@ app.post(
           req.session.user.email ||
           "",
         ...payload,
+        shareLabel,
+        label: shareLabel,
         status: "pending",
         invitationToken,
         guestAccessCode,
@@ -3130,8 +3140,12 @@ app.put(
             SK: `SHARE#${shareId}`,
           },
           UpdateExpression:
-            "SET inviteeName = :inviteeName, inviteeEmail = :inviteeEmail, childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, permission = :permission, note = :note, updatedAt = :updatedAt",
+            "SET shareLabel = :shareLabel, #label = :shareLabel, inviteeName = :inviteeName, inviteeEmail = :inviteeEmail, childIds = :childIds, children = :children, sectionIds = :sectionIds, sectionPermissions = :sectionPermissions, permission = :permission, note = :note, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#label": "label",
+          },
           ExpressionAttributeValues: {
+            ":shareLabel": payload.shareLabel || req.body?.guestAccessCode || shareId,
             ":inviteeName": payload.inviteeName,
             ":inviteeEmail": payload.inviteeEmail,
             ":childIds": payload.childIds,
@@ -3711,6 +3725,8 @@ app.post(
         sourceOwnerUserId: share.ownerUserId,
         sourceOwnerEmail: share.ownerEmail || "",
         sourceOwnerName: share.ownerName || "",
+        shareLabel: share.shareLabel || share.label || share.guestAccessCode || "",
+        customShareLabel: "",
 
         inviteeUserId: req.session.user.sub,
         inviteeEmail: connectedEmail,
@@ -4127,18 +4143,30 @@ app.get(
             children: sharedChildren,
           };
 
+          const guestLabel =
+            share.customShareLabel ||
+            share.shareLabel ||
+            share.label ||
+            share.guestAccessCode ||
+            (share.sourceOwnerName ? `Invité de ${share.sourceOwnerName}` : "Invité (partagé)");
+
           return {
             accountId: `guest-${share.id || index}`,
-            label: share.sourceOwnerName
-              ? `Invité de ${share.sourceOwnerName}`
-              : "Invité (partagé)",
-            description: "Accès limité et partagé",
+            label: guestLabel,
+            description: share.sourceOwnerName
+              ? `Partagé par ${share.sourceOwnerName}`
+              : share.sourceOwnerEmail
+                ? `Partagé par ${share.sourceOwnerEmail}`
+                : "Accès limité et partagé",
             type: "guest",
             role: "guest",
             subscriptionRequired: false,
             hasAccess: true,
             subscriptionStatus: "not_required",
             shareId: share.id,
+            shareLabel: share.shareLabel || share.label || "",
+            customShareLabel: share.customShareLabel || "",
+            guestAccessCode: share.guestAccessCode || "",
             sourceShareId: share.sourceShareId || "",
             sourceOwnerUserId: share.sourceOwnerUserId || "",
             sourceOwnerEmail: share.sourceOwnerEmail || "",
@@ -4286,6 +4314,86 @@ app.get(
   }
 );
 
+
+app.patch(
+  "/api/profile-shares/imported/:shareId/label",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const shareId = String(req.params.shareId || "").trim();
+      const label = String(req.body?.label || req.body?.shareLabel || "")
+        .trim()
+        .slice(0, 80);
+
+      if (!shareId) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_share_id",
+          message: "L’accès invité est introuvable.",
+        });
+      }
+
+      if (!label) {
+        return res.status(400).json({
+          success: false,
+          error: "missing_label",
+          message: "Inscrivez un nom pour ce partage.",
+        });
+      }
+
+      const userPk = getUserPk(req);
+      const now = new Date().toISOString();
+
+      const existingResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: userPk,
+            SK: `IMPORTED_SHARE#${shareId}`,
+          },
+        })
+      );
+
+      if (!existingResult.Item || existingResult.Item.status === "revoked") {
+        return res.status(404).json({
+          success: false,
+          error: "guest_access_not_found",
+          message: "Cet accès invité est introuvable ou a été retiré.",
+        });
+      }
+
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: userPk,
+            SK: `IMPORTED_SHARE#${shareId}`,
+          },
+          UpdateExpression:
+            "SET customShareLabel = :label, updatedAt = :updatedAt",
+          ExpressionAttributeValues: {
+            ":label": label,
+            ":updatedAt": now,
+          },
+          ReturnValues: "NONE",
+        })
+      );
+
+      return res.json({
+        success: true,
+        share: {
+          ...existingResult.Item,
+          customShareLabel: label,
+          updatedAt: now,
+        },
+        message: "Le nom du partage a été modifié.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 app.delete(
   "/api/profile-shares/imported/:shareId",

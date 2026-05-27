@@ -236,6 +236,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [selectedChildIds, setSelectedChildIds] = useState([]);
   const [selectedSectionIds, setSelectedSectionIds] = useState([]);
   const [sectionPermissions, setSectionPermissions] = useState({});
+  const [shareLabel, setShareLabel] = useState("");
   const [note, setNote] = useState("");
 
   const shareableSections = useMemo(() => {
@@ -303,6 +304,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     setSelectedSectionIds([]);
     setSectionPermissions({});
     setEditingShareId("");
+    setShareLabel("");
     setNote("");
   }
 
@@ -347,6 +349,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
         )
       )
     );
+    setShareLabel(share.shareLabel || share.label || share.guestAccessCode || "");
     setNote(share.note || "");
     setMessage("");
     setShowWizard(true);
@@ -710,6 +713,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       sectionIds: allowedSelectedSectionIds,
       sectionPermissions: cleanSectionPermissions,
       permission: getHighestPermission(cleanSectionPermissions),
+      shareLabel: shareLabel.trim(),
       note: note.trim(),
     };
 
@@ -1066,6 +1070,24 @@ if (!response.ok) {
     if (wizardStep === 3) {
       return (
         <div className="space-y-6">
+          <div className="rounded-3xl border border-[#EADFCF] bg-white p-5">
+            <h3 className="text-lg font-bold text-[#4F4A45]">
+              Nommer le partage
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-[#7D756E]">
+              Ce nom aide la personne invitée à distinguer ses différents accès invités.
+              S’il est laissé vide, Camelio utilisera le code invité comme nom par défaut.
+            </p>
+
+            <input
+              className="mt-4 w-full rounded-3xl border border-[#EADFCF] px-4 py-3 text-sm outline-none focus:border-[#A8B193] focus:ring-4 focus:ring-[#A8B193]/15"
+              value={shareLabel}
+              onChange={(event) => setShareLabel(event.target.value)}
+              placeholder={inviteDraft?.guestAccessCode ? `Ex. Famille Emma · ${inviteDraft.guestAccessCode}` : "Ex. Famille Emma"}
+            />
+          </div>
+
           <div className="rounded-3xl border border-[#EADFCF] bg-white p-5">
             <h3 className="text-lg font-bold text-[#4F4A45]">
               Choisir les enfants à partager
@@ -1681,7 +1703,7 @@ if (!response.ok) {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-lg font-bold text-[#4F4A45]">
-                            {share.inviteeName || "Invitation"}
+                            {share.shareLabel || share.label || share.guestAccessCode || share.inviteeName || "Invitation"}
                           </p>
 
                           <span
@@ -1694,7 +1716,7 @@ if (!response.ok) {
                         </div>
 
                         <p className="mt-1 break-all text-sm font-semibold text-[#6F785F]">
-                          {share.inviteeEmail}
+                          {share.inviteeName ? `${share.inviteeName} · ` : ""}{share.inviteeEmail}
                         </p>
 
                         <p className="mt-3 text-sm leading-6 text-[#6B625A]">
@@ -1783,6 +1805,15 @@ if (!response.ok) {
                               : share.emailStatus === "failed"
                                 ? "Échec"
                                 : "En attente"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white p-3 ring-1 ring-[#F0E6D8] md:col-span-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A8B193]">
+                            Nom du partage
+                          </p>
+                          <p className="mt-1 text-sm font-black text-[#4F4A45]">
+                            {share.shareLabel || share.label || share.guestAccessCode || "Non précisé"}
                           </p>
                         </div>
 
