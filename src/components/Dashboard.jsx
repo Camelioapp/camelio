@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Check,
   Crown,
+  Star,
   UsersRound,
 } from "lucide-react";
 
@@ -73,6 +74,13 @@ function getChildColorTheme(colorId) {
     childColorOptions[0]
   );
 }
+
+function isStarChild(child = {}) {
+  return Boolean(child.isStar || child.starChild || child.isDeceased);
+}
+
+const starClipPath =
+  "polygon(50% 0%, 61% 34%, 97% 34%, 68% 56%, 79% 91%, 50% 70%, 21% 91%, 32% 56%, 3% 34%, 39% 34%)";
 
 function normalizePhotoPosition(position) {
   if (!position) return defaultPhotoPosition;
@@ -155,6 +163,8 @@ function formatChildFromServer(child) {
     photoPosition: normalizePhotoPosition(child.photoPosition),
     photoZoom: child.photoZoom || 1,
     profileNote: child.notes || child.profileNote || "",
+    isStar: isStarChild(child),
+    deceasedDate: child.deceasedDate || child.deathDate || "",
   };
 }
 
@@ -183,6 +193,8 @@ function formatSharedChild(child = {}, index = 0) {
     photoPosition: normalizePhotoPosition(child.photoPosition),
     photoZoom: child.photoZoom || 1,
     profileNote: child.notes || child.profileNote || "",
+    isStar: isStarChild(child),
+    deceasedDate: child.deceasedDate || child.deathDate || "",
   };
 }
 
@@ -1050,6 +1062,8 @@ export default function Dashboard({
       photoPosition: child?.photoPosition || defaultPhotoPosition,
       photoZoom: Number(child?.photoZoom) || 1,
       notes: child?.notes || child?.profileNote || "",
+      isStar: isStarChild(child),
+      deceasedDate: isStarChild(child) ? child?.deceasedDate || child?.deathDate || "" : "",
     };
   }
 
@@ -1395,6 +1409,7 @@ export default function Dashboard({
                               const photo = child.image || child.photo || "";
                               const initials = getInitials(child);
                               const childTheme = getChildColorTheme(child.color);
+                              const starProfile = isStarChild(child);
                               const floatDelay = index * 0.45;
                               const floatDuration = 4.8 + (index % 3) * 0.7;
                               const floatAmplitude = index % 2 === 0 ? -7 : 7;
@@ -1422,13 +1437,22 @@ export default function Dashboard({
                                   whileTap={{ scale: 0.98 }}
                                 >
                                   <div
-                                    className="relative flex h-[112px] w-[112px] items-center justify-center overflow-visible rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
+                                    className={`relative flex h-[112px] w-[112px] items-center justify-center overflow-visible border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px] ${
+                                      starProfile ? "rounded-none" : "rounded-full"
+                                    }`}
                                     style={{
                                       backgroundColor: childTheme.soft,
                                       color: childTheme.text,
                                     }}
                                   >
-                                    <div className="absolute inset-0 overflow-hidden rounded-full">
+                                    <div
+                                      className={`absolute inset-0 overflow-hidden ${
+                                        starProfile ? "rounded-none" : "rounded-full"
+                                      }`}
+                                      style={{
+                                        clipPath: starProfile ? starClipPath : undefined,
+                                      }}
+                                    >
                                       {photo ? (
                                         <PhotoImage
                                           src={photo}
@@ -1447,6 +1471,12 @@ export default function Dashboard({
                                         </div>
                                       )}
                                     </div>
+
+                                    {starProfile ? (
+                                      <div className="absolute right-1 top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#AA90C8] shadow-sm">
+                                        <Star className="h-4 w-4 fill-[#AA90C8]" />
+                                      </div>
+                                    ) : null}
 
                                     <div
                                       className="absolute left-1/2 bottom-[-15px] z-20 w-[104px] -translate-x-1/2 rounded-[14px] px-3 py-2 text-center text-base font-bold leading-none text-white shadow-[0_8px_16px_rgba(79,74,69,0.14)] transition group-hover:brightness-95 sm:bottom-[-17px] sm:w-[118px] sm:rounded-[16px] sm:text-lg md:bottom-[-18px] md:w-[128px] md:text-xl"

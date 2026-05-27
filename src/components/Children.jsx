@@ -8,6 +8,7 @@ import {
   ImagePlus,
   Plus,
   ScrollText,
+  Star,
   StickyNote,
   Trash2,
   UserRound,
@@ -101,6 +102,13 @@ function getColorTheme(colorId) {
     childColorOptions[0]
   );
 }
+
+function isStarChild(child = {}) {
+  return Boolean(child.isStar || child.starChild || child.isDeceased);
+}
+
+const starClipPath =
+  "polygon(50% 0%, 61% 34%, 97% 34%, 68% 56%, 79% 91%, 50% 70%, 21% 91%, 32% 56%, 3% 34%, 39% 34%)";
 
 function calculateChildAge(birthDate) {
   if (!birthDate || birthDate === "À compléter") return "";
@@ -496,6 +504,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
     avatarS3Key: "",
     photoPosition: defaultPhotoPosition,
     photoZoom: 1,
+    isStar: false,
+    deceasedDate: "",
   });
 
   const inputClass =
@@ -581,6 +591,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       photoPosition: normalizePhotoPosition(child.photoPosition),
       photoZoom: child.photoZoom || 1,
       profileNote: child.notes || child.profileNote || "",
+      isStar: isStarChild(child),
+      deceasedDate: child.deceasedDate || child.deathDate || "",
     };
   };
 
@@ -737,6 +749,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       avatarS3Key: "",
       photoPosition: defaultPhotoPosition,
       photoZoom: 1,
+      isStar: false,
+      deceasedDate: "",
     });
 
     setPreviewPhoto("");
@@ -780,6 +794,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
           photoPosition: newChild.photoPosition || defaultPhotoPosition,
           photoZoom: newChild.photoZoom || 1,
           notes: "",
+          isStar: Boolean(newChild.isStar),
+          deceasedDate: newChild.isStar ? newChild.deceasedDate || "" : "",
         }),
       });
 
@@ -803,6 +819,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
           avatarS3Key: newChild.avatarS3Key || "",
           photoPosition: newChild.photoPosition || defaultPhotoPosition,
           photoZoom: newChild.photoZoom || 1,
+          isStar: Boolean(newChild.isStar),
+          deceasedDate: newChild.isStar ? newChild.deceasedDate || "" : "",
         }),
       ]);
 
@@ -852,6 +870,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       photoPosition: selectedChild.photoPosition || defaultPhotoPosition,
       photoZoom: selectedChild.photoZoom || 1,
       notes: selectedChild.profileNote || selectedChild.notes || "",
+      isStar: isStarChild(selectedChild),
+      deceasedDate: isStarChild(selectedChild) ? selectedChild.deceasedDate || "" : "",
     };
 
     try {
@@ -890,6 +910,8 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                 avatarS3Key: payload.avatarS3Key,
                 photoPosition: payload.photoPosition,
                 photoZoom: payload.photoZoom,
+                isStar: payload.isStar,
+                deceasedDate: payload.deceasedDate,
               })
             : child
         )
@@ -1102,6 +1124,52 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                 </FormField>
               </div>
 
+              <div className="rounded-[24px] border border-[#EADFCF] bg-[#FFFDF8] p-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNewChild((current) => ({
+                      ...current,
+                      isStar: !current.isStar,
+                      deceasedDate: current.isStar ? "" : current.deceasedDate,
+                    }))
+                  }
+                  className={`flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition ${
+                    newChild.isStar
+                      ? "bg-[#F4EEFF] text-[#7A639D] ring-1 ring-[#D8C7EF]"
+                      : "bg-white text-[#746F64] ring-1 ring-[#EFE4D6]"
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm">
+                      <Star className={`h-5 w-5 ${newChild.isStar ? "fill-[#AA90C8] text-[#AA90C8]" : "text-[#A8B193]"}`} />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-black">Inscrire comme une étoile</span>
+                      <span className="mt-1 block text-xs font-semibold opacity-80">Le profil apparaîtra en forme d’étoile dans le tableau de bord.</span>
+                    </span>
+                  </span>
+                  <span className="text-xs font-bold">{newChild.isStar ? "Activé" : "Non"}</span>
+                </button>
+
+                {newChild.isStar ? (
+                  <label className="mt-4 block">
+                    <span className="text-sm font-bold text-[#4F4A45]">Date du décès</span>
+                    <input
+                      type="date"
+                      className={`${inputClass} mt-2`}
+                      value={newChild.deceasedDate || ""}
+                      onChange={(event) =>
+                        setNewChild((current) => ({
+                          ...current,
+                          deceasedDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ) : null}
+              </div>
+
               <FormField
                 label="Couleur de l’enfant"
                 helpText="Cette couleur personnalise le profil de l’enfant et sera notamment utilisée dans le calendrier."
@@ -1146,6 +1214,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             const photo = child.photo || child.image || child.avatar || "";
             const theme = getColorTheme(child.color);
             const ageLabel = calculateChildAge(child.birthDate);
+            const starProfile = isStarChild(child);
 
             return (
               <article
@@ -1165,10 +1234,13 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                     <button
                       type="button"
                       onClick={() => openProfile(child)}
-                      className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white text-2xl font-bold shadow-sm"
+                      className={`relative flex h-24 w-24 items-center justify-center overflow-hidden border-4 border-white text-2xl font-bold shadow-sm ${
+                        starProfile ? "rounded-none" : "rounded-full"
+                      }`}
                       style={{
                         backgroundColor: theme.soft,
                         color: theme.text,
+                        clipPath: starProfile ? starClipPath : undefined,
                       }}
                     >
                       {photo ? (
@@ -1204,6 +1276,20 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                         >
                           {child.gender || child.sex || "Enfant"}
                         </span>
+
+                        {starProfile ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold"
+                            style={{
+                              backgroundColor: "#FFFFFF",
+                              color: "#8C76A8",
+                              boxShadow: "0 0 0 1px #DED2EA",
+                            }}
+                          >
+                            <Star className="h-3.5 w-3.5 fill-[#AA90C8] text-[#AA90C8]" />
+                            Étoile
+                          </span>
+                        ) : null}
 
                         {ageLabel ? (
                           <span
@@ -1382,6 +1468,52 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   }
                 />
               </FormField>
+            </div>
+
+            <div className="rounded-[24px] border border-[#EADFCF] bg-[#FFFDF8] p-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedChild((current) => ({
+                    ...current,
+                    isStar: !isStarChild(current),
+                    deceasedDate: isStarChild(current) ? "" : current.deceasedDate || "",
+                  }))
+                }
+                className={`flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition ${
+                  isStarChild(selectedChild)
+                    ? "bg-[#F4EEFF] text-[#7A639D] ring-1 ring-[#D8C7EF]"
+                    : "bg-white text-[#746F64] ring-1 ring-[#EFE4D6]"
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm">
+                    <Star className={`h-5 w-5 ${isStarChild(selectedChild) ? "fill-[#AA90C8] text-[#AA90C8]" : "text-[#A8B193]"}`} />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-black">Inscrire comme une étoile</span>
+                    <span className="mt-1 block text-xs font-semibold opacity-80">Lorsque cette option est activée, le profil apparaît en forme d’étoile dans le dashboard.</span>
+                  </span>
+                </span>
+                <span className="text-xs font-bold">{isStarChild(selectedChild) ? "Activé" : "Non"}</span>
+              </button>
+
+              {isStarChild(selectedChild) ? (
+                <label className="mt-4 block">
+                  <span className="text-sm font-bold text-[#4F4A45]">Date du décès</span>
+                  <input
+                    type="date"
+                    className={`${inputClass} mt-2`}
+                    value={selectedChild.deceasedDate || ""}
+                    onChange={(event) =>
+                      setSelectedChild((current) => ({
+                        ...current,
+                        deceasedDate: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ) : null}
             </div>
 
             <FormField
