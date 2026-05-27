@@ -439,6 +439,7 @@ export default function Dashboard({
   const [activeSection, setActiveSection] = useState("home");
   const [viewMode, setViewMode] = useState("grid");
   const [showSubscriptionPopup, setShowSubscriptionPopup] = useState(false);
+  const [principalActivationPrompt, setPrincipalActivationPrompt] = useState(false);
   const [showFirstStep, setShowFirstStep] = useState(false);
   const [accountAccess, setAccountAccess] = useState({
     isLoading: true,
@@ -519,6 +520,8 @@ export default function Dashboard({
           activeAccountId: selectedAccount?.accountId || "",
         });
 
+        setPrincipalActivationPrompt(false);
+
         const welcomeProfileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
           method: "GET",
           credentials: "include",
@@ -558,6 +561,7 @@ export default function Dashboard({
             hasSharedAccess: true,
             shares: selectedAccount.share ? [selectedAccount.share] : [],
           });
+          setPrincipalActivationPrompt(false);
           setShowSubscriptionPopup(false);
           setShowFirstStep(false);
           return;
@@ -583,9 +587,45 @@ export default function Dashboard({
           return;
         }
 
-        setShowSubscriptionPopup(!data.hasAccess);
+        const principalHasAccess = data.hasAccess === true;
 
-        if (!data.hasAccess) {
+        if (!principalHasAccess) {
+          const guestFallbackAccount = accounts.find(
+            (account) => account.type === "guest" && account.share
+          );
+
+          if (guestFallbackAccount) {
+            setAccountAccess({
+              isLoading: false,
+              accounts,
+              activeAccountId: guestFallbackAccount.accountId,
+            });
+            setSharedAccess({
+              isLoading: false,
+              hasSharedAccess: true,
+              shares: guestFallbackAccount.share ? [guestFallbackAccount.share] : [],
+            });
+            setPrincipalActivationPrompt(true);
+            setShowSubscriptionPopup(true);
+            setShowFirstStep(false);
+
+            fetch(`${API_BASE_URL}/api/accounts/active`, {
+              method: "PUT",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ accountId: guestFallbackAccount.accountId }),
+            }).catch((error) =>
+              console.error("Erreur sauvegarde compte invité actif:", error)
+            );
+
+            return;
+          }
+        }
+
+        setPrincipalActivationPrompt(false);
+        setShowSubscriptionPopup(!principalHasAccess);
+
+        if (!principalHasAccess) {
           setShowFirstStep(false);
           return;
         }
@@ -632,44 +672,44 @@ export default function Dashboard({
 
     if (!selectedAccount) return;
 
-    setAccountAccess((current) => ({
-      ...current,
-      activeAccountId: accountId,
-    }));
+    const previousGuestAccount =
+      activeAccount?.type === "guest"
+        ? activeAccount
+        : accountAccess.accounts.find((account) => account.type === "guest" && account.share);
 
     setActiveSection("home");
-    setChildren([]);
-    setIsLoadingChildren(true);
-
-    try {
-      await fetch(`${API_BASE_URL}/api/accounts/active`, {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ accountId }),
-      });
-    } catch (error) {
-      console.error("Erreur sauvegarde compte actif:", error);
-    }
 
     if (selectedAccount.type === "guest") {
+      setAccountAccess((current) => ({
+        ...current,
+        activeAccountId: accountId,
+      }));
+      setChildren([]);
+      setIsLoadingChildren(true);
+
+      try {
+        await fetch(`${API_BASE_URL}/api/accounts/active`, {
+          method: "PUT",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ accountId }),
+        });
+      } catch (error) {
+        console.error("Erreur sauvegarde compte actif:", error);
+      }
+
       setSharedAccess({
         isLoading: false,
         hasSharedAccess: true,
         shares: selectedAccount.share ? [selectedAccount.share] : [],
       });
+      setPrincipalActivationPrompt(false);
       setShowSubscriptionPopup(false);
       setShowFirstStep(false);
       return;
     }
-
-    setSharedAccess({
-      isLoading: false,
-      hasSharedAccess: false,
-      shares: [],
-    });
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/subscription`, {
@@ -679,14 +719,77 @@ export default function Dashboard({
       });
 
       const data = await response.json().catch(() => ({}));
-      const hasAccess = response.ok && data.hasAccess;
-
-      setShowSubscriptionPopup(!hasAccess);
+      const hasAccess = response.ok && data.hasAccess === true;
 
       if (!hasAccess) {
+        if (previousGuestAccount) {
+          setAccountAccess((current) => ({
+            ...current,
+            activeAccountId: previousGuestAccount.accountId,
+          }));
+          setSharedAccess({
+            isLoading: false,
+            hasSharedAccess: true,
+            shares: previousGuestAccount.share ? [previousGuestAccount.share] : [],
+          });
+          setChildren(getSharedChildrenFromShares(previousGuestAccount.share ? [previousGuestAccount.share] : []));
+          setIsLoadingChildren(false);
+
+          try {
+            await fetch(`${API_BASE_URL}/api/accounts/active`, {
+              method: "PUT",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ accountId: previousGuestAccount.accountId }),
+            });
+          } catch (error) {
+            console.error("Erreur conservation compte invité actif:", error);
+          }
+        } else {
+          setAccountAccess((current) => ({
+            ...current,
+            activeAccountId: accountId,
+          }));
+          setSharedAccess({
+            isLoading: false,
+            hasSharedAccess: false,
+            shares: [],
+          });
+        }
+
+        setPrincipalActivationPrompt(Boolean(previousGuestAccount));
+        setShowSubscriptionPopup(true);
         setShowFirstStep(false);
         return;
       }
+
+      setAccountAccess((current) => ({
+        ...current,
+        activeAccountId: accountId,
+      }));
+      setChildren([]);
+      setIsLoadingChildren(true);
+
+      try {
+        await fetch(`${API_BASE_URL}/api/accounts/active`, {
+          method: "PUT",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ accountId }),
+        });
+      } catch (error) {
+        console.error("Erreur sauvegarde compte actif:", error);
+      }
+
+      setSharedAccess({
+        isLoading: false,
+        hasSharedAccess: false,
+        shares: [],
+      });
+      setPrincipalActivationPrompt(false);
+      setShowSubscriptionPopup(false);
 
       const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
         method: "GET",
@@ -698,7 +801,9 @@ export default function Dashboard({
       setShowFirstStep(profileData?.profile?.onboardingCompleted !== true);
     } catch (error) {
       console.error("Erreur vérification compte principal:", error);
+      setPrincipalActivationPrompt(Boolean(previousGuestAccount));
       setShowSubscriptionPopup(true);
+      setShowFirstStep(false);
     }
   }
 
@@ -1207,10 +1312,12 @@ export default function Dashboard({
     showSubscriptionPopup &&
     !showUserWelcome &&
     !sharedAccess.isLoading &&
-    !sharedAccess.hasSharedAccess ? (
+    (!sharedAccess.hasSharedAccess || principalActivationPrompt) ? (
       <SubscriptionPopup
+        principalActivationOnly={principalActivationPrompt}
         onClose={() => {
           setShowSubscriptionPopup(false);
+          setPrincipalActivationPrompt(false);
           loadAccountsAndAccess();
         }}
       />

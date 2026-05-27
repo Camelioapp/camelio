@@ -52,6 +52,7 @@ function normalizeGuestCode(value = "") {
 
 export default function SubscriptionPopup({
   onClose = () => window.location.reload(),
+  principalActivationOnly = false,
 }) {
   const [checkingSubscription, setCheckingSubscription] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
@@ -197,23 +198,13 @@ export default function SubscriptionPopup({
         );
       }
 
-      if (data?.activeAccountId) {
-        try {
-          localStorage.setItem("camelio_active_account_id", data.activeAccountId);
-        } catch (storageError) {
-          console.warn("Impossible de mémoriser le compte invité actif:", storageError);
-        }
-      }
-
       setHasAccess(true);
-      setSuccessMessage(
-        data.message || "Votre accès invité est maintenant associé à votre compte partagé."
-      );
+      setSuccessMessage(data.message || "Votre accès invité est maintenant associé à votre compte.");
 
       setTimeout(() => {
         onClose();
-        window.location.replace("/");
-      }, 900);
+        window.location.reload();
+      }, 800);
     } catch (err) {
       console.error("Erreur activation code invité:", err);
       setError(err.message || "Impossible d’associer ce code invité.");
@@ -243,12 +234,20 @@ export default function SubscriptionPopup({
 
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-[1.55rem] font-bold leading-tight text-[#3F3B35]">
-            Activez votre espace Camelio
+            {principalActivationOnly ? "Activez votre compte principal" : "Activez votre espace Camelio"}
           </h2>
           <p className="mt-3 text-[0.95rem] leading-6 text-[#6B6258]">
-            Choisissez un forfait avec 1 mois gratuit, utilisez un code promo ou associez un accès invité reçu par courriel.
+            {principalActivationOnly
+              ? "Vous êtes actuellement dans votre accès invité. Pour utiliser votre compte principal, choisissez un forfait. Tant que le compte principal n’est pas activé, seules les sections invitées restent accessibles."
+              : "Choisissez un forfait avec 1 mois gratuit, utilisez un code promo ou associez un accès invité reçu par courriel."}
           </p>
         </div>
+
+        {principalActivationOnly ? (
+          <div className="mx-auto mt-5 max-w-2xl rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-center text-sm font-semibold leading-6 text-[#7A5F37]">
+            Votre compte invité demeure actif. Le compte principal sera accessible uniquement après l’activation d’un abonnement.
+          </div>
+        ) : null}
 
         <div className="mx-auto mt-5 flex w-fit rounded-full border border-[#E7DCCB] bg-white p-1 shadow-sm">
           <button
@@ -289,7 +288,7 @@ export default function SubscriptionPopup({
           </p>
         ) : null}
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className={`mt-6 grid gap-4 ${principalActivationOnly ? "" : "lg:grid-cols-[1fr_320px]"}`}>
           <div className="grid gap-3 sm:grid-cols-3">
             {trialPlans.map((plan) => (
               <div key={plan.id} className="flex rounded-3xl border border-[#E7DCCB] bg-white p-4 shadow-sm">
@@ -339,6 +338,7 @@ export default function SubscriptionPopup({
             ))}
           </div>
 
+          {!principalActivationOnly ? (
           <div className="rounded-3xl border border-[#B5A7C8]/70 bg-[#FBF8FF] p-4 shadow-sm ring-1 ring-[#B5A7C8]/10">
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#B5A7C8]/20 text-[#8B78A5]">
@@ -399,6 +399,7 @@ export default function SubscriptionPopup({
               </p>
             </div>
           </div>
+          ) : null}
         </div>
 
         <div className="mx-auto mt-5 max-w-xl rounded-2xl border border-[#E7DCCB] bg-white">
@@ -445,7 +446,9 @@ export default function SubscriptionPopup({
         </div>
 
         <p className="mt-4 text-center text-xs leading-5 text-[#8A8178]">
-          Les essais gratuits sont traités par Stripe. Le code invité ne demande aucun paiement.
+          {principalActivationOnly
+            ? "Les essais gratuits sont traités par Stripe. Votre accès invité reste disponible tant que le compte principal n’est pas activé."
+            : "Les essais gratuits sont traités par Stripe. Le code invité ne demande aucun paiement."}
         </p>
       </div>
     </div>
