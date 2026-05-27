@@ -11,6 +11,7 @@ import {
   Crown,
   Star,
   UsersRound,
+  LockKeyhole,
 } from "lucide-react";
 
 import SubscriptionPopup from "./SubscriptionPopup";
@@ -776,6 +777,10 @@ export default function Dashboard({
     );
   }, [sharedAccess.hasSharedAccess, sharedAccess.shares]);
 
+  const isGuestAccount = sharedAccess.hasSharedAccess || activeAccount?.type === "guest";
+
+  const guestLockedSectionIds = useMemo(() => new Set(["children"]), []);
+
   const visibleSections = useMemo(() => {
     if (!sharedAccess.hasSharedAccess || !sharedSectionIds) {
       return orderedSections;
@@ -876,6 +881,10 @@ export default function Dashboard({
   }, [activeSection]);
 
   function openSection(sectionId) {
+    if (isGuestAccount && guestLockedSectionIds.has(sectionId)) {
+      return;
+    }
+
     if (sharedAccess.hasSharedAccess) {
       const allowedGuestSections = new Set(["guest-settings"]);
 
@@ -1382,22 +1391,35 @@ export default function Dashboard({
                     <button
                       type="button"
                       onClick={() => openSection("children")}
-                      className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center transition hover:bg-[#faf4ec] hover:shadow-sm"
+                      disabled={isGuestAccount}
+                      className={`flex min-h-[180px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed border-[#d8c8b6] bg-[#fffdf8]/85 text-center transition ${
+                        isGuestAccount
+                          ? "cursor-not-allowed opacity-60 grayscale"
+                          : "hover:bg-[#faf4ec] hover:shadow-sm"
+                      }`}
                     >
                       <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#d8c8b6] bg-[#eef0e7] text-[#8f9874] shadow-sm">
-                        <Plus size={32} strokeWidth={1.7} />
+                        {isGuestAccount ? (
+                          <LockKeyhole size={28} strokeWidth={1.7} />
+                        ) : (
+                          <Plus size={32} strokeWidth={1.7} />
+                        )}
                       </div>
 
                       <p className="mt-4 text-lg font-semibold text-[#4f4a45]">
-                        {sharedAccess.hasSharedAccess
-                          ? "Aucun profil partagé"
-                          : "Ajouter votre enfant"}
+                        {isGuestAccount
+                          ? "Profil enfant réservé"
+                          : sharedAccess.hasSharedAccess
+                            ? "Aucun profil partagé"
+                            : "Ajouter votre enfant"}
                       </p>
 
                       <p className="mt-1 text-sm text-[#8b8278]">
-                        {sharedAccess.hasSharedAccess
-                          ? "Le partage ne contient pas encore de profil enfant."
-                          : "Créez un premier profil pour commencer."}
+                        {isGuestAccount
+                          ? "Cette section est accessible seulement avec le compte principal."
+                          : sharedAccess.hasSharedAccess
+                            ? "Le partage ne contient pas encore de profil enfant."
+                            : "Créez un premier profil pour commencer."}
                       </p>
                     </button>
                   ) : (
@@ -1419,7 +1441,16 @@ export default function Dashboard({
                                   key={child.id || child.name}
                                   type="button"
                                   onClick={() => openSection("children")}
+                                  disabled={isGuestAccount}
+                                  aria-disabled={isGuestAccount}
+                                  title={
+                                    isGuestAccount
+                                      ? "Profil enfant accessible seulement avec le compte principal"
+                                      : undefined
+                                  }
                                   className={`group relative isolate flex w-[118px] shrink-0 items-center justify-center pb-4 sm:w-[138px] md:w-[156px] ${
+                                    isGuestAccount ? "cursor-not-allowed" : ""
+                                  } ${
                                     index === 0 ? "" : "-ml-7 sm:-ml-9 md:-ml-11"
                                   }`}
                                   style={{ zIndex: children.length + index }}
@@ -1564,23 +1595,35 @@ export default function Dashboard({
                       section,
                       sectionThemeOverrides
                     );
+                    const isGuestLockedSection =
+                      isGuestAccount && guestLockedSectionIds.has(section.id);
 
                     return (
                       <button
                         key={section.id}
                         type="button"
                         onClick={() => openSection(section.id)}
-                        className="min-h-[148px] rounded-[24px] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[138px] md:rounded-[26px] md:p-5"
+                        disabled={isGuestLockedSection}
+                        aria-disabled={isGuestLockedSection}
+                        className={`min-h-[148px] rounded-[24px] border p-4 text-left shadow-sm transition md:min-h-[138px] md:rounded-[26px] md:p-5 ${
+                          isGuestLockedSection
+                            ? "cursor-not-allowed opacity-55 grayscale"
+                            : "hover:-translate-y-0.5 hover:shadow-md"
+                        }`}
                         style={{
-                          backgroundColor: theme.bgColor,
-                          borderColor: theme.borderColor,
+                          backgroundColor: isGuestLockedSection ? "#F5F1EA" : theme.bgColor,
+                          borderColor: isGuestLockedSection ? "#DDD2C2" : theme.borderColor,
                         }}
                       >
                         <div
                           className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-white md:h-12 md:w-12"
-                          style={{ backgroundColor: theme.iconColor }}
+                          style={{ backgroundColor: isGuestLockedSection ? "#B8AEA2" : theme.iconColor }}
                         >
-                          <Icon size={22} />
+                          {isGuestLockedSection ? (
+                            <LockKeyhole size={22} />
+                          ) : (
+                            <Icon size={22} />
+                          )}
                         </div>
 
                         <h3 className="text-base font-semibold leading-5 text-[#4f4a45] md:text-xl">
@@ -1588,7 +1631,9 @@ export default function Dashboard({
                         </h3>
 
                         <p className="mt-2 text-xs leading-5 text-[#7d756e] md:text-sm">
-                          {section.description}
+                          {isGuestLockedSection
+                            ? "Accessible seulement avec le compte principal."
+                            : section.description}
                         </p>
                       </button>
                     );
