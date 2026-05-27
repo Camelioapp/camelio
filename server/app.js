@@ -2190,30 +2190,107 @@ function normalizeGuestAccessCodeInput(value = "") {
     .trim()
     .toUpperCase()
     .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/\s+/g, "");
+    .replace(/\s+/g, "")
+    .replace(/[^A-Z0-9-]/g, "");
+}
+
+function getGuestAccessCodeVariants(value = "") {
+  const normalized = normalizeGuestAccessCodeInput(value);
+  const compact = normalized.replace(/-/g, "");
+  const variants = new Set([normalized]);
+
+  if (compact) {
+    variants.add(compact);
+
+    if (compact.startsWith("INV") && compact.length > 3) {
+      variants.add(`INV-${compact.slice(3)}`);
+    }
+  }
+
+  return Array.from(variants).filter(Boolean);
 }
 
 async function findGuestSignupInvitationByCode(guestAccessCode) {
-  const code = normalizeGuestAccessCodeInput(guestAccessCode);
+  const variants = getGuestAccessCodeVariants(guestAccessCode);
 
-  if (!code) return null;
+  if (variants.length === 0) return null;
+
+  const expressionValues = {
+    ":type": "guestSignupInvitation",
+  };
+  const codeConditions = variants.map((variant, index) => {
+    const key = `:guestAccessCode${index}`;
+    expressionValues[key] = variant;
+    return `guestAccessCode = ${key}`;
+  });
 
   const result = await dynamo.send(
     new ScanCommand({
       TableName: DYNAMODB_TABLE,
-      FilterExpression: "#type = :type AND guestAccessCode = :guestAccessCode",
+      FilterExpression: `#type = :type AND (${codeConditions.join(" OR ")})`,
       ExpressionAttributeNames: {
         "#type": "type",
       },
-      ExpressionAttributeValues: {
-        ":type": "guestSignupInvitation",
-        ":guestAccessCode": code,
-      },
+      ExpressionAttributeValues: expressionValues,
       Limit: 1,
     })
   );
 
   return (result.Items || [])[0] || null;
+}
+
+async function findProfileShareByGuestAccessCode(guestAccessCode) {
+  const variants = getGuestAccessCodeVariants(guestAccessCode);
+
+  if (variants.length === 0) return null;
+
+  const expressionValues = {
+    ":type": "profileShare",
+  };
+  const codeConditions = variants.map((variant, index) => {
+    const key = `:guestAccessCode${index}`;
+    expressionValues[key] = variant;
+    return `guestAccessCode = ${key}`;
+  });
+
+  const result = await dynamo.send(
+    new ScanCommand({
+      TableName: DYNAMODB_TABLE,
+      FilterExpression: `#type = :type AND (${codeConditions.join(" OR ")})`,
+      ExpressionAttributeNames: {
+        "#type": "type",
+      },
+      ExpressionAttributeValues: expressionValues,
+      Limit: 10,
+    })
+  );
+
+  const shares = result.Items || [];
+  return shares.find((share) => share.status !== "revoked") || shares[0] || null;
+}
+
+async function getImportedShareByIdForCurrentUser(req, importedShareId = "") {
+  const id = String(importedShareId || "").trim();
+
+  if (!id) return null;
+
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: DYNAMODB_TABLE,
+      Key: {
+        PK: getUserPk(req),
+        SK: `IMPORTED_SHARE#${id}`,
+      },
+    })
+  );
+
+  const share = result.Item || null;
+
+  if (!(await isImportedShareStillActive(share))) {
+    return null;
+  }
+
+  return share;
 }
 
 async function findProfileShareByToken(invitationToken) {
@@ -3599,21 +3676,7 @@ app.post(
         });
       }
 
-      const result = await dynamo.send(
-        new ScanCommand({
-          TableName: DYNAMODB_TABLE,
-          FilterExpression: "#type = :type AND guestAccessCode = :guestAccessCode",
-          ExpressionAttributeNames: {
-            "#type": "type",
-          },
-          ExpressionAttributeValues: {
-            ":type": "profileShare",
-            ":guestAccessCode": code,
-          },
-        })
-      );
-
-      const share = (result.Items || [])[0];
+      const share = await findProfileShareByGuestAccessCode(code);
 
       if (!share) {
         const signupInvitation = await findGuestSignupInvitationByCode(code);
@@ -3650,7 +3713,10 @@ app.post(
         return res.status(403).json({
           success: false,
           error: "email_mismatch",
-          message: "Ce code invité est associé à une autre adresse courriel.",
+          message:
+            invitedEmail
+              ? `Ce code invité est associé au courriel ${invitedEmail}. Connectez-vous avec ce courriel pour l’utiliser.`
+              : "Ce code invité est associé à une autre adresse courriel.",
         });
       }
 
@@ -4481,7 +4547,9 @@ app.get(
       const activeStatuses = ["trialing", "active"];
 
       if (subscription?.status === "guest") {
-        const activeImportedShare = await getActiveImportedShare(req);
+        const activeImportedShare =
+          (await getActiveImportedShare(req)) ||
+          (await getImportedShareByIdForCurrentUser(req, subscription.importedShareId));
 
         if (activeImportedShare) {
           return res.json({
