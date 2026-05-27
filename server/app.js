@@ -54,11 +54,15 @@ const APP_URL =
   "http://localhost:5173";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || "Camelio <onboarding@resend.dev>";
+const EMAIL_FROM =
+  process.env.RESEND_FROM_EMAIL ||
+  process.env.EMAIL_FROM ||
+  "Camelio <onboarding@resend.dev>";
 const EMAIL_REPLY_TO =
+  process.env.RESEND_MAIL_REPLY_TO ||
+  process.env.RESEND_REPLY_TO ||
   process.env.EMAIL_REPLY_TO ||
   process.env.MAIL_REPLY_TO ||
-  process.env.SMTP_USER ||
   "info@camelio.app";
 
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
@@ -2081,12 +2085,14 @@ async function generateUniqueGuestAccessCode() {
     const result = await dynamo.send(
       new ScanCommand({
         TableName: DYNAMODB_TABLE,
-        FilterExpression: "#type = :type AND guestAccessCode = :guestAccessCode",
+        FilterExpression:
+          "(#type = :profileShareType OR #type = :guestSignupType) AND guestAccessCode = :guestAccessCode",
         ExpressionAttributeNames: {
           "#type": "type",
         },
         ExpressionAttributeValues: {
-          ":type": "profileShare",
+          ":profileShareType": "profileShare",
+          ":guestSignupType": "guestSignupInvitation",
           ":guestAccessCode": code,
         },
         Limit: 1,
@@ -2363,7 +2369,16 @@ Utilise ce code avec le courriel ${email} lors de ton inscription ou dans l’ac
         });
       }
 
-      const existingUser = await findCamelioUserByEmail(email);
+      let existingUser = null;
+
+      try {
+        existingUser = await findCamelioUserByEmail(email);
+      } catch (lookupError) {
+        console.warn(
+          "Recherche utilisateur ignorée pendant la préparation de l’invitation:",
+          lookupError?.message || lookupError
+        );
+      }
 
       if (existingUser) {
         return res.json({
@@ -2423,7 +2438,14 @@ Utilise ce code avec le courriel ${email} lors de ton inscription ou dans l’ac
           : "Invitation préparée.",
       });
     } catch (error) {
-      next(error);
+      console.error("Erreur préparation invitation création compte:", error);
+      return res.status(500).json({
+        success: false,
+        error: "invite_create_account_failed",
+        message:
+          error?.message ||
+          "Impossible de préparer l’invitation. Vérifiez la configuration DynamoDB ou courriel.",
+      });
     }
   }
 );
@@ -2446,7 +2468,16 @@ app.post(
         });
       }
 
-      const existingUser = await findCamelioUserByEmail(email);
+      let existingUser = null;
+
+      try {
+        existingUser = await findCamelioUserByEmail(email);
+      } catch (lookupError) {
+        console.warn(
+          "Recherche utilisateur ignorée pendant la préparation de l’invitation:",
+          lookupError?.message || lookupError
+        );
+      }
 
       if (existingUser) {
         return res.json({
