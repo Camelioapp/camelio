@@ -232,15 +232,9 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [selectedUser, setSelectedUser] = useState(null);
 
   const [selectedChildIds, setSelectedChildIds] = useState([]);
-  const [selectedSectionIds, setSelectedSectionIds] = useState([
-    "children",
-    "calendar",
-    "documents",
-  ]);
+  const [selectedSectionIds, setSelectedSectionIds] = useState(["children"]);
   const [sectionPermissions, setSectionPermissions] = useState({
     children: "read",
-    calendar: "read",
-    documents: "read",
   });
   const [note, setNote] = useState("");
 
@@ -257,7 +251,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const canSearch = isValidEmail(searchEmail);
 
   const canChooseAccess =
-    Boolean(selectedUser?.userId) &&
+    (Boolean(selectedUser?.userId) || Boolean(inviteDraft?.guestAccessCode) || isValidEmail(searchEmail)) &&
     selectedChildIds.length > 0 &&
     selectedSectionIds.length > 0;
 
@@ -300,11 +294,9 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     setFoundUser(null);
     setSelectedUser(null);
     setSelectedChildIds([]);
-    setSelectedSectionIds(["children", "calendar", "documents"]);
+    setSelectedSectionIds(["children"]);
     setSectionPermissions({
       children: "read",
-      calendar: "read",
-      documents: "read",
     });
     setEditingShareId("");
     setNote("");
@@ -483,11 +475,22 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
 
       setInviteEmailSubject(subject);
       setInviteEmailBody(body);
-      setInviteDraft({
+      const preparedDraft = {
         email: cleanEmail,
         name: searchName.trim(),
         guestAccessCode: data?.guestAccessCode || "",
+        sent: false,
+      };
+
+      setInviteDraft(preparedDraft);
+      setSelectedUser({
+        userId: "",
+        email: cleanEmail,
+        name: searchName.trim() || cleanEmail,
+        guestAccessCode: preparedDraft.guestAccessCode,
       });
+      setSelectedSectionIds(["children"]);
+      setSectionPermissions({ children: "read" });
     } catch (error) {
       console.error("Erreur préparation invitation création compte:", error);
       setWizardProblem(error?.message || "Impossible de préparer l’invitation.");
@@ -528,7 +531,15 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       }
 
       setInviteDraft((current) => ({ ...(current || {}), sent: true }));
-      setWizardInfo("Invitation envoyée. Le code invité peut aussi être copié et transmis manuellement.");
+      setSelectedUser({
+        userId: "",
+        email: inviteDraft.email,
+        name: inviteDraft.name || searchName.trim() || inviteDraft.email,
+        guestAccessCode: inviteDraft.guestAccessCode,
+      });
+      setSelectedSectionIds(["children"]);
+      setSectionPermissions({ children: "read" });
+      setWizardInfo("Invitation envoyée. Vous pouvez maintenant copier le code ou donner les accès. Par défaut, seul le profil d’enfant est partagé.");
     } catch (error) {
       console.error("Erreur envoi invitation création compte:", error);
       setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
@@ -634,7 +645,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   async function createShare() {
     if (!canChooseAccess) {
       setWizardProblem(
-        "Sélectionne un utilisateur, au moins un enfant et au moins une section."
+        "Sélectionne au moins un enfant et au moins une section. Pour un nouveau compte, prépare d’abord l’invitation afin de générer le code invité."
       );
       return;
     }
@@ -647,11 +658,23 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       {}
     );
 
+    const inviteeEmail = selectedUser?.email || inviteDraft?.email || searchEmail.trim().toLowerCase();
+    const inviteeName =
+      getUserAutomaticName(selectedUser) ||
+      inviteDraft?.name ||
+      searchName.trim() ||
+      inviteeEmail;
+
     const payload = {
-      targetUserId: selectedUser.userId,
-      inviteeUserId: selectedUser.userId,
-      inviteeName: getUserAutomaticName(selectedUser) || searchName.trim(),
-      inviteeEmail: selectedUser.email || searchEmail.trim().toLowerCase(),
+      ...(selectedUser?.userId
+        ? {
+            targetUserId: selectedUser.userId,
+            inviteeUserId: selectedUser.userId,
+          }
+        : {}),
+      guestAccessCode: inviteDraft?.guestAccessCode || selectedUser?.guestAccessCode || "",
+      inviteeName,
+      inviteeEmail,
       childIds: selectedChildIds,
       children: selectedChildren.map((child) => ({
         id: child.id,
@@ -948,6 +971,33 @@ if (!response.ok) {
                 placeholder="Ex. Thomas"
               />
 
+              {inviteDraft?.guestAccessCode ? (
+                <div className="mt-5 rounded-3xl border border-[#D8CBE8] bg-[#F7F3FF] p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#9D8BB7]">
+                    Code invité associé à ce courriel
+                  </p>
+
+                  <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="break-all text-xl font-black tracking-[0.08em] text-[#4F4A45]">
+                      {inviteDraft.guestAccessCode}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={copyInviteDraftCode}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-[#D8CBE8] bg-white px-4 py-2 text-sm font-bold text-[#7D6A9A]"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copier le code
+                    </button>
+                  </div>
+
+                  <p className="mt-2 text-xs leading-5 text-[#7D6A9A]">
+                    Ce code devra être utilisé avec le courriel {inviteDraft.email}.
+                  </p>
+                </div>
+              ) : null}
+
               <div className="mt-5 flex flex-col gap-3 md:flex-row">
                 <button
                   type="button"
@@ -956,8 +1006,24 @@ if (!response.ok) {
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                 >
                   <Mail className="h-4 w-4" />
-                  {isSaving ? "Préparation..." : "Inviter à créer un compte"}
+                  {isSaving ? "Préparation..." : inviteDraft?.guestAccessCode ? "Réouvrir l’invitation" : "Inviter à créer un compte"}
                 </button>
+
+                {inviteDraft?.guestAccessCode ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWizardMessage(
+                        "Par défaut, seul le profil d’enfant est partagé. Vous pouvez maintenant choisir les enfants à partager."
+                      );
+                      setWizardError("");
+                      setWizardStep(3);
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#A8B193] bg-white px-5 py-3 text-sm font-bold text-[#6F785F]"
+                  >
+                    Donner les accès
+                  </button>
+                ) : null}
               </div>
             </div>
           )}
@@ -1357,6 +1423,23 @@ if (!response.ok) {
                 <Mail className="h-4 w-4" />
                 {inviteDraft.sent ? "Invitation envoyée" : isSendingInvite ? "Envoi..." : "Envoyer l’invitation"}
               </button>
+
+              {inviteDraft?.sent ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInviteDraft(null);
+                    setWizardMessage(
+                      "Invitation envoyée. Par défaut, seul le profil d’enfant est partagé. Vous pouvez maintenant choisir les enfants."
+                    );
+                    setWizardError("");
+                    setWizardStep(3);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#A8B193] bg-white px-5 py-3 text-sm font-bold text-[#6F785F]"
+                >
+                  Donner les accès
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

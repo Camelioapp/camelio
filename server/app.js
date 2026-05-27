@@ -2590,7 +2590,10 @@ app.post(
       const now = new Date().toISOString();
       const shareId = req.body.id || randomUUID();
       const invitationToken = randomUUID();
-      const guestAccessCode = await generateUniqueGuestAccessCode();
+      const providedGuestAccessCode = String(req.body?.guestAccessCode || "")
+        .trim()
+        .toUpperCase();
+      const guestAccessCode = providedGuestAccessCode || (await generateUniqueGuestAccessCode());
       const invitationExpiresAt = createInvitationExpiry();
       const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
