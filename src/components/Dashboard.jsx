@@ -12,6 +12,7 @@ import {
   Star,
   UsersRound,
   LockKeyhole,
+  BookOpen,
 } from "lucide-react";
 
 import SubscriptionPopup from "./SubscriptionPopup";
@@ -29,6 +30,7 @@ import Notes from "./Notes.jsx";
 import SettingsView from "./SettingsView.jsx";
 import GuestSettingsView from "./GuestSettingsView.jsx";
 import MemorablePhrases from "./MemorablePhrases.jsx";
+import CarnetSouvenirs from "./CarnetSouvenirs.jsx";
 import { sections, getSectionTheme } from "./sectionsData.js";
 import { motion } from "framer-motion";
 import ProfileSharing from "./ProfileSharing.jsx";
@@ -49,6 +51,17 @@ const guestSettingsSection = {
   bg: "bg-[#FFFDF8]",
   border: "border-[#EADFCF]",
   iconBg: "bg-[#A8B193]",
+};
+
+
+const carnetSouvenirsSection = {
+  id: "carnet-souvenirs",
+  title: "Carnet souvenir",
+  description: "Échographies, premiers moments, croissance, photos et souvenirs précieux.",
+  icon: BookOpen,
+  bg: "bg-[#FFFDF8]",
+  border: "border-[#EADFCF]",
+  iconBg: "bg-[#B5A7C8]",
 };
 
 const childColorOptions = [
@@ -347,18 +360,12 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
   if (!activeAccount || accounts.length <= 1) {
     return activeAccount ? (
       <div className="inline-flex items-center gap-2 rounded-full border border-[#eadfcf] bg-white/90 px-4 py-2 text-xs font-bold text-[#6f665e] shadow-sm">
-        {activeAccount.type === "guest" && (activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto) ? (
-          <img
-            src={activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto}
-            alt="Profil invité"
-            className="h-5 w-5 rounded-full object-cover"
-          />
-        ) : activeAccount.type === "guest" ? (
+        {activeAccount.type === "guest" ? (
           <UsersRound className="h-4 w-4 text-[#b58bbd]" />
         ) : (
           <Crown className="h-4 w-4 text-[#8f9874]" />
         )}
-        <span>{activeAccount.type === "guest" ? activeAccount.label || "Invité" : "Compte principal"}</span>
+        <span>{activeAccount.type === "guest" ? "Invité" : "Compte principal"}</span>
       </div>
     ) : null;
   }
@@ -371,19 +378,13 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
         className="inline-flex items-center gap-2 rounded-full border border-[#d8c8b6] bg-white/95 px-4 py-2 text-xs font-bold text-[#5f564e] shadow-sm transition hover:bg-[#fffdf8]"
         aria-label="Sélectionner le compte Camelio"
       >
-        {activeAccount.type === "guest" && (activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto) ? (
-          <img
-            src={activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto}
-            alt="Profil invité"
-            className="h-5 w-5 rounded-full object-cover"
-          />
-        ) : activeAccount.type === "guest" ? (
+        {activeAccount.type === "guest" ? (
           <UsersRound className="h-4 w-4 text-[#b58bbd]" />
         ) : (
           <Crown className="h-4 w-4 text-[#8f9874]" />
         )}
         <span className="max-w-[150px] truncate sm:max-w-[190px]">
-          {activeAccount.type === "guest" ? activeAccount.label || "Invité" : "Compte principal"}
+          {activeAccount.type === "guest" ? "Invité" : "Compte principal"}
         </span>
         <ChevronDown
           className={`h-4 w-4 text-[#8b8278] transition ${
@@ -411,26 +412,18 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
                 }`}
               >
                 <span
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
                     account.type === "guest"
                       ? "bg-[#f4e8f4] text-[#b58bbd]"
                       : "bg-[#eef0e7] text-[#8f9874]"
                   }`}
                 >
-                  {account.type === "guest" && (account.customSharePhoto || account.share?.customSharePhoto) ? (
-                    <img
-                      src={account.customSharePhoto || account.share?.customSharePhoto}
-                      alt="Profil invité"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Icon className="h-5 w-5" />
-                  )}
+                  <Icon className="h-5 w-5" />
                 </span>
 
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold text-[#4f4a45]">
-                    {account.type === "guest" ? account.label || "Invité (partagé)" : "Compte principal"}
+                    {account.type === "guest" ? "Invité (partagé)" : "Compte principal"}
                   </span>
                   <span className="block truncate text-xs font-medium text-[#8b8278]">
                     {account.description || account.label}
@@ -487,9 +480,23 @@ export default function Dashboard({
 
   const activeAccountIsGuest = activeAccount?.type === "guest";
 
-  const activeGuestShare = activeAccountIsGuest
-    ? activeAccount?.share || sharedAccess.shares?.[0] || null
-    : null;
+  const dashboardSections = useMemo(() => {
+    if (sections.some((section) => section.id === carnetSouvenirsSection.id)) {
+      return sections;
+    }
+
+    const settingsIndex = sections.findIndex((section) => section.id === "settings");
+
+    if (settingsIndex === -1) {
+      return [...sections, carnetSouvenirsSection];
+    }
+
+    return [
+      ...sections.slice(0, settingsIndex),
+      carnetSouvenirsSection,
+      ...sections.slice(settingsIndex),
+    ];
+  }, []);
 
   const setParentProfile = (updatedProfile) => {
     if (typeof updatedProfile === "function") {
@@ -689,7 +696,7 @@ export default function Dashboard({
     loadAccountsAndAccess();
   }, [loadAccountsAndAccess]);
 
-  async function selectAccount(accountId, options = {}) {
+  async function selectAccount(accountId) {
     const selectedAccount = accountAccess.accounts.find(
       (account) => account.accountId === accountId
     );
@@ -701,9 +708,7 @@ export default function Dashboard({
         ? activeAccount
         : accountAccess.accounts.find((account) => account.type === "guest" && account.share);
 
-    if (!options.stayOnSection) {
-      setActiveSection("home");
-    }
+    setActiveSection("home");
 
     if (selectedAccount.type === "guest") {
       setAccountAccess((current) => ({
@@ -834,17 +839,17 @@ export default function Dashboard({
   }
 
   const defaultSectionOrder = useMemo(() => {
-    return sections
+    return dashboardSections
       .filter((section) => section.id !== "settings")
       .map((section) => section.id);
-  }, []);
+  }, [dashboardSections]);
 
   const [sectionOrderIds, setSectionOrderIds] = useState(() => {
     try {
       const savedOrder = localStorage.getItem(SECTION_ORDER_STORAGE_KEY);
 
       if (!savedOrder) {
-        return sections
+        return dashboardSections
           .filter((section) => section.id !== "settings")
           .map((section) => section.id);
       }
@@ -852,18 +857,18 @@ export default function Dashboard({
       const parsedOrder = JSON.parse(savedOrder);
 
       if (!Array.isArray(parsedOrder)) {
-        return sections
+        return dashboardSections
           .filter((section) => section.id !== "settings")
           .map((section) => section.id);
       }
 
-      const availableIds = sections
+      const availableIds = dashboardSections
         .filter((section) => section.id !== "settings")
         .map((section) => section.id);
 
       return parsedOrder.filter((id) => availableIds.includes(id));
     } catch {
-      return sections
+      return dashboardSections
         .filter((section) => section.id !== "settings")
         .map((section) => section.id);
     }
@@ -877,6 +882,23 @@ export default function Dashboard({
       return {};
     }
   });
+
+  useEffect(() => {
+    const availableIds = dashboardSections
+      .filter((section) => section.id !== "settings")
+      .map((section) => section.id);
+
+    setSectionOrderIds((current) => {
+      const cleaned = current.filter((id) => availableIds.includes(id));
+      const missing = availableIds.filter((id) => !cleaned.includes(id));
+
+      if (cleaned.length === current.length && missing.length === 0) {
+        return current;
+      }
+
+      return [...cleaned, ...missing];
+    });
+  }, [dashboardSections]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -894,9 +916,9 @@ export default function Dashboard({
 
   const orderedSections = useMemo(() => {
     return sectionOrderIds
-      .map((id) => sections.find((section) => section.id === id))
+      .map((id) => dashboardSections.find((section) => section.id === id))
       .filter(Boolean);
-  }, [sectionOrderIds]);
+  }, [sectionOrderIds, dashboardSections]);
 
   const sharedSectionIds = useMemo(() => {
     if (!sharedAccess.hasSharedAccess) return null;
@@ -1008,8 +1030,8 @@ export default function Dashboard({
       return guestSettingsSection;
     }
 
-    return sections.find((section) => section.id === activeSection);
-  }, [activeSection]);
+    return dashboardSections.find((section) => section.id === activeSection);
+  }, [activeSection, dashboardSections]);
 
   function openSection(sectionId) {
     if (isGuestAccount && guestLockedSectionIds.has(sectionId)) {
@@ -1100,6 +1122,9 @@ export default function Dashboard({
       case "memorable-phrases":
         return <MemorablePhrases children={children} onBack={goHome} />;
 
+      case "carnet-souvenirs":
+        return <CarnetSouvenirs children={children} onBack={goHome} />;
+
       case "profile-sharing":
         if (sharedAccess.hasSharedAccess) return null;
         return <ProfileSharing children={children} onBack={goHome} />;
@@ -1110,12 +1135,8 @@ export default function Dashboard({
         return (
           <GuestSettingsView
             userEmail={parentProfile.email}
-            sharedProfile={activeGuestShare}
-            guestAccounts={accountAccess.accounts.filter((account) => account.type === "guest")}
-            activeGuestAccountId={accountAccess.activeAccountId}
-            onSelectGuestAccount={(accountId) => selectAccount(accountId, { stayOnSection: true })}
+            sharedProfile={sharedAccess.shares?.[0] || null}
             onBack={goHome}
-            onUpdated={loadAccountsAndAccess}
           />
         );
 
