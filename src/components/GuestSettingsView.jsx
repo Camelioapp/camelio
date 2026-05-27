@@ -9,6 +9,9 @@ import {
   UserRound,
   Pencil,
   Save,
+  Camera,
+  UsersRound,
+  Check,
 } from "lucide-react";
 
 const API_BASE_URL =
@@ -27,6 +30,9 @@ function SimpleCard({ children, className = "" }) {
 export default function GuestSettingsView({
   sharedProfile = null,
   userEmail = "",
+  guestAccounts = [],
+  activeGuestAccountId = "",
+  onSelectGuestAccount = () => {},
   onBack = () => {},
   onUpdated = () => {},
 }) {
@@ -41,6 +47,13 @@ export default function GuestSettingsView({
       sharedProfile?.guestAccessCode ||
       "Accès invité"
   );
+  const [sharePhoto, setSharePhoto] = useState(
+    sharedProfile?.customSharePhoto || sharedProfile?.sharePhoto || ""
+  );
+  const [sharePhotoS3Key, setSharePhotoS3Key] = useState(
+    sharedProfile?.customSharePhotoS3Key || ""
+  );
+  const [localPhotoFile, setLocalPhotoFile] = useState(null);
   const [labelLoading, setLabelLoading] = useState(false);
   const [labelMessage, setLabelMessage] = useState("");
   const [labelError, setLabelError] = useState("");
@@ -76,6 +89,9 @@ export default function GuestSettingsView({
         sharedProfile?.guestAccessCode ||
         "Accès invité"
     );
+    setSharePhoto(sharedProfile?.customSharePhoto || sharedProfile?.sharePhoto || "");
+    setSharePhotoS3Key(sharedProfile?.customSharePhotoS3Key || "");
+    setLocalPhotoFile(null);
     setLabelMessage("");
     setLabelError("");
   }, [
@@ -84,7 +100,73 @@ export default function GuestSettingsView({
     sharedProfile?.shareLabel,
     sharedProfile?.label,
     sharedProfile?.guestAccessCode,
+    sharedProfile?.customSharePhoto,
+    sharedProfile?.sharePhoto,
+    sharedProfile?.customSharePhotoS3Key,
   ]);
+
+  const handleSharePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type?.startsWith("image/")) {
+      setLabelError("Choisissez une image valide.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setLabelError("La photo doit faire moins de 5 Mo.");
+      return;
+    }
+
+    setLocalPhotoFile(file);
+    setSharePhoto(URL.createObjectURL(file));
+    setSharePhotoS3Key("");
+    setLabelMessage("");
+    setLabelError("");
+  };
+
+  const uploadSharePhotoIfNeeded = async () => {
+    if (!localPhotoFile) {
+      return {
+        customSharePhoto: sharePhoto,
+        customSharePhotoS3Key: sharePhotoS3Key,
+      };
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/uploads/avatar`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: localPhotoFile.name || "photo-partage.jpg",
+        fileType: localPhotoFile.type || "image/jpeg",
+        fileSize: localPhotoFile.size,
+        childId: `guest-share-${shareId || "profile"}`,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.message || "Impossible de préparer l’importation de la photo.");
+    }
+
+    const uploadResponse = await fetch(data.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": localPhotoFile.type || "image/jpeg" },
+      body: localPhotoFile,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error("Impossible d’importer la photo dans l’espace sécurisé.");
+    }
+
+    return {
+      customSharePhoto: data.downloadUrl || "",
+      customSharePhotoS3Key: data.s3Key || "",
+    };
+  };
 
   const handleSaveShareLabel = async () => {
     const cleanLabel = shareLabel.trim();
@@ -104,13 +186,19 @@ export default function GuestSettingsView({
       setLabelMessage("");
       setLabelError("");
 
+      const uploadedPhoto = await uploadSharePhotoIfNeeded();
+
       const response = await fetch(
         `${API_BASE_URL}/api/profile-shares/imported/${sharedProfile.id}/label`,
         {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: cleanLabel }),
+          body: JSON.stringify({
+            label: cleanLabel,
+            customSharePhoto: uploadedPhoto.customSharePhoto,
+            customSharePhotoS3Key: uploadedPhoto.customSharePhotoS3Key,
+          }),
         }
       );
 
@@ -120,7 +208,10 @@ export default function GuestSettingsView({
         throw new Error(data.message || "Impossible de modifier le nom du partage.");
       }
 
-      setLabelMessage("Le nom du partage a été modifié.");
+      setSharePhoto(data.share?.customSharePhoto || uploadedPhoto.customSharePhoto || "");
+      setSharePhotoS3Key(data.share?.customSharePhotoS3Key || uploadedPhoto.customSharePhotoS3Key || "");
+      setLocalPhotoFile(null);
+      setLabelMessage("Le profil invité a été modifié.");
       onUpdated();
     } catch (error) {
       setLabelError(error.message || "Impossible de modifier le nom du partage.");
@@ -265,6 +356,62 @@ export default function GuestSettingsView({
         </div>
       </SimpleCard>
 
+      {guestAccounts.length > 1 ? (
+        <SimpleCard>
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F4E8F4] text-[#9A7CB0]">
+              <UsersRound className="h-5 w-5" />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-[#3F3B35]">Changer de profil invité</p>
+              <p className="mt-1 text-sm leading-6 text-[#6B6258]">
+                Sélectionnez l’espace partagé que vous voulez consulter ou modifier.
+              </p>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {guestAccounts.map((account) => {
+                  const accountPhoto = account.customSharePhoto || account.share?.customSharePhoto || "";
+                  const isActive = account.accountId === activeGuestAccountId;
+
+                  return (
+                    <button
+                      key={account.accountId}
+                      type="button"
+                      onClick={() => onSelectGuestAccount(account.accountId)}
+                      className={`flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                        isActive
+                          ? "border-[#B5A7C8] bg-[#F8F2FB]"
+                          : "border-[#EADFCF] bg-[#FFFDF8] hover:bg-[#F8F3EA]"
+                      }`}
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#F4E8F4] text-[#9A7CB0]">
+                        {accountPhoto ? (
+                          <img src={accountPhoto} alt="Profil invité" className="h-full w-full object-cover" />
+                        ) : (
+                          <UsersRound className="h-5 w-5" />
+                        )}
+                      </span>
+
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-bold text-[#3F3B35]">
+                          {account.label || "Invité (partagé)"}
+                        </span>
+                        <span className="block truncate text-xs font-semibold text-[#8B8278]">
+                          {account.description || "Accès limité et partagé"}
+                        </span>
+                      </span>
+
+                      {isActive ? <Check className="h-5 w-5 shrink-0 text-[#8FA173]" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </SimpleCard>
+      ) : null}
+
       <SimpleCard>
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F4E8F4] text-[#9A7CB0]">
@@ -276,6 +423,40 @@ export default function GuestSettingsView({
             <p className="mt-1 text-sm leading-6 text-[#6B6258]">
               Ce nom apparaît dans le sélecteur de compte pour distinguer vos différents accès invités.
             </p>
+
+            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#F4E8F4] text-[#9A7CB0] ring-1 ring-[#E6D8EF]">
+                {sharePhoto ? (
+                  <img src={sharePhoto} alt="Profil du partage" className="h-full w-full object-cover" />
+                ) : (
+                  <UsersRound className="h-8 w-8" />
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[#EADFCF] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#6B6258] transition hover:bg-[#F8F3EA]">
+                  <Camera className="h-4 w-4" />
+                  Choisir une photo
+                  <input type="file" accept="image/*" onChange={handleSharePhotoChange} className="hidden" />
+                </label>
+
+                {sharePhoto ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSharePhoto("");
+                      setSharePhotoS3Key("");
+                      setLocalPhotoFile(null);
+                      setLabelMessage("");
+                      setLabelError("");
+                    }}
+                    className="rounded-2xl border border-[#EADFCF] bg-white px-4 py-3 text-sm font-bold text-[#8B8278] transition hover:bg-[#F8F3EA]"
+                  >
+                    Retirer la photo
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
               <input

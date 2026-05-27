@@ -4140,6 +4140,8 @@ app.get(
           const sharedChildren = await loadSharedChildrenForImportedShare(share);
           const hydratedShare = {
             ...share,
+            customSharePhoto: share.customSharePhoto || share.sharePhoto || share.profilePhoto || "",
+            customSharePhotoS3Key: share.customSharePhotoS3Key || "",
             children: sharedChildren,
           };
 
@@ -4149,6 +4151,12 @@ app.get(
             share.label ||
             share.guestAccessCode ||
             (share.sourceOwnerName ? `Invité de ${share.sourceOwnerName}` : "Invité (partagé)");
+
+          const guestPhoto =
+            share.customSharePhoto ||
+            share.sharePhoto ||
+            share.profilePhoto ||
+            "";
 
           return {
             accountId: `guest-${share.id || index}`,
@@ -4166,6 +4174,8 @@ app.get(
             shareId: share.id,
             shareLabel: share.shareLabel || share.label || "",
             customShareLabel: share.customShareLabel || "",
+            customSharePhoto: guestPhoto,
+            customSharePhotoS3Key: share.customSharePhotoS3Key || "",
             guestAccessCode: share.guestAccessCode || "",
             sourceShareId: share.sourceShareId || "",
             sourceOwnerUserId: share.sourceOwnerUserId || "",
@@ -4196,10 +4206,10 @@ app.get(
             ) || guestAccounts[0]
           : null;
 
-      const defaultActiveAccountId = subscriptionGuestAccount
-        ? subscriptionGuestAccount.accountId
-        : savedAccountExists
+      const defaultActiveAccountId = savedAccountExists
         ? savedActiveAccountId
+        : subscriptionGuestAccount
+        ? subscriptionGuestAccount.accountId
         : guestAccounts[0]?.accountId || principalAccount.accountId;
 
       if ((subscriptionGuestAccount || !savedAccountExists) && profile.PK && profile.SK) {
@@ -4325,6 +4335,12 @@ app.patch(
       const label = String(req.body?.label || req.body?.shareLabel || "")
         .trim()
         .slice(0, 80);
+      const customSharePhoto = String(req.body?.customSharePhoto || "")
+        .trim()
+        .slice(0, 2048);
+      const customSharePhotoS3Key = String(req.body?.customSharePhotoS3Key || "")
+        .trim()
+        .slice(0, 1024);
 
       if (!shareId) {
         return res.status(400).json({
@@ -4371,9 +4387,11 @@ app.patch(
             SK: `IMPORTED_SHARE#${shareId}`,
           },
           UpdateExpression:
-            "SET customShareLabel = :label, updatedAt = :updatedAt",
+            "SET customShareLabel = :label, customSharePhoto = :customSharePhoto, customSharePhotoS3Key = :customSharePhotoS3Key, updatedAt = :updatedAt",
           ExpressionAttributeValues: {
             ":label": label,
+            ":customSharePhoto": customSharePhoto,
+            ":customSharePhotoS3Key": customSharePhotoS3Key,
             ":updatedAt": now,
           },
           ReturnValues: "NONE",
@@ -4385,9 +4403,11 @@ app.patch(
         share: {
           ...existingResult.Item,
           customShareLabel: label,
+          customSharePhoto,
+          customSharePhotoS3Key,
           updatedAt: now,
         },
-        message: "Le nom du partage a été modifié.",
+        message: "Le partage a été modifié.",
       });
     } catch (error) {
       next(error);

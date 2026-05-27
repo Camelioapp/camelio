@@ -347,7 +347,13 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
   if (!activeAccount || accounts.length <= 1) {
     return activeAccount ? (
       <div className="inline-flex items-center gap-2 rounded-full border border-[#eadfcf] bg-white/90 px-4 py-2 text-xs font-bold text-[#6f665e] shadow-sm">
-        {activeAccount.type === "guest" ? (
+        {activeAccount.type === "guest" && (activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto) ? (
+          <img
+            src={activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto}
+            alt="Profil invité"
+            className="h-5 w-5 rounded-full object-cover"
+          />
+        ) : activeAccount.type === "guest" ? (
           <UsersRound className="h-4 w-4 text-[#b58bbd]" />
         ) : (
           <Crown className="h-4 w-4 text-[#8f9874]" />
@@ -365,7 +371,13 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
         className="inline-flex items-center gap-2 rounded-full border border-[#d8c8b6] bg-white/95 px-4 py-2 text-xs font-bold text-[#5f564e] shadow-sm transition hover:bg-[#fffdf8]"
         aria-label="Sélectionner le compte Camelio"
       >
-        {activeAccount.type === "guest" ? (
+        {activeAccount.type === "guest" && (activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto) ? (
+          <img
+            src={activeAccount.customSharePhoto || activeAccount.share?.customSharePhoto}
+            alt="Profil invité"
+            className="h-5 w-5 rounded-full object-cover"
+          />
+        ) : activeAccount.type === "guest" ? (
           <UsersRound className="h-4 w-4 text-[#b58bbd]" />
         ) : (
           <Crown className="h-4 w-4 text-[#8f9874]" />
@@ -399,13 +411,21 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
                 }`}
               >
                 <span
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ${
                     account.type === "guest"
                       ? "bg-[#f4e8f4] text-[#b58bbd]"
                       : "bg-[#eef0e7] text-[#8f9874]"
                   }`}
                 >
-                  <Icon className="h-5 w-5" />
+                  {account.type === "guest" && (account.customSharePhoto || account.share?.customSharePhoto) ? (
+                    <img
+                      src={account.customSharePhoto || account.share?.customSharePhoto}
+                      alt="Profil invité"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Icon className="h-5 w-5" />
+                  )}
                 </span>
 
                 <span className="min-w-0 flex-1">
@@ -669,7 +689,7 @@ export default function Dashboard({
     loadAccountsAndAccess();
   }, [loadAccountsAndAccess]);
 
-  async function selectAccount(accountId) {
+  async function selectAccount(accountId, options = {}) {
     const selectedAccount = accountAccess.accounts.find(
       (account) => account.accountId === accountId
     );
@@ -681,7 +701,9 @@ export default function Dashboard({
         ? activeAccount
         : accountAccess.accounts.find((account) => account.type === "guest" && account.share);
 
-    setActiveSection("home");
+    if (!options.stayOnSection) {
+      setActiveSection("home");
+    }
 
     if (selectedAccount.type === "guest") {
       setAccountAccess((current) => ({
@@ -1089,6 +1111,9 @@ export default function Dashboard({
           <GuestSettingsView
             userEmail={parentProfile.email}
             sharedProfile={activeGuestShare}
+            guestAccounts={accountAccess.accounts.filter((account) => account.type === "guest")}
+            activeGuestAccountId={accountAccess.activeAccountId}
+            onSelectGuestAccount={(accountId) => selectAccount(accountId, { stayOnSection: true })}
             onBack={goHome}
             onUpdated={loadAccountsAndAccess}
           />
