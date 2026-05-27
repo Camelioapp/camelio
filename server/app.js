@@ -1499,14 +1499,15 @@ async function sendEmailWithResend({ to, subject, html, text }) {
   return data;
 }
 
-app.get("/api/test-email", async (req, res) => {
-  try {
-    console.log("TEST RESEND EMAIL START", {
-      hasResendApiKey: Boolean(RESEND_API_KEY),
-      emailFrom: EMAIL_FROM,
-      emailReplyTo: EMAIL_REPLY_TO,
+app.get("/api/test-email", requireAuth, async (req, res) => {
+  if (IS_PRODUCTION) {
+    return res.status(403).json({
+      error: "forbidden",
+      message: "Route désactivée en production.",
     });
+  }
 
+  try {
     const result = await sendEmailWithResend({
       to: process.env.TEST_EMAIL_TO || process.env.SMTP_USER || "info@camelio.app",
       subject: "Test courriel Camelio via Resend",
@@ -1521,18 +1522,19 @@ app.get("/api/test-email", async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Courriel de test envoyé avec Resend.",
+      message: "Courriel de test envoyé.",
       result,
     });
-  } catch (error) {
-    console.error("Erreur test Resend:", error);
+  } catch (err) {
+    console.error("Erreur test-email:", err);
 
     return res.status(500).json({
-      success: false,
-      message: error.message,
+      error: "email_error",
+      message: "Impossible d’envoyer le courriel de test.",
     });
   }
 });
+
 
 app.get("/aws-check", (req, res) => {
   if (IS_PRODUCTION) {
