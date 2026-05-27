@@ -42,8 +42,9 @@ const permissionOptions = [
   },
 ];
 
+const nonShareableSectionIds = ["children"];
+
 const shareableSectionIds = [
-  "children",
   "photos",
   "memorable-phrases",
   "calendar",
@@ -233,15 +234,19 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [selectedUser, setSelectedUser] = useState(null);
 
   const [selectedChildIds, setSelectedChildIds] = useState([]);
-  const [selectedSectionIds, setSelectedSectionIds] = useState(["children"]);
-  const [sectionPermissions, setSectionPermissions] = useState({
-    children: "read",
-  });
+  const [selectedSectionIds, setSelectedSectionIds] = useState([]);
+  const [sectionPermissions, setSectionPermissions] = useState({});
   const [note, setNote] = useState("");
 
   const shareableSections = useMemo(() => {
     return sections.filter((section) =>
       shareableSectionIds.includes(section.id)
+    );
+  }, []);
+
+  const nonShareableSections = useMemo(() => {
+    return sections.filter((section) =>
+      nonShareableSectionIds.includes(section.id)
     );
   }, []);
 
@@ -295,10 +300,8 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
     setFoundUser(null);
     setSelectedUser(null);
     setSelectedChildIds([]);
-    setSelectedSectionIds(["children"]);
-    setSectionPermissions({
-      children: "read",
-    });
+    setSelectedSectionIds([]);
+    setSectionPermissions({});
     setEditingShareId("");
     setNote("");
   }
@@ -310,7 +313,9 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   }
 
   function openEditWizard(share) {
-    const sectionIds = Array.isArray(share.sectionIds) ? share.sectionIds : [];
+    const sectionIds = Array.isArray(share.sectionIds)
+      ? share.sectionIds.filter((sectionId) => shareableSectionIds.includes(sectionId))
+      : [];
     const childIds = Array.isArray(share.childIds)
       ? share.childIds
       : (share.children || []).map((child) => child.id).filter(Boolean);
@@ -335,7 +340,13 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
 
     setSelectedChildIds(childIds);
     setSelectedSectionIds(sectionIds);
-    setSectionPermissions(share.sectionPermissions || {});
+    setSectionPermissions(
+      Object.fromEntries(
+        Object.entries(share.sectionPermissions || {}).filter(([sectionId]) =>
+          shareableSectionIds.includes(sectionId)
+        )
+      )
+    );
     setNote(share.note || "");
     setMessage("");
     setShowWizard(true);
@@ -654,7 +665,15 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       return;
     }
 
-    const cleanSectionPermissions = selectedSectionIds.reduce(
+    const allowedSelectedSectionIds = selectedSectionIds.filter((sectionId) =>
+      shareableSectionIds.includes(sectionId)
+    );
+
+    if (allowedSelectedSectionIds.length !== selectedSectionIds.length) {
+      setSelectedSectionIds(allowedSelectedSectionIds);
+    }
+
+    const cleanSectionPermissions = allowedSelectedSectionIds.reduce(
       (acc, sectionId) => {
         acc[sectionId] = sectionPermissions[sectionId] || "read";
         return acc;
@@ -688,7 +707,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
         color: child.color || "sage",
         photo: child.photo || child.avatar || child.image || "",
       })),
-      sectionIds: selectedSectionIds,
+      sectionIds: allowedSelectedSectionIds,
       sectionPermissions: cleanSectionPermissions,
       permission: getHighestPermission(cleanSectionPermissions),
       note: note.trim(),
@@ -1094,7 +1113,45 @@ if (!response.ok) {
               Choisir les accès par section
             </h3>
 
+            <div className="mt-3 rounded-3xl border border-[#EADFCF] bg-[#FBF7EF] px-4 py-3 text-sm text-[#6F665E]">
+              Le <span className="font-bold text-[#4F4A45]">Profil enfant</span> ne peut pas être partagé directement.
+              Cette section contient les informations de base de l’enfant et demeure accessible seulement avec le compte principal.
+              Vous pouvez plutôt partager les sections autorisées ci-dessous, comme le calendrier, les photos, les documents ou la santé.
+            </div>
+
             <div className="mt-4 space-y-3">
+              {nonShareableSections.map((section) => {
+                const Icon = section.icon;
+
+                return (
+                  <div
+                    key={section.id}
+                    className="rounded-3xl border border-[#EADFCF] bg-[#F3F1EC] p-4 opacity-75"
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E6E1D8] text-[#8B8278]">
+                          <Icon className="h-5 w-5" />
+                        </div>
+
+                        <div>
+                          <p className="font-bold text-[#4F4A45]">
+                            {section.title}
+                          </p>
+                          <p className="text-xs text-[#8B8278]">
+                            Non partageable, compte principal seulement.
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className="inline-flex items-center justify-center rounded-full border border-[#D8CDBE] bg-white px-3 py-2 text-xs font-bold text-[#8B8278]">
+                        Non disponible
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
               {shareableSections.map((section) => {
                 const Icon = section.icon;
                 const selected = selectedSectionIds.includes(section.id);
