@@ -79,7 +79,21 @@ export default function SubscriptionPopup({
         const data = await response.json().catch(() => ({}));
 
         if (!isMounted) return;
-        setHasAccess(response.ok && data.hasAccess === true);
+
+        const subscriptionStatus = String(data?.status || "").toLowerCase();
+        const accountType = String(data?.accountType || data?.subscription?.accountType || "").toLowerCase();
+
+        const principalHasAccess =
+          response.ok &&
+          data.hasAccess === true &&
+          subscriptionStatus !== "guest" &&
+          accountType !== "guest";
+
+        setHasAccess(
+          principalActivationOnly
+            ? principalHasAccess
+            : response.ok && data.hasAccess === true
+        );
       } catch (err) {
         console.error("Erreur vérification abonnement:", err);
         if (isMounted) setHasAccess(false);
@@ -93,7 +107,7 @@ export default function SubscriptionPopup({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [principalActivationOnly]);
 
   const handleLogout = () => {
     window.location.href = `${API_URL}/logout`;
