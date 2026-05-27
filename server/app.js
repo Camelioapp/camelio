@@ -2302,33 +2302,60 @@ function getGuestAccessCodeVariants(value = "") {
   return Array.from(variants).filter(Boolean);
 }
 
-async function findGuestSignupInvitationByCode(guestAccessCode) {
-  const variants = getGuestAccessCodeVariants(guestAccessCode);
-
-  if (variants.length === 0) return null;
+async function scanGuestCodeItems({ type, variants, limit = 50 }) {
+  if (!type || !Array.isArray(variants) || variants.length === 0) return [];
 
   const expressionValues = {
-    ":type": "guestSignupInvitation",
+    ":type": type,
   };
+
   const codeConditions = variants.map((variant, index) => {
     const key = `:guestAccessCode${index}`;
     expressionValues[key] = variant;
     return `guestAccessCode = ${key}`;
   });
 
-  const result = await dynamo.send(
-    new ScanCommand({
-      TableName: DYNAMODB_TABLE,
-      FilterExpression: `#type = :type AND (${codeConditions.join(" OR ")})`,
-      ExpressionAttributeNames: {
-        "#type": "type",
-      },
-      ExpressionAttributeValues: expressionValues,
-      Limit: 1,
-    })
-  );
+  const items = [];
+  let lastEvaluatedKey;
 
-  return (result.Items || [])[0] || null;
+  do {
+    const result = await dynamo.send(
+      new ScanCommand({
+        TableName: DYNAMODB_TABLE,
+        FilterExpression: `#type = :type AND (${codeConditions.join(" OR ")})`,
+        ExpressionAttributeNames: {
+          "#type": "type",
+        },
+        ExpressionAttributeValues: expressionValues,
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+
+    items.push(...(result.Items || []));
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey && items.length < limit);
+
+  return items;
+}
+
+async function findGuestSignupInvitationByCode(guestAccessCode) {
+  const variants = getGuestAccessCodeVariants(guestAccessCode);
+
+  if (variants.length === 0) return null;
+
+  const invitations = await scanGuestCodeItems({
+    type: "guestSignupInvitation",
+    variants,
+    limit: 25,
+  });
+
+  return invitations
+    .filter((invitation) => invitation.status !== "revoked")
+    .sort((a, b) =>
+      String(b.createdAt || b.updatedAt || "").localeCompare(
+        String(a.createdAt || a.updatedAt || "")
+      )
+    )[0] || invitations[0] || null;
 }
 
 async function findProfileShareByGuestAccessCode(guestAccessCode) {
@@ -2336,29 +2363,21 @@ async function findProfileShareByGuestAccessCode(guestAccessCode) {
 
   if (variants.length === 0) return null;
 
-  const expressionValues = {
-    ":type": "profileShare",
-  };
-  const codeConditions = variants.map((variant, index) => {
-    const key = `:guestAccessCode${index}`;
-    expressionValues[key] = variant;
-    return `guestAccessCode = ${key}`;
+  const shares = await scanGuestCodeItems({
+    type: "profileShare",
+    variants,
+    limit: 50,
   });
 
-  const result = await dynamo.send(
-    new ScanCommand({
-      TableName: DYNAMODB_TABLE,
-      FilterExpression: `#type = :type AND (${codeConditions.join(" OR ")})`,
-      ExpressionAttributeNames: {
-        "#type": "type",
-      },
-      ExpressionAttributeValues: expressionValues,
-      Limit: 10,
-    })
-  );
+  const activeShares = shares
+    .filter((share) => share.status !== "revoked")
+    .sort((a, b) =>
+      String(b.createdAt || b.updatedAt || "").localeCompare(
+        String(a.createdAt || a.updatedAt || "")
+      )
+    );
 
-  const shares = result.Items || [];
-  return shares.find((share) => share.status !== "revoked") || shares[0] || null;
+  return activeShares[0] || shares[0] || null;
 }
 
 async function getImportedShareByIdForCurrentUser(req, importedShareId = "") {
