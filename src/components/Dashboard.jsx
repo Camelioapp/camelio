@@ -866,7 +866,10 @@ export default function Dashboard({
         .filter((section) => section.id !== "settings")
         .map((section) => section.id);
 
-      return parsedOrder.filter((id) => availableIds.includes(id));
+      const cleanOrder = parsedOrder.filter((id) => availableIds.includes(id));
+      const missingIds = availableIds.filter((id) => !cleanOrder.includes(id));
+
+      return [...cleanOrder, ...missingIds];
     } catch {
       return dashboardSections
         .filter((section) => section.id !== "settings")
@@ -913,6 +916,31 @@ export default function Dashboard({
       JSON.stringify(sectionThemeOverrides)
     );
   }, [sectionThemeOverrides]);
+
+  useEffect(() => {
+    const availableIds = dashboardSections
+      .filter((section) => section.id !== "settings")
+      .map((section) => section.id);
+
+    setSectionOrderIds((currentOrder) => {
+      const currentOrderArray = Array.isArray(currentOrder) ? currentOrder : [];
+      const cleanOrder = currentOrderArray.filter((id) => availableIds.includes(id));
+      const missingIds = availableIds.filter((id) => !cleanOrder.includes(id));
+      const nextOrder = [...cleanOrder, ...missingIds];
+
+      if (JSON.stringify(nextOrder) === JSON.stringify(currentOrderArray)) {
+        return currentOrder;
+      }
+
+      try {
+        localStorage.setItem(SECTION_ORDER_STORAGE_KEY, JSON.stringify(nextOrder));
+      } catch (error) {
+        console.error("Erreur sauvegarde ordre des sections:", error);
+      }
+
+      return nextOrder;
+    });
+  }, [dashboardSections]);
 
   const orderedSections = useMemo(() => {
     return sectionOrderIds
