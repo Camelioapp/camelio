@@ -275,7 +275,22 @@ app.use(express.json({ limit: "10mb" }));
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: [
+          "'self'",
+          "https://api.camelio.app",
+          "https://camelio.onrender.com",
+          "https://*.amazonaws.com",
+          "https://*.stripe.com",
+        ],
+        frameSrc: ["https://*.stripe.com"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -3356,6 +3371,7 @@ app.post(
 
 app.get(
   "/api/profile-shares/invitation/:token",
+  sensitiveLimiter,
   validateAwsConfig,
   async (req, res, next) => {
     try {
@@ -3640,6 +3656,7 @@ app.patch(
 
 app.post(
   "/api/profile-shares/import",
+  sensitiveLimiter,
   requireAuth,
   validateAwsConfig,
   async (req, res, next) => {
@@ -3788,8 +3805,9 @@ app.post(
 );
 
 
-app.post(
+aapp.post(
   "/api/profile-shares/redeem-code",
+  sensitiveLimiter,
   requireAuth,
   validateAwsConfig,
   async (req, res, next) => {
@@ -4266,6 +4284,20 @@ app.put(
 
       const userPk = getUserPk(req);
       const now = new Date().toISOString();
+
+      const accountsResult = await getAvailableAccountsForUser(req);
+
+      const requestedAccountExists = accountsResult.accounts.some(
+        (account) => account.accountId === requestedAccountId
+      );
+
+      if (!requestedAccountExists) {
+        return res.status(403).json({
+          success: false,
+          error: "forbidden_account",
+          message: "Vous n’avez pas accès à ce compte.",
+        });
+      }
 
       await dynamo.send(
         new UpdateCommand({
