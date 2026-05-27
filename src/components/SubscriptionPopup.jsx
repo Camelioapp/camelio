@@ -259,6 +259,7 @@ export default function SubscriptionPopup({
         );
       }
 
+      setHasAccess(true);
       setSuccessMessage(
         data.message || "Votre accès invité est maintenant associé à votre compte."
       );

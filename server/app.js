@@ -54,11 +54,15 @@ const APP_URL =
   "http://localhost:5173";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || "Camelio <onboarding@resend.dev>";
+const EMAIL_FROM =
+  process.env.RESEND_FROM_EMAIL ||
+  process.env.EMAIL_FROM ||
+  "Camelio <onboarding@resend.dev>";
 const EMAIL_REPLY_TO =
+  process.env.RESEND_MAIL_REPLY_TO ||
+  process.env.RESEND_REPLY_TO ||
   process.env.EMAIL_REPLY_TO ||
   process.env.MAIL_REPLY_TO ||
-  process.env.SMTP_USER ||
   "info@camelio.app";
 
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "CamelioData";
@@ -732,6 +736,73 @@ async function getCurrentUserProfile(req) {
   return result.Item || null;
 }
 
+async function getSourceProfileShareForImportedShare(importedShare) {
+  if (!importedShare?.sourceOwnerUserId || !importedShare?.sourceShareId) {
+    return null;
+  }
+
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: DYNAMODB_TABLE,
+      Key: {
+        PK: `USER#${importedShare.sourceOwnerUserId}`,
+        SK: `SHARE#${importedShare.sourceShareId}`,
+      },
+    })
+  );
+
+  return result.Item || null;
+}
+
+async function revokeImportedShareLocally(importedShare, reason = "owner_revoked") {
+  if (!importedShare?.PK || !importedShare?.SK || importedShare.status === "revoked") {
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: importedShare.PK,
+          SK: importedShare.SK,
+        },
+        UpdateExpression:
+          "SET #status = :status, revokedAt = :revokedAt, revokedReason = :revokedReason, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "revoked",
+          ":revokedAt": now,
+          ":revokedReason": reason,
+          ":updatedAt": now,
+        },
+        ReturnValues: "NONE",
+      })
+    );
+  } catch (error) {
+    console.warn("Impossible de révoquer localement l’accès invité:", error?.message || error);
+  }
+}
+
+async function isImportedShareStillActive(importedShare) {
+  if (!importedShare || importedShare.status === "revoked") {
+    return false;
+  }
+
+  const sourceShare = await getSourceProfileShareForImportedShare(importedShare);
+
+  if (!sourceShare || sourceShare.status === "revoked") {
+    await revokeImportedShareLocally(importedShare, "owner_revoked");
+    return false;
+  }
+
+  return true;
+}
+
 async function getActiveImportedShare(req) {
   const profile = await getCurrentUserProfile(req);
   const activeAccountId = String(profile?.activeAccountId || "");
@@ -758,7 +829,7 @@ async function getActiveImportedShare(req) {
 
   const share = result.Item || null;
 
-  if (!share || share.status === "revoked") {
+  if (!(await isImportedShareStillActive(share))) {
     return null;
   }
 
@@ -780,9 +851,20 @@ function getShareSectionPermission(share, sectionId) {
 }
 
 async function getDataAccessContext(req, sectionId, requiredPermission = "read") {
+  const profile = await getCurrentUserProfile(req);
+  const activeAccountId = String(profile?.activeAccountId || "");
   const share = await getActiveImportedShare(req);
 
   if (!share) {
+    if (isGuestAccountId(activeAccountId)) {
+      const error = new Error(
+        "Cet accès invité a été retiré ou révoqué. Sélectionnez un autre compte ou demandez une nouvelle invitation."
+      );
+      error.statusCode = 403;
+      error.errorCode = "guest_access_revoked";
+      throw error;
+    }
+
     return {
       isGuest: false,
       dataPk: getUserPk(req),
@@ -995,10 +1077,6 @@ function cleanChildPayload(body = {}) {
     },
     photoZoom: Number(body.photoZoom) || 1,
     notes: body.notes || body.profileNote || "",
-    isStar: Boolean(body.isStar || body.starChild || body.isDeceased),
-    deceasedDate: body.isStar || body.starChild || body.isDeceased
-      ? body.deceasedDate || body.deathDate || ""
-      : "",
   };
 }
 
@@ -1967,21 +2045,35 @@ function createTemporaryPassword() {
   return `Cam-${randomUUID().replace(/-/g, "").slice(0, 14)}aA1!`;
 }
 
-async function sendCreateAccountInvitationEmail({ email, name = "" }) {
+async function sendCreateAccountInvitationEmail({
+  email,
+  name = "",
+  guestAccessCode = "",
+  emailSubject = "Invitation à rejoindre Camelio",
+  emailBody = "",
+}) {
   const signupUrl = buildCamelioSignupUrl();
   const accueilUrl = buildCamelioAccueilUrl();
+  const safeBody = String(
+    emailBody ||
+      `Bonjour${name ? ` ${name}` : ""},\n\nJe t’invite à créer ton compte Camelio pour que je puisse te partager certaines informations familiales dans un espace sécurisé.\n\nTon code invité est : ${guestAccessCode}\n\nUtilise ce code avec le courriel ${email} lors de ton inscription ou dans l’activation de ton espace invité.\n\nÀ bientôt!`
+  );
+
+  const formattedBody = safeBody
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("\n");
 
   return sendEmailWithResend({
     to: email,
-    subject: "Invitation à créer ton compte Camelio",
+    subject: emailSubject || "Invitation à rejoindre Camelio",
     html: `
       <div style="font-family: Arial, sans-serif; color: #4F4A45; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
         <div style="background: #FFFDF8; border: 1px solid #EADFCF; border-radius: 24px; padding: 24px;">
           <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: #8F9874; font-weight: bold;">Camelio</p>
-          <h2 style="margin: 0 0 16px; color: #4F4A45;">Tu es invité à créer ton compte Camelio 😊</h2>
-          <p>${escapeHtml(name || "Bonjour")}, une personne souhaite te partager un accès familial dans Camelio.</p>
-          <p>Crée d’abord ton compte avec cette adresse courriel : <strong>${escapeHtml(email)}</strong>.</p>
-          <p>Une fois ton compte créé, la personne pourra te retrouver dans la recherche Camelio et te donner les accès souhaités.</p>
+          <h2 style="margin: 0 0 16px; color: #4F4A45;">Tu es invité à rejoindre Camelio 😊</h2>
+          ${formattedBody}
+          ${guestAccessCode ? `<p style="background:#F7F3FF; border:1px solid #D8CBE8; border-radius:16px; padding:12px;"><strong>Code invité :</strong> ${escapeHtml(guestAccessCode)}</p>` : ""}
           <p style="margin: 24px 0;">
             <a href="${escapeHtml(signupUrl)}" style="display: inline-block; background: #A8B193; color: white; padding: 12px 18px; border-radius: 999px; text-decoration: none; font-weight: bold;">Créer mon compte Camelio</a>
           </p>
@@ -1989,7 +2081,7 @@ async function sendCreateAccountInvitationEmail({ email, name = "" }) {
         </div>
       </div>
     `,
-    text: `Tu es invité à créer ton compte Camelio avec l’adresse ${email}. Crée ton compte ici : ${signupUrl}`,
+    text: `${safeBody}\n\nCréer mon compte : ${signupUrl}`,
   });
 }
 
@@ -2071,12 +2163,14 @@ async function generateUniqueGuestAccessCode() {
     const result = await dynamo.send(
       new ScanCommand({
         TableName: DYNAMODB_TABLE,
-        FilterExpression: "#type = :type AND guestAccessCode = :guestAccessCode",
+        FilterExpression:
+          "(#type = :profileShareType OR #type = :guestSignupType) AND guestAccessCode = :guestAccessCode",
         ExpressionAttributeNames: {
           "#type": "type",
         },
         ExpressionAttributeValues: {
-          ":type": "profileShare",
+          ":profileShareType": "profileShare",
+          ":guestSignupType": "guestSignupInvitation",
           ":guestAccessCode": code,
         },
         Limit: 1,
@@ -2089,6 +2183,37 @@ async function generateUniqueGuestAccessCode() {
   }
 
   return `INV-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+}
+
+function normalizeGuestAccessCodeInput(value = "") {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/\s+/g, "");
+}
+
+async function findGuestSignupInvitationByCode(guestAccessCode) {
+  const code = normalizeGuestAccessCodeInput(guestAccessCode);
+
+  if (!code) return null;
+
+  const result = await dynamo.send(
+    new ScanCommand({
+      TableName: DYNAMODB_TABLE,
+      FilterExpression: "#type = :type AND guestAccessCode = :guestAccessCode",
+      ExpressionAttributeNames: {
+        "#type": "type",
+      },
+      ExpressionAttributeValues: {
+        ":type": "guestSignupInvitation",
+        ":guestAccessCode": code,
+      },
+      Limit: 1,
+    })
+  );
+
+  return (result.Items || [])[0] || null;
 }
 
 async function findProfileShareByToken(invitationToken) {
@@ -2328,6 +2453,22 @@ app.post(
     try {
       const email = normalizeInviteeEmail(req.body?.email || "");
       const name = String(req.body?.name || "").trim();
+      const shouldSend = req.body?.send === true;
+      const providedCode = normalizeGuestAccessCodeInput(req.body?.guestAccessCode || "");
+      const guestAccessCode = providedCode || (await generateUniqueGuestAccessCode());
+      const emailSubject = String(req.body?.emailSubject || "Invitation à rejoindre Camelio").trim();
+      const emailBody = String(
+        req.body?.emailBody ||
+          `Bonjour${name ? ` ${name}` : ""},
+
+Je t’invite à créer ton compte Camelio pour que je puisse te partager certaines informations familiales dans un espace sécurisé.
+
+Ton code invité est : ${guestAccessCode}
+
+Utilise ce code avec le courriel ${email} lors de ton inscription ou dans l’activation de ton espace invité.
+
+À bientôt!`
+      );
 
       if (!email || !email.includes("@")) {
         return res.status(400).json({
@@ -2337,7 +2478,16 @@ app.post(
         });
       }
 
-      const existingUser = await findCamelioUserByEmail(email);
+      let existingUser = null;
+
+      try {
+        existingUser = await findCamelioUserByEmail(email);
+      } catch (lookupError) {
+        console.warn(
+          "Recherche utilisateur ignorée pendant la préparation de l’invitation:",
+          lookupError?.message || lookupError
+        );
+      }
 
       if (existingUser) {
         return res.json({
@@ -2348,14 +2498,63 @@ app.post(
         });
       }
 
-      await sendCreateAccountInvitationEmail({ email, name });
+      const now = new Date().toISOString();
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: {
+            PK: getUserPk(req),
+            SK: `GUEST_SIGNUP_CODE#${guestAccessCode}`,
+            type: "guestSignupInvitation",
+            ownerUserId: req.session.user.sub,
+            ownerEmail: req.session.user.email || "",
+            ownerName:
+              req.session.user.name ||
+              req.session.user.given_name ||
+              req.session.user.email ||
+              "",
+            inviteeEmail: email,
+            inviteeName: name,
+            guestAccessCode,
+            guestAccessCodeEmail: email,
+            status: shouldSend ? "sent" : "draft",
+            emailSubject,
+            emailBody,
+            createdAt: now,
+            updatedAt: now,
+          },
+        })
+      );
+
+      if (shouldSend) {
+        await sendCreateAccountInvitationEmail({
+          email,
+          name,
+          guestAccessCode,
+          emailSubject,
+          emailBody,
+        });
+      }
 
       return res.json({
         success: true,
-        message: "Invitation à créer un compte envoyée par courriel.",
+        sent: shouldSend,
+        guestAccessCode,
+        emailSubject,
+        emailBody,
+        message: shouldSend
+          ? "Invitation à créer un compte envoyée par courriel."
+          : "Invitation préparée.",
       });
     } catch (error) {
-      next(error);
+      console.error("Erreur préparation invitation création compte:", error);
+      return res.status(500).json({
+        success: false,
+        error: "invite_create_account_failed",
+        message:
+          error?.message ||
+          "Impossible de préparer l’invitation. Vérifiez la configuration DynamoDB ou courriel.",
+      });
     }
   }
 );
@@ -2378,7 +2577,16 @@ app.post(
         });
       }
 
-      const existingUser = await findCamelioUserByEmail(email);
+      let existingUser = null;
+
+      try {
+        existingUser = await findCamelioUserByEmail(email);
+      } catch (lookupError) {
+        console.warn(
+          "Recherche utilisateur ignorée pendant la préparation de l’invitation:",
+          lookupError?.message || lookupError
+        );
+      }
 
       if (existingUser) {
         return res.json({
@@ -2491,7 +2699,9 @@ app.post(
       const now = new Date().toISOString();
       const shareId = req.body.id || randomUUID();
       const invitationToken = randomUUID();
-      const guestAccessCode = await generateUniqueGuestAccessCode();
+      const providedGuestAccessCode = normalizeGuestAccessCodeInput(req.body?.guestAccessCode || "");
+      const guestAccessCode = providedGuestAccessCode || (await generateUniqueGuestAccessCode());
+      const shouldSkipInvitationEmail = req.body?.skipInvitationEmail === true || req.body?.inviteEmailAlreadySent === true;
       const invitationExpiresAt = createInvitationExpiry();
       const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
@@ -2518,8 +2728,9 @@ app.post(
         importedByUserId: "",
         importedByEmail: "",
         importedAt: null,
-        emailStatus: "pending",
+        emailStatus: shouldSkipInvitationEmail ? "sent" : "pending",
         emailError: "",
+        createAccountInvitationAlreadySent: shouldSkipInvitationEmail,
         createdAt: now,
         updatedAt: now,
       };
@@ -2599,6 +2810,14 @@ app.post(
           share,
           importedShare,
           message: "L’accès partagé a été créé pour l’utilisateur sélectionné.",
+        });
+      }
+
+      if (shouldSkipInvitationEmail) {
+        return res.status(201).json({
+          success: true,
+          share,
+          message: "L’accès partagé a été créé. Aucun deuxième courriel n’a été envoyé, car l’invitation de création de compte a déjà été transmise.",
         });
       }
 
@@ -3181,9 +3400,32 @@ app.patch(
         })
       );
 
+      const revokedShare = result.Attributes;
+
+      if (revokedShare?.importedByUserId) {
+        const importedResult = await dynamo.send(
+          new QueryCommand({
+            TableName: DYNAMODB_TABLE,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            FilterExpression: "sourceShareId = :sourceShareId",
+            ExpressionAttributeValues: {
+              ":pk": `USER#${revokedShare.importedByUserId}`,
+              ":sk": "IMPORTED_SHARE#",
+              ":sourceShareId": shareId,
+            },
+          })
+        );
+
+        await Promise.all(
+          (importedResult.Items || []).map((importedShare) =>
+            revokeImportedShareLocally(importedShare, "owner_revoked")
+          )
+        );
+      }
+
       return res.json({
         success: true,
-        share: result.Attributes,
+        share: revokedShare,
         message: "L’accès partagé a été révoqué.",
       });
     } catch (error) {
@@ -3346,7 +3588,7 @@ app.post(
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      const code = String(req.body?.code || "").trim().toUpperCase();
+      const code = normalizeGuestAccessCodeInput(req.body?.code || "");
       const connectedEmail = String(req.session.user?.email || "").trim().toLowerCase();
 
       if (!code) {
@@ -3373,11 +3615,30 @@ app.post(
 
       const share = (result.Items || [])[0];
 
-      if (!share || share.status === "revoked") {
+      if (!share) {
+        const signupInvitation = await findGuestSignupInvitationByCode(code);
+
+        if (signupInvitation) {
+          return res.status(409).json({
+            success: false,
+            error: "access_not_configured",
+            message:
+              "Ce code existe, mais les accès partagés ne sont pas encore configurés. Demandez à la personne qui vous a invité de compléter l’étape Accès dans Partage de profil.",
+          });
+        }
+
         return res.status(404).json({
           success: false,
           error: "code_not_found",
           message: "Ce code invité est introuvable ou n’est plus valide.",
+        });
+      }
+
+      if (share.status === "revoked") {
+        return res.status(404).json({
+          success: false,
+          error: "code_revoked",
+          message: "Cette invitation a été révoquée.",
         });
       }
 
@@ -3596,9 +3857,17 @@ app.get(
         storageGb: Number(subscription?.storageGb) || Number(STRIPE_STORAGE_GB) || 5,
       };
 
-      const guestShares = (importedSharesResult.Items || [])
-        .filter((share) => share.status !== "revoked")
-        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      const activeGuestShares = [];
+
+      for (const share of importedSharesResult.Items || []) {
+        if (await isImportedShareStillActive(share)) {
+          activeGuestShares.push(share);
+        }
+      }
+
+      const guestShares = activeGuestShares.sort((a, b) =>
+        String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
+      );
 
       const guestAccounts = await Promise.all(
         guestShares.map(async (share, index) => {
@@ -3967,7 +4236,7 @@ app.put(
             SK: `CHILD#${childId}`,
           },
           UpdateExpression:
-            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, avatarS3Key = :avatarS3Key, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, isStar = :isStar, deceasedDate = :deceasedDate, updatedAt = :updatedAt",
+            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, avatarS3Key = :avatarS3Key, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, updatedAt = :updatedAt",
           ExpressionAttributeNames: {
             "#image": "image",
           },
@@ -3985,8 +4254,6 @@ app.put(
             ":photoPosition": payload.photoPosition,
             ":photoZoom": payload.photoZoom,
             ":notes": payload.notes,
-            ":isStar": payload.isStar,
-            ":deceasedDate": payload.deceasedDate,
             ":updatedAt": now,
           },
           ReturnValues: "ALL_NEW",
@@ -4212,6 +4479,37 @@ app.get(
 
       const subscription = result.Item || null;
       const activeStatuses = ["trialing", "active"];
+
+      if (subscription?.status === "guest") {
+        const activeImportedShare = await getActiveImportedShare(req);
+
+        if (activeImportedShare) {
+          return res.json({
+            hasAccess: true,
+            status: "guest",
+            plan: null,
+            accountType: "guest",
+            subscriptionRequired: false,
+            source: subscription.source || "guest_invitation_code",
+            linkedOwnerAccountId: subscription.linkedOwnerAccountId || activeImportedShare.sourceOwnerUserId || "",
+            linkedOwnerEmail: subscription.linkedOwnerEmail || activeImportedShare.sourceOwnerEmail || "",
+            linkedOwnerName: subscription.linkedOwnerName || activeImportedShare.sourceOwnerName || "",
+            importedShareId: subscription.importedShareId || activeImportedShare.id || "",
+            sourceShareId: subscription.sourceShareId || activeImportedShare.sourceShareId || "",
+            subscription,
+          });
+        }
+
+        return res.json({
+          hasAccess: false,
+          status: "guest_revoked",
+          plan: null,
+          accountType: "guest",
+          subscriptionRequired: false,
+          message: "Votre accès invité n’est plus actif.",
+          subscription,
+        });
+      }
 
       if (subscription && activeStatuses.includes(subscription.status)) {
         return res.json({
