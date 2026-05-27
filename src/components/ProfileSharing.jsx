@@ -215,6 +215,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
   const [message, setMessage] = useState("");
   const [accountCreationNotice, setAccountCreationNotice] = useState(null);
   const [inviteDraft, setInviteDraft] = useState(null);
+  const [isInviteDraftOpen, setIsInviteDraftOpen] = useState(false);
   const [inviteEmailBody, setInviteEmailBody] = useState("");
   const [inviteEmailSubject, setInviteEmailSubject] = useState("Invitation à rejoindre Camelio");
   const [isSendingInvite, setIsSendingInvite] = useState(false);
@@ -483,6 +484,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       };
 
       setInviteDraft(preparedDraft);
+      setIsInviteDraftOpen(true);
       setSelectedUser({
         userId: "",
         email: cleanEmail,
@@ -531,6 +533,8 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       }
 
       setInviteDraft((current) => ({ ...(current || {}), sent: true }));
+      setIsInviteDraftOpen(false);
+      setWizardStep(3);
       setSelectedUser({
         userId: "",
         email: inviteDraft.email,
@@ -539,7 +543,7 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
       });
       setSelectedSectionIds(["children"]);
       setSectionPermissions({ children: "read" });
-      setWizardInfo("Invitation envoyée. Vous pouvez maintenant copier le code ou donner les accès. Par défaut, seul le profil d’enfant est partagé.");
+      setWizardInfo("Invitation envoyée. Par défaut, seul le profil d’enfant est partagé. Vous pouvez maintenant choisir les enfants et confirmer les accès.");
     } catch (error) {
       console.error("Erreur envoi invitation création compte:", error);
       setWizardProblem(error?.message || "Impossible d’envoyer l’invitation.");
@@ -673,6 +677,8 @@ export default function ProfileSharing({ children = [], onBack = () => {} }) {
           }
         : {}),
       guestAccessCode: inviteDraft?.guestAccessCode || selectedUser?.guestAccessCode || "",
+      inviteEmailAlreadySent: Boolean(inviteDraft?.sent),
+      skipInvitationEmail: Boolean(inviteDraft?.sent),
       inviteeName,
       inviteeEmail,
       childIds: selectedChildIds,
@@ -1001,7 +1007,14 @@ if (!response.ok) {
               <div className="mt-5 flex flex-col gap-3 md:flex-row">
                 <button
                   type="button"
-                  onClick={inviteToCreateAccount}
+                  onClick={() => {
+                    if (inviteDraft?.guestAccessCode) {
+                      setIsInviteDraftOpen(true);
+                      return;
+                    }
+
+                    inviteToCreateAccount();
+                  }}
                   disabled={isSaving}
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                 >
@@ -1319,7 +1332,7 @@ if (!response.ok) {
       ) : null}
 
 
-      {inviteDraft ? (
+      {inviteDraft && isInviteDraftOpen ? (
         <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-[#4F4A45]/45 px-4 py-6 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-[30px] border border-[#EADFCF] bg-[#FFFDF8] p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
@@ -1339,7 +1352,7 @@ if (!response.ok) {
 
               <button
                 type="button"
-                onClick={() => setInviteDraft(null)}
+                onClick={() => setIsInviteDraftOpen(false)}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7D756E] shadow-sm"
                 aria-label="Fermer"
               >
@@ -1428,7 +1441,7 @@ if (!response.ok) {
                 <button
                   type="button"
                   onClick={() => {
-                    setInviteDraft(null);
+                    setIsInviteDraftOpen(false);
                     setWizardMessage(
                       "Invitation envoyée. Par défaut, seul le profil d’enfant est partagé. Vous pouvez maintenant choisir les enfants."
                     );

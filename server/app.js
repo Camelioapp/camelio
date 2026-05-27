@@ -2668,7 +2668,9 @@ app.post(
       const now = new Date().toISOString();
       const shareId = req.body.id || randomUUID();
       const invitationToken = randomUUID();
-      const guestAccessCode = await generateUniqueGuestAccessCode();
+      const providedGuestAccessCode = String(req.body?.guestAccessCode || "").trim().toUpperCase();
+      const guestAccessCode = providedGuestAccessCode || (await generateUniqueGuestAccessCode());
+      const shouldSkipInvitationEmail = req.body?.skipInvitationEmail === true || req.body?.inviteEmailAlreadySent === true;
       const invitationExpiresAt = createInvitationExpiry();
       const inviteUrl = buildProfileShareInviteUrl(invitationToken);
 
@@ -2695,8 +2697,9 @@ app.post(
         importedByUserId: "",
         importedByEmail: "",
         importedAt: null,
-        emailStatus: "pending",
+        emailStatus: shouldSkipInvitationEmail ? "sent" : "pending",
         emailError: "",
+        createAccountInvitationAlreadySent: shouldSkipInvitationEmail,
         createdAt: now,
         updatedAt: now,
       };
@@ -2776,6 +2779,14 @@ app.post(
           share,
           importedShare,
           message: "L’accès partagé a été créé pour l’utilisateur sélectionné.",
+        });
+      }
+
+      if (shouldSkipInvitationEmail) {
+        return res.status(201).json({
+          success: true,
+          share,
+          message: "L’accès partagé a été créé. Aucun deuxième courriel n’a été envoyé, car l’invitation de création de compte a déjà été transmise.",
         });
       }
 
