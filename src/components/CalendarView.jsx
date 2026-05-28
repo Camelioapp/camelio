@@ -170,8 +170,9 @@ function formatEventFromServer(event) {
     end: event.end || "",
     note: event.note || "",
     color: event.color || "sage",
-    appointmentEmoji: event.appointmentEmoji || "♡",
+    appointmentEmoji: event.appointmentEmoji || event.icon || "♡",
     recurrence: event.recurrence || "Aucune",
+    recurrenceGroupId: event.recurrenceGroupId || "",
     createdAt: event.createdAt || "",
     updatedAt: event.updatedAt || "",
   };
@@ -349,6 +350,11 @@ function EventCard({ event, childrenList, onClick }) {
             {event.title || eventTypeLabel(event)}
           </p>
           <p className="mt-1 text-xs font-bold text-[#746F64]">{eventTypeLabel(event)}</p>
+          {event.recurrence && event.recurrence !== "Aucune" && (
+            <p className="mt-1 inline-flex rounded-full bg-[#F8F3EA] px-2.5 py-1 text-[11px] font-bold text-[#7A8564] ring-1 ring-[#EFE4D6]">
+              Fréquence : {event.recurrence}
+            </p>
+          )}
         </div>
 
         {(event.start || event.end) && (
@@ -384,6 +390,7 @@ export default function CalendarView({ children = [] }) {
   const [appointmentEmoji, setAppointmentEmoji] = useState("♡");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteOptions, setShowDeleteOptions] = useState(false);
 
   const selectedDate = useMemo(() => new Date(year, month, selectedDay), [year, month, selectedDay]);
   const selectedDateKey = dateToKey(selectedDate);
@@ -400,6 +407,7 @@ export default function CalendarView({ children = [] }) {
     color: "sage",
     appointmentEmoji: "♡",
     recurrence: "Aucune",
+    recurrenceGroupId: "",
   });
 
   useEffect(() => {
@@ -565,6 +573,7 @@ export default function CalendarView({ children = [] }) {
       color: "sage",
       appointmentEmoji,
       recurrence: "Aucune",
+      recurrenceGroupId: "",
     });
 
     const parts = dateKey.split("-");
@@ -600,8 +609,9 @@ export default function CalendarView({ children = [] }) {
       end: event.end || "",
       note: event.note || "",
       color: event.color || "sage",
-      appointmentEmoji: event.appointmentEmoji || appointmentEmoji,
+      appointmentEmoji: event.appointmentEmoji || event.icon || appointmentEmoji,
       recurrence: event.recurrence || "Aucune",
+      recurrenceGroupId: event.recurrenceGroupId || "",
     });
 
     setShowDayDetails(false);
@@ -613,24 +623,11 @@ export default function CalendarView({ children = [] }) {
   }
 
   function hasType(type) {
-    return draft.eventType === type || draft.eventType === "both";
+    return draft.eventType === type;
   }
 
-  function toggleType(type) {
-    const hasCustody = hasType("custody");
-    const hasAppointment = hasType("appointment");
-
-    if (type === "custody") {
-      updateDraft({
-        eventType: hasCustody && hasAppointment ? "appointment" : hasCustody ? "appointment" : hasAppointment ? "both" : "custody",
-      });
-    }
-
-    if (type === "appointment") {
-      updateDraft({
-        eventType: hasAppointment && hasCustody ? "custody" : hasAppointment ? "custody" : hasCustody ? "both" : "appointment",
-      });
-    }
+  function selectType(type) {
+    updateDraft({ eventType: type });
   }
 
   function toggleChild(childId) {
@@ -643,7 +640,7 @@ export default function CalendarView({ children = [] }) {
     });
   }
 
-  function buildEventPayload(dateOverride = null) {
+  function buildEventPayload(dateOverride = null, overrides = {}) {
     const childNames = getChildNamesFromIds(draft.childIds);
     const selectedColor = getPrimaryColorKey(draft.childIds);
 
@@ -664,7 +661,10 @@ export default function CalendarView({ children = [] }) {
       note: draft.note || "",
       color: selectedColor,
       appointmentEmoji: draft.appointmentEmoji || appointmentEmoji,
+      icon: draft.appointmentEmoji || appointmentEmoji,
       recurrence: draft.recurrence || "Aucune",
+      recurrenceGroupId: draft.recurrenceGroupId || "",
+      ...overrides,
     };
   }
 
@@ -710,6 +710,7 @@ export default function CalendarView({ children = [] }) {
         return;
       }
 
+      const recurrenceGroupId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const startDate = new Date(year, month, selectedDay);
       const endDate = new Date(startDate);
       endDate.setMonth(endDate.getMonth() + RECURRENCE_MONTH_LIMIT);
@@ -717,7 +718,7 @@ export default function CalendarView({ children = [] }) {
 
       const addOccurrence = async (date) => {
         const dateKey = toDateKey(date.getFullYear(), date.getMonth(), date.getDate());
-        const payload = buildEventPayload(dateKey);
+        const payload = buildEventPayload(dateKey, { recurrenceGroupId });
         const savedEvent = await saveSingleEvent(payload);
         savedEvents.push(savedEvent);
       };
@@ -757,40 +758,90 @@ export default function CalendarView({ children = [] }) {
     }
   }
 
-  async function deleteEvent() {
-    if (!selectedEventId) return;
+  function getSelectedEvent() {
+    return events.find((event) => event.id === selectedEventId) || null;
+  }
+
+  function sameChildIds(first = [], second = []) {
+    const a = [...first].sort().join("|");
+    const b = [...second].sort().join("|");
+    return a === b;
+  }
+
+  function getSeriesEvents(baseEvent) {
+    if (!baseEvent || !baseEvent.recurrence || baseEvent.recurrence === "Aucune") return baseEvent ? [baseEvent] : [];
+
+    if (baseEvent.recurrenceGroupId) {
+      return events.filter((event) => event.recurrenceGroupId === baseEvent.recurrenceGroupId);
+    }
+
+    return events.filter((event) => {
+      return (
+        event.recurrence === baseEvent.recurrence &&
+        event.eventType === baseEvent.eventType &&
+        event.title === baseEvent.title &&
+        event.start === baseEvent.start &&
+        event.end === baseEvent.end &&
+        sameChildIds(event.childIds, baseEvent.childIds)
+      );
+    });
+  }
+
+  async function deleteEventsByIds(ids = []) {
+    const uniqueIds = [...new Set(ids)].filter(Boolean);
+    if (uniqueIds.length === 0) return;
 
     try {
       setIsSaving(true);
 
-      const response = await fetch(`${API_BASE_URL}/api/events/${selectedEventId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
+      for (const eventId of uniqueIds) {
+        const response = await fetch(`${API_BASE_URL}/api/events/${eventId}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (response.status === 401) {
-        alert("Tu dois être connecté pour supprimer un événement.");
-        return;
+        if (response.status === 401) throw new Error("Tu dois être connecté pour supprimer un événement.");
+        if (!response.ok) throw new Error(data.message || "Impossible de supprimer l’événement.");
       }
 
-      if (!response.ok) {
-        console.error("Erreur suppression calendrier:", data);
-        alert(data.message || "Impossible de supprimer l’événement.");
-        return;
-      }
-
-      setEvents((current) => current.filter((event) => event.id !== selectedEventId));
+      setEvents((current) => current.filter((event) => !uniqueIds.includes(event.id)));
       setSelectedEventId(null);
+      setShowDeleteOptions(false);
       setShowEditor(false);
     } catch (error) {
       console.error("Erreur suppression calendrier:", error);
-      alert("Erreur de connexion avec le serveur.");
+      alert(error.message || "Erreur de connexion avec le serveur.");
     } finally {
       setIsSaving(false);
     }
   }
+
+  function deleteEvent() {
+    const selectedEvent = getSelectedEvent();
+    if (!selectedEvent) return;
+
+    if (selectedEvent.recurrence && selectedEvent.recurrence !== "Aucune") {
+      setShowDeleteOptions(true);
+      return;
+    }
+
+    deleteEventsByIds([selectedEvent.id]);
+  }
+
+  function deleteOnlyThisDay() {
+    const selectedEvent = getSelectedEvent();
+    if (!selectedEvent) return;
+    deleteEventsByIds([selectedEvent.id]);
+  }
+
+  function deleteWholeFrequency() {
+    const selectedEvent = getSelectedEvent();
+    if (!selectedEvent) return;
+    deleteEventsByIds(getSeriesEvents(selectedEvent).map((event) => event.id));
+  }
+
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -962,10 +1013,10 @@ export default function CalendarView({ children = [] }) {
             <div>
               <p className="label">Type</p>
               <div className="mt-3 grid !grid-cols-2 gap-2">
-                <button type="button" onClick={() => toggleType("custody")} className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 ${hasType("custody") ? "bg-[#F0F3EA] text-[#7A8564] ring-2 ring-[#DDE4D2]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
+                <button type="button" onClick={() => selectType("custody")} className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 ${hasType("custody") ? "bg-[#F0F3EA] text-[#7A8564] ring-2 ring-[#DDE4D2]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
                   Journée de garde
                 </button>
-                <button type="button" onClick={() => toggleType("appointment")} className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 ${hasType("appointment") ? "bg-[#FFFAEF] text-[#B68E3D] ring-2 ring-[#F1DDAE]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
+                <button type="button" onClick={() => selectType("appointment")} className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 ${hasType("appointment") ? "bg-[#FFFAEF] text-[#B68E3D] ring-2 ring-[#F1DDAE]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
                   Rendez-vous
                 </button>
               </div>
@@ -1051,6 +1102,35 @@ export default function CalendarView({ children = [] }) {
           </div>
         </Popup>
       )}
+
+      {showDeleteOptions && (
+        <Popup title="Supprimer cet élément" kicker="Calendrier" close={() => setShowDeleteOptions(false)}>
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm leading-6 text-[#746F64] ring-1 ring-[#EFE4D6]">
+              Cet élément fait partie d’une fréquence. Veux-tu supprimer seulement cette journée ou toute la fréquence?
+            </div>
+
+            <button
+              type="button"
+              onClick={deleteOnlyThisDay}
+              disabled={isSaving}
+              className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-60"
+            >
+              Supprimer seulement cette journée
+            </button>
+
+            <button
+              type="button"
+              onClick={deleteWholeFrequency}
+              disabled={isSaving}
+              className="w-full rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60"
+            >
+              Supprimer toute la fréquence
+            </button>
+          </div>
+        </Popup>
+      )}
+
     </div>
   );
 }

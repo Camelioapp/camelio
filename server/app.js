@@ -1218,6 +1218,10 @@ function cleanEventPayload(body = {}) {
     end: body.end || "",
     note: body.note || "",
     color: body.color || "sage",
+    appointmentEmoji: body.appointmentEmoji || body.icon || "♡",
+    icon: body.icon || body.appointmentEmoji || "♡",
+    recurrence: body.recurrence || "Aucune",
+    recurrenceGroupId: body.recurrenceGroupId || "",
   };
 }
 
@@ -4819,7 +4823,7 @@ app.put(
             SK: `EVENT#${eventId}`,
           },
           UpdateExpression:
-            "SET title = :title, eventType = :eventType, childIds = :childIds, childNames = :childNames, #date = :date, #start = :start, #end = :end, note = :note, color = :color, updatedAt = :updatedAt",
+            "SET title = :title, eventType = :eventType, childIds = :childIds, childNames = :childNames, #date = :date, #start = :start, #end = :end, note = :note, color = :color, appointmentEmoji = :appointmentEmoji, icon = :icon, recurrence = :recurrence, recurrenceGroupId = :recurrenceGroupId, updatedAt = :updatedAt",
           ExpressionAttributeNames: {
             "#date": "date",
             "#start": "start",
@@ -4835,6 +4839,10 @@ app.put(
             ":end": payload.end,
             ":note": payload.note,
             ":color": payload.color,
+            ":appointmentEmoji": payload.appointmentEmoji,
+            ":icon": payload.icon,
+            ":recurrence": payload.recurrence,
+            ":recurrenceGroupId": payload.recurrenceGroupId,
             ":updatedAt": now,
           },
           ReturnValues: "ALL_NEW",
