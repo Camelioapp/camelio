@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Clock,
   Heart,
-  Plus,
   Trash2,
   UserRound,
   X,
@@ -47,6 +46,7 @@ const RECURRENCES = ["Aucune", "Chaque semaine", "Aux deux semaines", "Chaque mo
 
 const CAMELIO_COLORS = ["#A8B193", "#B5A7C8", "#EAA5AF", "#EEC988", "#A2BADF"];
 const APPOINTMENT_COLOR = "#EEC988";
+const RECURRENCE_MONTH_LIMIT = 12;
 
 const childColorHex = {
   sage: "#A8B193",
@@ -122,6 +122,22 @@ function getMonthWeeks(year, monthIndex) {
   }
 
   return weeks;
+}
+
+function getWeekDays(date) {
+  const cursor = getWeekStartMonday(date);
+  return Array.from({ length: 7 }, () => {
+    const currentDate = new Date(cursor);
+    cursor.setDate(cursor.getDate() + 1);
+    return {
+      date: currentDate,
+      day: currentDate.getDate(),
+      month: currentDate.getMonth(),
+      year: currentDate.getFullYear(),
+      dateKey: dateToKey(currentDate),
+      isCurrentMonth: true,
+    };
+  });
 }
 
 function formatLongDate(date) {
@@ -359,6 +375,7 @@ export default function CalendarView({ children = [] }) {
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(today.getDate());
   const [activeChildIds, setActiveChildIds] = useState([]);
+  const [viewMode, setViewMode] = useState("month");
 
   const [events, setEvents] = useState([]);
   const [showDayDetails, setShowDayDetails] = useState(false);
@@ -399,6 +416,8 @@ export default function CalendarView({ children = [] }) {
   }, [children]);
 
   const monthWeeks = useMemo(() => getMonthWeeks(year, month), [year, month]);
+  const selectedWeekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
+  const visibleCalendarDays = useMemo(() => (viewMode === "week" ? selectedWeekDays : monthWeeks.flat()), [viewMode, selectedWeekDays, monthWeeks]);
   const activeSet = useMemo(() => new Set(activeChildIds), [activeChildIds]);
 
   const filteredEvents = useMemo(() => {
@@ -444,7 +463,17 @@ export default function CalendarView({ children = [] }) {
     }
   }
 
-  function previousMonth() {
+  function previousPeriod() {
+    if (viewMode === "week") {
+      const currentDate = new Date(selectedDate);
+      currentDate.setDate(currentDate.getDate() - 7);
+      if (currentDate.getFullYear() < startYear) return;
+      setYear(currentDate.getFullYear());
+      setMonth(currentDate.getMonth());
+      setSelectedDay(currentDate.getDate());
+      return;
+    }
+
     const currentDate = new Date(year, month, 1);
     currentDate.setMonth(currentDate.getMonth() - 1);
     if (currentDate.getFullYear() < startYear) return;
@@ -453,7 +482,17 @@ export default function CalendarView({ children = [] }) {
     setSelectedDay(1);
   }
 
-  function nextMonth() {
+  function nextPeriod() {
+    if (viewMode === "week") {
+      const currentDate = new Date(selectedDate);
+      currentDate.setDate(currentDate.getDate() + 7);
+      if (currentDate.getFullYear() > maxYear) return;
+      setYear(currentDate.getFullYear());
+      setMonth(currentDate.getMonth());
+      setSelectedDay(currentDate.getDate());
+      return;
+    }
+
     const currentDate = new Date(year, month, 1);
     currentDate.setMonth(currentDate.getMonth() + 1);
     if (currentDate.getFullYear() > maxYear) return;
@@ -672,7 +711,8 @@ export default function CalendarView({ children = [] }) {
       }
 
       const startDate = new Date(year, month, selectedDay);
-      const endDate = new Date(maxYear, 11, 31);
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + RECURRENCE_MONTH_LIMIT);
       const savedEvents = [];
 
       const addOccurrence = async (date) => {
@@ -785,25 +825,50 @@ export default function CalendarView({ children = [] }) {
           <div className="mt-7 flex items-center justify-between border-y border-[#EFE4D6] py-4">
             <button
               type="button"
-              onClick={previousMonth}
+              onClick={previousPeriod}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]"
               aria-label="Mois précédent"
             >
               <ChevronLeft className="h-6 w-6" />
             </button>
 
-            <h3 className="text-center text-2xl font-extrabold text-[#52713E] md:text-3xl">
-              {MONTHS[month]} {year}
-            </h3>
+            <div className="text-center">
+              <h3 className="text-2xl font-extrabold text-[#52713E] md:text-3xl">
+                {viewMode === "week" ? "Vue semaine" : `${MONTHS[month]} ${year}`}
+              </h3>
+              {viewMode === "week" && (
+                <p className="mt-1 text-xs font-bold text-[#746F64]">
+                  Du {selectedWeekDays[0]?.day} {MONTHS[selectedWeekDays[0]?.month]?.toLowerCase()} au {selectedWeekDays[6]?.day} {MONTHS[selectedWeekDays[6]?.month]?.toLowerCase()} {selectedWeekDays[6]?.year}
+                </p>
+              )}
+            </div>
 
             <button
               type="button"
-              onClick={nextMonth}
+              onClick={nextPeriod}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]"
               aria-label="Mois suivant"
             >
               <ChevronRight className="h-6 w-6" />
             </button>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 rounded-full bg-[#F8F3EA] p-1 ring-1 ring-[#EFE4D6]">
+            {[
+              ["month", "Mois"],
+              ["week", "Semaine"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setViewMode(value)}
+                className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                  viewMode === value ? "bg-white text-[#52713E] shadow-sm" : "text-[#746F64] hover:bg-white/60"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           <div className="mt-5 grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#6F7466] md:gap-3 md:text-sm">
@@ -818,10 +883,11 @@ export default function CalendarView({ children = [] }) {
             </div>
           )}
 
-          <div className="mt-3 grid !grid-cols-7 gap-2 md:gap-3">
-            {monthWeeks.flat().map((date) => {
+          <div className={`mt-3 grid !grid-cols-7 gap-2 md:gap-3 ${viewMode === "week" ? "min-h-[160px]" : ""}`}>
+            {visibleCalendarDays.map((date) => {
               const dayEvents = getEventsForDate(date.dateKey);
               const hasAppointment = dayEvents.some(isAppointmentEvent);
+              const appointmentIcon = dayEvents.find(isAppointmentEvent)?.appointmentEmoji || "♡";
               const segments = getChildSegments(dayEvents);
               const isSelected = date.dateKey === selectedDateKey;
               const isToday = date.dateKey === todayKey;
@@ -836,10 +902,10 @@ export default function CalendarView({ children = [] }) {
                   } ${!date.isCurrentMonth ? "opacity-40" : ""}`}
                   aria-label={formatLongDate(date.date)}
                 >
-                  <span className="text-base font-bold leading-none text-[#1F2B33] md:text-2xl">{date.day}</span>
+                  <span className="font-['Comfortaa'] text-base font-bold leading-none text-[#1F2B33] md:text-2xl">{date.day}</span>
 
                   <span className="flex h-6 items-center justify-center text-lg leading-none md:h-7 md:text-xl">
-                    {hasAppointment ? <span style={{ color: APPOINTMENT_COLOR }}>♡</span> : <span aria-hidden="true">&nbsp;</span>}
+                    {hasAppointment ? <span style={{ color: APPOINTMENT_COLOR }}>{appointmentIcon}</span> : <span aria-hidden="true">&nbsp;</span>}
                   </span>
 
                   <span className="flex h-2.5 w-full max-w-[54px] overflow-hidden rounded-full bg-transparent md:max-w-[72px]">
@@ -864,28 +930,8 @@ export default function CalendarView({ children = [] }) {
             })}
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-[#EFE4D6] pt-4">
-            {children.map((child, index) => (
-              <span key={child.id} className="flex items-center gap-2 text-xs font-bold text-[#5F5A52]">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: getChildAccent(child, index) }} />
-                {displayName(child)}
-              </span>
-            ))}
-            <span className="flex items-center gap-2 text-xs font-bold text-[#5F5A52]">
-              <span className="text-base leading-none" style={{ color: APPOINTMENT_COLOR }}>♡</span>
-              Rendez-vous / événement
-            </span>
-          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => openNewEvent(selectedDateKey)}
-          className="absolute bottom-8 right-8 z-20 flex h-16 w-16 items-center justify-center rounded-full bg-[#A8B193] text-white shadow-xl ring-4 ring-white/80 transition hover:scale-105 hover:brightness-95"
-          aria-label="Ajouter un événement"
-        >
-          <Plus className="h-8 w-8" />
-        </button>
       </div>
 
       {showDayDetails && (
