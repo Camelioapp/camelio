@@ -8,10 +8,11 @@ import {
   Plus,
   Trash2,
   UserRound,
+  X,
 } from "lucide-react";
 
-import { Field, Popup, SectionTitle } from "./shared.jsx";
-import { displayName, getColor } from "./sectionsData.js";
+import { Field, Popup } from "./shared.jsx";
+import { displayName } from "./sectionsData.js";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
@@ -42,26 +43,22 @@ const WEEK_DAYS_LONG = [
 ];
 
 const EMOJIS = ["♡", "🏥", "🦷", "⚽", "🎒", "🎵", "🎂", "🚗"];
-const RECURRENCES = [
-  "Aucune",
-  "Chaque semaine",
-  "Aux deux semaines",
-  "Chaque mois",
-  "Tous les jours",
-];
+const RECURRENCES = ["Aucune", "Chaque semaine", "Aux deux semaines", "Chaque mois", "Tous les jours"];
+
+const CAMELIO_COLORS = ["#A8B193", "#B5A7C8", "#EAA5AF", "#EEC988", "#A2BADF"];
+const APPOINTMENT_COLOR = "#EEC988";
 
 const childColorHex = {
   sage: "#A8B193",
   green: "#A8B193",
   rose: "#EAA5AF",
+  pink: "#EAA5AF",
   blue: "#A2BADF",
   mauve: "#B5A7C8",
   purple: "#B5A7C8",
   gold: "#EEC988",
   yellow: "#EEC988",
 };
-
-const appointmentColorHex = "#F5333F";
 
 const inputClass =
   "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
@@ -70,7 +67,7 @@ const selectClass =
   "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
 
 const textareaClass =
-  "w-full min-h-[140px] rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold leading-6 text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20 resize-none";
+  "w-full min-h-[120px] rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold leading-6 text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20 resize-none";
 
 const timeButtonClass =
   "mt-2 flex w-full items-center justify-between rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-left text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition hover:bg-white focus:border-[#A8B193] focus:ring-2 focus:ring-[#A8B193]/20";
@@ -128,9 +125,7 @@ function getMonthWeeks(year, monthIndex) {
 }
 
 function formatLongDate(date) {
-  return `${WEEK_DAYS_LONG[date.getDay()]} ${date.getDate()} ${MONTHS[
-    date.getMonth()
-  ].toLowerCase()} ${date.getFullYear()}`;
+  return `${WEEK_DAYS_LONG[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()].toLowerCase()} ${date.getFullYear()}`;
 }
 
 function getChildPhoto(child) {
@@ -140,13 +135,11 @@ function getChildPhoto(child) {
 function getChildInitials(child) {
   const first = child?.firstName?.trim()?.[0] || child?.name?.trim()?.[0] || "";
   const last = child?.lastName?.trim()?.[0] || "";
-  const initials = `${first}${last}`.toUpperCase();
-  return initials || "";
+  return `${first}${last}`.toUpperCase() || "";
 }
 
 function getChildAccent(child, fallbackIndex = 0) {
-  const fallback = ["#A8B193", "#B5A7C8", "#EAA5AF", "#EEC988", "#A2BADF"];
-  return childColorHex[child?.color] || child?.colorHex || child?.accentColor || fallback[fallbackIndex % fallback.length];
+  return childColorHex[child?.color] || child?.colorHex || child?.accentColor || CAMELIO_COLORS[fallbackIndex % CAMELIO_COLORS.length];
 }
 
 function formatEventFromServer(event) {
@@ -169,11 +162,7 @@ function formatEventFromServer(event) {
 }
 
 function isCustodyEvent(event) {
-  return (
-    event.eventType === "custody" ||
-    event.eventType === "both" ||
-    event.eventType === "Garde"
-  );
+  return event.eventType === "custody" || event.eventType === "both" || event.eventType === "Garde";
 }
 
 function isAppointmentEvent(event) {
@@ -268,30 +257,63 @@ function TimeDropdown({ label, value, onChange }) {
   );
 }
 
-function ChildAvatar({ child, checked = false, size = "md", index = 0 }) {
+function CamelioLogo() {
+  const letters = [
+    ["C", "#A8B193"],
+    ["a", "#EAA5AF"],
+    ["m", "#B5A7C8"],
+    ["e", "#EEC988"],
+    ["l", "#A8B193"],
+    ["i", "#A2BADF"],
+    ["o", "#EAA5AF"],
+  ];
+
+  return (
+    <div className="flex items-center justify-center gap-0.5 text-4xl font-semibold tracking-wide md:text-5xl">
+      {letters.map(([letter, color], index) => (
+        <span key={`${letter}-${index}`} style={{ color }}>
+          {letter}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ChildFilterPill({ child, active, index, onClick }) {
   const photo = getChildPhoto(child);
   const initials = getChildInitials(child);
   const accent = getChildAccent(child, index);
-  const sizeClass = size === "lg" ? "h-20 w-20" : "h-11 w-11";
 
   return (
-    <span
-      className={`flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-bold text-[#8F9874] shadow-sm ring-2`}
-      style={{ borderColor: accent, boxShadow: checked ? `0 0 0 4px ${accent}22` : undefined }}
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group flex min-w-[92px] flex-col items-center rounded-[1.8rem] bg-white px-3 py-3 shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${
+        active ? "ring-2" : "opacity-55 ring-[#EFE4D6]"
+      }`}
+      style={{ borderColor: active ? accent : undefined, boxShadow: active ? `0 14px 30px ${accent}22` : undefined }}
+      aria-pressed={active}
     >
-      {photo ? (
-        <img src={photo} alt={displayName(child)} className="h-full w-full object-cover" />
-      ) : initials ? (
-        initials
-      ) : (
-        <UserRound className="h-5 w-5" />
-      )}
-    </span>
+      <span
+        className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-bold text-[#8F9874] shadow-sm ring-4"
+        style={{ borderColor: accent, boxShadow: active ? `0 0 0 4px ${accent}22` : undefined }}
+      >
+        {photo ? (
+          <img src={photo} alt={displayName(child)} className="h-full w-full object-cover" />
+        ) : initials ? (
+          initials
+        ) : (
+          <UserRound className="h-6 w-6" />
+        )}
+      </span>
+
+      <span className="mt-3 max-w-[76px] truncate text-sm font-bold text-[#3F474D]">{displayName(child)}</span>
+      <span className="mt-2 h-2 w-14 rounded-full" style={{ backgroundColor: accent }} />
+    </button>
   );
 }
 
 function EventCard({ event, childrenList, onClick }) {
-  const color = getColor(event.color);
   const childNames =
     event.childNames?.length > 0
       ? event.childNames
@@ -303,7 +325,7 @@ function EventCard({ event, childrenList, onClick }) {
           .filter(Boolean);
 
   return (
-    <button type="button" onClick={() => onClick(event)} className={`w-full rounded-3xl p-4 text-left ring-1 transition hover:brightness-[0.98] ${color.bg} ${color.text}`}>
+    <button type="button" onClick={() => onClick(event)} className="w-full rounded-3xl bg-[#FFFDF8] p-4 text-left ring-1 ring-[#EFE4D6] transition hover:bg-white hover:shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold text-[#4F4A45]">
@@ -314,7 +336,7 @@ function EventCard({ event, childrenList, onClick }) {
         </div>
 
         {(event.start || event.end) && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-[#55534C]">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-bold text-[#55534C] ring-1 ring-[#EFE4D6]">
             <Clock className="h-3.5 w-3.5" />
             {event.start || "--:--"}
             {event.end ? ` - ${event.end}` : ""}
@@ -336,12 +358,12 @@ export default function CalendarView({ children = [] }) {
   const [year, setYear] = useState(startYear);
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(today.getDate());
-  const [selectedChildId, setSelectedChildId] = useState("all");
+  const [activeChildIds, setActiveChildIds] = useState([]);
 
   const [events, setEvents] = useState([]);
+  const [showDayDetails, setShowDayDetails] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
-  const [appointmentColor, setAppointmentColor] = useState("sage");
   const [appointmentEmoji, setAppointmentEmoji] = useState("♡");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -367,31 +389,28 @@ export default function CalendarView({ children = [] }) {
     loadEvents();
   }, []);
 
-  const visibleChildren = useMemo(() => children.slice(0, 3), [children]);
+  useEffect(() => {
+    setActiveChildIds((current) => {
+      const availableIds = children.map((child) => child.id);
+      if (availableIds.length === 0) return [];
+      const stillAvailable = current.filter((id) => availableIds.includes(id));
+      return stillAvailable.length > 0 ? stillAvailable : availableIds;
+    });
+  }, [children]);
+
+  const monthWeeks = useMemo(() => getMonthWeeks(year, month), [year, month]);
+  const activeSet = useMemo(() => new Set(activeChildIds), [activeChildIds]);
 
   const filteredEvents = useMemo(() => {
-    if (selectedChildId === "all") return events;
-    return events.filter((event) => event.childIds.includes(selectedChildId));
-  }, [events, selectedChildId]);
+    if (activeChildIds.length === 0) return events;
+    return events.filter((event) => event.childIds.length === 0 || event.childIds.some((childId) => activeSet.has(childId)));
+  }, [events, activeChildIds, activeSet]);
 
   const selectedDateEvents = useMemo(() => {
     return filteredEvents
       .filter((event) => event.date === selectedDateKey)
       .sort((a, b) => String(a.start || "99:99").localeCompare(String(b.start || "99:99")));
   }, [filteredEvents, selectedDateKey]);
-
-  const monthWeeks = useMemo(() => getMonthWeeks(year, month), [year, month]);
-
-  const upcomingEvents = useMemo(() => {
-    return filteredEvents
-      .filter((event) => event.date >= todayKey)
-      .sort((a, b) => {
-        const dateCompare = String(a.date).localeCompare(String(b.date));
-        if (dateCompare !== 0) return dateCompare;
-        return String(a.start || "99:99").localeCompare(String(b.start || "99:99"));
-      })
-      .slice(0, 5);
-  }, [filteredEvents, todayKey]);
 
   async function loadEvents() {
     try {
@@ -443,10 +462,14 @@ export default function CalendarView({ children = [] }) {
     setSelectedDay(1);
   }
 
-  function selectDate(nextDate) {
-    setYear(nextDate.getFullYear());
-    setMonth(nextDate.getMonth());
-    setSelectedDay(nextDate.getDate());
+  function toggleChildFilter(childId) {
+    setActiveChildIds((current) => {
+      if (current.includes(childId)) {
+        const next = current.filter((id) => id !== childId);
+        return next.length > 0 ? next : children.map((child) => child.id);
+      }
+      return [...current, childId];
+    });
   }
 
   function getChildNamesFromIds(childIds) {
@@ -458,28 +481,36 @@ export default function CalendarView({ children = [] }) {
       .filter(Boolean);
   }
 
-  function getPrimaryColor(childIds = []) {
+  function getPrimaryColorKey(childIds = []) {
     const firstChildId = childIds[0];
     const firstChild = children.find((child) => child.id === firstChildId);
-    return firstChild?.color || appointmentColor || "sage";
+    return firstChild?.color || "sage";
   }
 
   function getEventsForDate(dateKey) {
     return filteredEvents.filter((event) => event.date === dateKey);
   }
 
-  function getChildBars(dayEvents) {
+  function getChildSegments(dayEvents) {
     return children
       .map((child, index) => {
-        const hasChildEvent = dayEvents.some((event) => event.childIds.includes(child.id));
-        if (!hasChildEvent) return null;
+        if (!activeSet.has(child.id)) return null;
+        const hasChildCustody = dayEvents.some((event) => isCustodyEvent(event) && event.childIds.includes(child.id));
+        if (!hasChildCustody) return null;
         return {
           id: child.id,
           color: getChildAccent(child, index),
         };
       })
       .filter(Boolean)
-      .slice(0, 3);
+      .slice(0, 4);
+  }
+
+  function selectDate(nextDate) {
+    setYear(nextDate.getFullYear());
+    setMonth(nextDate.getMonth());
+    setSelectedDay(nextDate.getDate());
+    setShowDayDetails(true);
   }
 
   function openNewEvent(dateKey = selectedDateKey) {
@@ -487,7 +518,7 @@ export default function CalendarView({ children = [] }) {
     setDraft({
       title: "",
       eventType: "custody",
-      childIds: selectedChildId === "all" ? [] : [selectedChildId],
+      childIds: activeChildIds.length === 1 ? [activeChildIds[0]] : [],
       date: dateKey,
       start: "",
       end: "",
@@ -504,6 +535,7 @@ export default function CalendarView({ children = [] }) {
       setSelectedDay(Number(parts[2]));
     }
 
+    setShowDayDetails(false);
     setShowEditor(true);
   }
 
@@ -533,6 +565,7 @@ export default function CalendarView({ children = [] }) {
       recurrence: event.recurrence || "Aucune",
     });
 
+    setShowDayDetails(false);
     if (shouldOpen) setShowEditor(true);
   }
 
@@ -573,7 +606,7 @@ export default function CalendarView({ children = [] }) {
 
   function buildEventPayload(dateOverride = null) {
     const childNames = getChildNamesFromIds(draft.childIds);
-    const selectedColor = draft.eventType === "appointment" ? appointmentColor : getPrimaryColor(draft.childIds);
+    const selectedColor = getPrimaryColorKey(draft.childIds);
 
     return {
       title:
@@ -616,24 +649,16 @@ export default function CalendarView({ children = [] }) {
   }
 
   async function saveEvent() {
-    try {
-      setIsSaving(true);
-      const payload = buildEventPayload();
-      const savedEvent = await saveSingleEvent(payload, selectedEventId);
+    const payload = buildEventPayload();
+    const savedEvent = await saveSingleEvent(payload, selectedEventId);
 
-      setEvents((current) => {
-        if (selectedEventId) return current.map((event) => (event.id === selectedEventId ? savedEvent : event));
-        return [...current, savedEvent];
-      });
+    setEvents((current) => {
+      if (selectedEventId) return current.map((event) => (event.id === selectedEventId ? savedEvent : event));
+      return [...current, savedEvent];
+    });
 
-      setSelectedEventId(savedEvent.id);
-      setShowEditor(false);
-    } catch (error) {
-      console.error("Erreur sauvegarde calendrier:", error);
-      alert(error.message || "Erreur de connexion avec le serveur.");
-    } finally {
-      setIsSaving(false);
-    }
+    setSelectedEventId(savedEvent.id);
+    setShowEditor(false);
   }
 
   async function saveDayAndApplyFrequency() {
@@ -728,69 +753,67 @@ export default function CalendarView({ children = [] }) {
   }
 
   return (
-    <div className="space-y-7">
-      <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm md:p-6">
-        <SectionTitle
-          title="Calendrier familial"
-          subtitle="Gardes, rendez-vous et repères importants de chaque enfant, dans une vue claire et visuelle."
-          icon={CalendarDays}
-        />
-      </div>
+    <div className="mx-auto max-w-5xl">
+      <div className="relative overflow-hidden rounded-[2.5rem] border border-[#EFE4D6] bg-[#FFFCF7] p-4 shadow-sm md:p-8">
+        <div className="pointer-events-none absolute -left-24 -top-24 h-56 w-56 rounded-full bg-[#EAA5AF]/25 blur-xl" />
+        <div className="pointer-events-none absolute -bottom-28 -right-20 h-64 w-64 rounded-full bg-[#B5A7C8]/25 blur-xl" />
+        <div className="pointer-events-none absolute left-10 bottom-10 h-40 w-40 rounded-full bg-[#A8B193]/15 blur-xl" />
 
-      <div className="relative overflow-hidden rounded-[2.25rem] border border-[#EFE4D6] bg-[#FFFDF9] shadow-sm">
-        <div className="absolute -left-16 -top-20 h-40 w-40 rounded-full bg-[#EAA5AF]/40 blur-sm" />
-        <div className="absolute -bottom-20 -right-16 h-48 w-48 rounded-full bg-[#B5A7C8]/35 blur-sm" />
-
-        <div className="relative z-10 border-b border-[#EFE4D6] px-5 pb-5 pt-6 md:px-7">
-          {children.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
-              {visibleChildren.map((child, index) => {
-                const selected = selectedChildId === child.id;
-                const accent = getChildAccent(child, index);
-                return (
-                  <button
-                    key={child.id}
-                    type="button"
-                    onClick={() => setSelectedChildId(selected ? "all" : child.id)}
-                    className={`rounded-[1.75rem] bg-white/80 px-3 py-4 text-center shadow-sm ring-1 transition ${
-                      selected ? "ring-2" : "ring-[#F3E8DA] hover:ring-[#D8C8B6]"
-                    }`}
-                    style={{ borderColor: selected ? accent : undefined, boxShadow: selected ? `0 10px 22px ${accent}22` : undefined }}
-                  >
-                    <div className="flex justify-center">
-                      <ChildAvatar child={child} checked={selected} size="lg" index={index} />
-                    </div>
-                    <p className="mt-3 truncate text-sm font-bold text-[#3F474D]">{displayName(child)}</p>
-                    <span className="mx-auto mt-2 block h-2 w-16 rounded-full" style={{ backgroundColor: accent }} />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="relative z-10 flex items-center justify-between border-b border-[#EFE4D6] bg-white/65 px-5 py-4 md:px-7">
-          <button type="button" onClick={previousMonth} className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]">
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-
-          <div className="text-center">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#A8B193]">Mois affiché</p>
-            <h3 className="text-2xl font-extrabold text-[#52713E]">{MONTHS[month]} {year}</h3>
+        <div className="relative z-10 rounded-[2rem] bg-white/80 p-4 shadow-[0_18px_45px_rgba(74,68,58,0.08)] ring-1 ring-white/70 md:p-7">
+          <div className="flex items-center justify-center">
+            <CamelioLogo />
           </div>
 
-          <button type="button" onClick={nextMonth} className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]">
-            <ChevronRight className="h-5 w-5" />
-          </button>
-        </div>
+          <div className="mt-7 flex gap-4 overflow-x-auto px-1 pb-2 md:justify-center">
+            {children.length === 0 ? (
+              <div className="rounded-3xl bg-[#FFF8EC] px-5 py-4 text-sm font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">
+                Ajoutez un profil enfant pour utiliser les filtres du calendrier.
+              </div>
+            ) : (
+              children.map((child, index) => (
+                <ChildFilterPill
+                  key={child.id}
+                  child={child}
+                  index={index}
+                  active={activeChildIds.includes(child.id)}
+                  onClick={() => toggleChildFilter(child.id)}
+                />
+              ))
+            )}
+          </div>
 
-        <div className="relative z-10 bg-white/55 px-4 py-5 md:px-6">
-          <div className="grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#2F3B42] md:gap-3">
-            {WEEK_DAYS.map((day) => <span key={day}>{day}</span>)}
+          <div className="mt-7 flex items-center justify-between border-y border-[#EFE4D6] py-4">
+            <button
+              type="button"
+              onClick={previousMonth}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]"
+              aria-label="Mois précédent"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+
+            <h3 className="text-center text-2xl font-extrabold text-[#52713E] md:text-3xl">
+              {MONTHS[month]} {year}
+            </h3>
+
+            <button
+              type="button"
+              onClick={nextMonth}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]"
+              aria-label="Mois suivant"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="mt-5 grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#6F7466] md:gap-3 md:text-sm">
+            {WEEK_DAYS.map((day) => (
+              <span key={day}>{day}</span>
+            ))}
           </div>
 
           {isLoading && (
-            <div className="mt-5 rounded-2xl bg-white p-4 text-center text-sm font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">
+            <div className="mt-5 rounded-2xl bg-[#FFFDF8] p-4 text-center text-sm font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">
               Chargement du calendrier...
             </div>
           )}
@@ -798,104 +821,94 @@ export default function CalendarView({ children = [] }) {
           <div className="mt-3 grid !grid-cols-7 gap-2 md:gap-3">
             {monthWeeks.flat().map((date) => {
               const dayEvents = getEventsForDate(date.dateKey);
+              const hasAppointment = dayEvents.some(isAppointmentEvent);
+              const segments = getChildSegments(dayEvents);
               const isSelected = date.dateKey === selectedDateKey;
               const isToday = date.dateKey === todayKey;
-              const hasAppointment = dayEvents.some(isAppointmentEvent);
-              const bars = getChildBars(dayEvents);
 
               return (
                 <button
                   key={date.dateKey}
                   type="button"
                   onClick={() => selectDate(date.date)}
-                  className={`relative flex min-h-[78px] flex-col items-center justify-between rounded-[1.35rem] bg-white px-1.5 py-3 text-center shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[96px] md:rounded-[1.6rem] ${
+                  className={`relative flex min-h-[76px] flex-col items-center justify-between rounded-[1.35rem] bg-white px-1.5 py-3 text-center shadow-[0_8px_22px_rgba(74,68,58,0.05)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[112px] md:rounded-[1.6rem] md:px-2 md:py-4 ${
                     isSelected ? "ring-2 ring-[#A8B193]" : "ring-[#F1E4D7]"
-                  } ${!date.isCurrentMonth ? "opacity-45" : ""}`}
+                  } ${!date.isCurrentMonth ? "opacity-40" : ""}`}
+                  aria-label={formatLongDate(date.date)}
                 >
-                  <span className="text-lg font-bold text-[#1F2B33] md:text-2xl">{date.day}</span>
+                  <span className="text-base font-bold leading-none text-[#1F2B33] md:text-2xl">{date.day}</span>
 
-                  <span className="flex h-5 items-center justify-center">
-                    {hasAppointment && (
-                      <Heart className="h-4 w-4 fill-white stroke-[2.5]" style={{ color: appointmentColorHex }} />
-                    )}
+                  <span className="flex h-6 items-center justify-center text-lg leading-none md:h-7 md:text-xl">
+                    {hasAppointment ? <span style={{ color: APPOINTMENT_COLOR }}>♡</span> : <span aria-hidden="true">&nbsp;</span>}
                   </span>
 
-                  <span className="flex w-full flex-col gap-1">
-                    {bars.length === 0 ? (
-                      <span className="h-1.5" />
+                  <span className="flex h-2.5 w-full max-w-[54px] overflow-hidden rounded-full bg-transparent md:max-w-[72px]">
+                    {segments.length === 0 ? (
+                      <span className="h-1.5 w-full" />
+                    ) : segments.length === 1 ? (
+                      <span className="h-1.5 w-full rounded-full" style={{ backgroundColor: segments[0].color }} />
                     ) : (
-                      bars.map((bar) => (
-                        <span key={bar.id} className="mx-auto h-1.5 w-10 rounded-full md:w-14" style={{ backgroundColor: bar.color }} />
+                      segments.map((segment, index) => (
+                        <span
+                          key={segment.id}
+                          className={`h-1.5 flex-1 ${index === 0 ? "rounded-l-full" : ""} ${index === segments.length - 1 ? "rounded-r-full" : ""}`}
+                          style={{ backgroundColor: segment.color, marginLeft: index === 0 ? 0 : 2 }}
+                        />
                       ))
                     )}
                   </span>
 
-                  {isToday && <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-[#A8B193]" />}
+                  {isToday && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#A8B193]" />}
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[#EFE4D6] pt-4">
+          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-[#EFE4D6] pt-4">
             {children.map((child, index) => (
               <span key={child.id} className="flex items-center gap-2 text-xs font-bold text-[#5F5A52]">
                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: getChildAccent(child, index) }} />
                 {displayName(child)}
               </span>
             ))}
-            <span className="flex items-center gap-2 text-xs font-bold text-[#5F5A52]"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: appointmentColorHex }} /> Rendez-vous</span>
+            <span className="flex items-center gap-2 text-xs font-bold text-[#5F5A52]">
+              <span className="text-base leading-none" style={{ color: APPOINTMENT_COLOR }}>♡</span>
+              Rendez-vous / événement
+            </span>
           </div>
         </div>
 
         <button
           type="button"
           onClick={() => openNewEvent(selectedDateKey)}
-          className="absolute bottom-6 right-6 z-20 flex h-16 w-16 items-center justify-center rounded-full bg-[#A8B193] text-white shadow-xl ring-4 ring-white/80 transition hover:scale-105 hover:brightness-95"
+          className="absolute bottom-8 right-8 z-20 flex h-16 w-16 items-center justify-center rounded-full bg-[#A8B193] text-white shadow-xl ring-4 ring-white/80 transition hover:scale-105 hover:brightness-95"
           aria-label="Ajouter un événement"
         >
           <Plus className="h-8 w-8" />
         </button>
       </div>
 
-      <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm">
-        <div>
-          <p className="label">Journée sélectionnée</p>
-          <h3 className="text-xl font-bold text-[#55534C]">{formatLongDate(selectedDate)}</h3>
-          <p className="mt-1 text-sm text-[#746F64]">Cliquez sur une journée dans le calendrier pour voir ou ajouter des informations.</p>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {selectedDateEvents.length === 0 ? (
-            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun événement pour cette journée.</div>
-          ) : (
-            selectedDateEvents.map((event) => <EventCard key={event.id} event={event} childrenList={children} onClick={editEvent} />)
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="label">À venir</p>
-            <h3 className="text-xl font-bold text-[#55534C]">Prochains événements</h3>
-            <p className="mt-1 text-sm text-[#746F64]">Les prochains rendez-vous, gardes et rappels importants.</p>
-          </div>
-          <CalendarDays className="h-5 w-5 text-[#A8B193]" />
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {upcomingEvents.length === 0 ? (
-            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun événement à venir.</div>
-          ) : (
-            upcomingEvents.map((event) => (
-              <div key={event.id} className="grid gap-2 md:grid-cols-[140px_1fr]">
-                <div className="rounded-2xl bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">{event.date}</div>
-                <EventCard event={event} childrenList={children} onClick={editEvent} />
+      {showDayDetails && (
+        <Popup title={formatLongDate(selectedDate)} kicker="Calendrier" close={() => setShowDayDetails(false)}>
+          <div className="space-y-4">
+            {selectedDateEvents.length === 0 ? (
+              <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
+                Aucun événement pour cette journée.
               </div>
-            ))
-          )}
-        </div>
-      </div>
+            ) : (
+              selectedDateEvents.map((event) => <EventCard key={event.id} event={event} childrenList={children} onClick={editEvent} />)
+            )}
+
+            <button
+              type="button"
+              onClick={() => openNewEvent(selectedDateKey)}
+              className="w-full rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white shadow-sm"
+            >
+              Ajouter une information à cette journée
+            </button>
+          </div>
+        </Popup>
+      )}
 
       {showEditor && (
         <Popup title={`${selectedDay} ${MONTHS[month].toLowerCase()} ${year}`} kicker={selectedEventId ? "Modifier un événement" : "Nouvel événement"} close={() => setShowEditor(false)}>
@@ -951,14 +964,16 @@ export default function CalendarView({ children = [] }) {
                 ) : (
                   children.map((child, index) => {
                     const checked = draft.childIds.includes(child.id);
-                    const color = getColor(child.color);
+                    const accent = getChildAccent(child, index);
                     return (
-                      <button key={child.id} type="button" onClick={() => toggleChild(child.id)} className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-1 ${checked ? `${color.bg} ring-2` : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
+                      <button key={child.id} type="button" onClick={() => toggleChild(child.id)} className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-1 ${checked ? "bg-[#F8F3EA] ring-2" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`} style={{ borderColor: checked ? accent : undefined }}>
                         <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white text-xs font-bold">{checked ? "✓" : ""}</span>
-                        <ChildAvatar child={child} checked={checked} index={index} />
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-xs font-bold shadow-sm ring-2" style={{ borderColor: accent }}>
+                          {getChildPhoto(child) ? <img src={getChildPhoto(child)} alt={displayName(child)} className="h-full w-full object-cover" /> : getChildInitials(child) || <UserRound className="h-4 w-4" />}
+                        </span>
                         <div>
-                          <p className="font-bold">{displayName(child)}</p>
-                          <p className="text-xs">{child.sex || child.gender || "Profil enfant"}</p>
+                          <p className="font-bold text-[#4F4A45]">{displayName(child)}</p>
+                          <p className="text-xs text-[#746F64]">Profil enfant</p>
                         </div>
                       </button>
                     );
