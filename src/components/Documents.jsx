@@ -281,6 +281,31 @@ function getFolderById(folders, folderId) {
   return folders.find((folder) => folder.id === folderId) || folders.find((folder) => folder.id === "other");
 }
 
+function documentMatchesSearch(doc, folder, normalizedQuery) {
+  if (!normalizedQuery) return true;
+
+  const searchable = normalizeText([
+    getDocumentTitle(doc),
+    getDocumentCategory(doc),
+    doc.childName,
+    doc.fileName,
+    doc.note,
+    folder?.name,
+    folder?.description,
+  ].join(" "));
+
+  return searchable.includes(normalizedQuery);
+}
+
+function folderMatchesSearch(folder, matchingDocs, normalizedQuery) {
+  if (!normalizedQuery) return true;
+
+  const folderText = normalizeText([folder?.name, folder?.description].join(" "));
+  if (folderText.includes(normalizedQuery)) return true;
+
+  return matchingDocs.some((doc) => getDocFolderId(doc) === folder.id);
+}
+
 function DocumentRow({ doc, folder, onView, onMenu }) {
   const FolderIcon = folder?.icon || Folder;
 
@@ -489,38 +514,42 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
 
   const selectedChild = useMemo(() => children.find((child) => getChildId(child) === form.childId) || null, [children, form.childId]);
 
-  const folderCounts = useMemo(() => {
-    const counts = new Map();
-    docs.forEach((doc) => {
-      const id = getDocFolderId(doc);
-      counts.set(id, (counts.get(id) || 0) + 1);
-    });
-    return counts;
-  }, [docs]);
+  const normalizedSearchQuery = useMemo(() => normalizeText(searchQuery), [searchQuery]);
 
-  const filteredDocs = useMemo(() => {
-    const query = normalizeText(searchQuery);
+  const matchingDocsForSearch = useMemo(() => {
+    if (!normalizedSearchQuery) return docs;
 
     return docs.filter((doc) => {
       const folder = getFolderById(allFolders, getDocFolderId(doc));
-      const matchesFolder = selectedFolderId === "all" || getDocFolderId(doc) === selectedFolderId;
-
-      if (!matchesFolder) return false;
-      if (!query) return true;
-
-      const searchable = normalizeText([
-        getDocumentTitle(doc),
-        getDocumentCategory(doc),
-        doc.childName,
-        doc.fileName,
-        doc.note,
-        folder?.name,
-        folder?.description,
-      ].join(" "));
-
-      return searchable.includes(query);
+      return documentMatchesSearch(doc, folder, normalizedSearchQuery);
     });
-  }, [allFolders, docs, searchQuery, selectedFolderId]);
+  }, [allFolders, docs, normalizedSearchQuery]);
+
+  const visibleFolders = useMemo(() => {
+    if (!normalizedSearchQuery) return allFolders;
+
+    return allFolders.filter((folder) => folderMatchesSearch(folder, matchingDocsForSearch, normalizedSearchQuery));
+  }, [allFolders, matchingDocsForSearch, normalizedSearchQuery]);
+
+  const folderCounts = useMemo(() => {
+    const counts = new Map();
+    const sourceDocs = normalizedSearchQuery ? matchingDocsForSearch : docs;
+
+    sourceDocs.forEach((doc) => {
+      const id = getDocFolderId(doc);
+      counts.set(id, (counts.get(id) || 0) + 1);
+    });
+
+    return counts;
+  }, [docs, matchingDocsForSearch, normalizedSearchQuery]);
+
+  const filteredDocs = useMemo(() => {
+    const sourceDocs = normalizedSearchQuery ? matchingDocsForSearch : docs;
+
+    return sourceDocs.filter((doc) => {
+      return selectedFolderId === "all" || getDocFolderId(doc) === selectedFolderId;
+    });
+  }, [docs, matchingDocsForSearch, normalizedSearchQuery, selectedFolderId]);
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -940,7 +969,7 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
             onClick={() => setSelectedFolderId("all")}
             className={`rounded-full px-4 py-2 text-xs font-bold ring-1 ${selectedFolderId === "all" ? "bg-[#A8B193] text-white ring-[#A8B193]" : "bg-[#FFFDF8] text-[#746F64] ring-[#EFE4D6]"}`}
           >
-            Tous les dossiers · {docs.length}
+            Tous les dossiers · {matchingDocsForSearch.length}
           </button>
           {children.map((child) => (
             <button
@@ -972,7 +1001,7 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
         </div>
 
         <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2 xl:!grid-cols-3">
-          {allFolders.map((folder) => (
+          {visibleFolders.map((folder) => (
             <FolderCard
               key={folder.id}
               folder={folder}
@@ -981,6 +1010,12 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
               onClick={() => setSelectedFolderId(folder.id)}
             />
           ))}
+
+          {searchQuery && !visibleFolders.length && (
+            <div className="rounded-3xl bg-[#FFFDF8] p-5 text-sm font-semibold leading-6 text-[#746F64] ring-1 ring-[#EFE4D6] sm:col-span-2 xl:col-span-3">
+              Aucun dossier ne contient un document correspondant à cette recherche.
+            </div>
+          )}
 
           <button
             type="button"
