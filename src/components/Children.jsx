@@ -49,29 +49,82 @@ const childColorOptions = [
   { id: "sand", label: "Sable", dot: "#D8C49A", soft: "#FBF4E7", text: "#927D54", border: "#E8D9BA" },
 ];
 
-const girlPresetPhotos = Array.from({ length: 15 }, (_, index) => {
-  const number = String(index + 1).padStart(2, "0");
+function createPresetPhoto(url, category, index) {
+  const labelPrefix = category === "garcon" ? "Garçon" : "Fille";
+  const cleanName = String(url || "")
+    .split("/")
+    .pop()
+    ?.replace(/\.[^.]+$/, "")
+    ?.replace(/[_-]+/g, " ")
+    ?.trim();
 
   return {
-    id: `fille-profil-${number}`,
-    label: `Fille ${number}`,
-    category: "fille",
-    url: `/Profil/Fille/profil_${number}.png`,
+    id: `${category}-${index}-${url}`,
+    label: cleanName || `${labelPrefix} ${index + 1}`,
+    category,
+    url,
   };
-});
+}
 
-const boyPresetPhotos = Array.from({ length: 18 }, (_, index) => {
+const fallbackGirlPresetPhotos = Array.from({ length: 29 }, (_, index) => {
   const number = String(index + 1).padStart(2, "0");
 
-  return {
-    id: `garcon-profil-${number}`,
-    label: `Garçon ${number}`,
-    category: "garcon",
-    url: `/Profil/Garcon/Garcon_${number}.png`,
-  };
+  return createPresetPhoto(`/Profil/Fille/Fille_${number}.png`, "fille", index);
 });
 
-const presetPhotos = [...girlPresetPhotos, ...boyPresetPhotos];
+const fallbackBoyPresetPhotos = Array.from({ length: 22 }, (_, index) => {
+  const number = String(index + 1).padStart(2, "0");
+
+  return createPresetPhoto(`/Profil/Garcon/Garcon_${number}.png`, "garcon", index);
+});
+
+const fallbackPresetPhotos = [
+  ...fallbackGirlPresetPhotos,
+  ...fallbackBoyPresetPhotos,
+];
+
+function normalizePresetPhotosFromManifest(manifest = {}) {
+  const normalizeList = (items, category) => {
+    if (!Array.isArray(items)) return [];
+
+    return items
+      .map((item, index) => {
+        const url = typeof item === "string" ? item : item?.url;
+        if (!url) return null;
+
+        return {
+          ...createPresetPhoto(url, category, index),
+          ...(typeof item === "object" && item ? item : {}),
+          category,
+          url,
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const photos = [
+    ...normalizeList(manifest.fille, "fille"),
+    ...normalizeList(manifest.garcon, "garcon"),
+  ];
+
+  return photos.length ? photos : fallbackPresetPhotos;
+}
+
+function getChildPresetCategory(child = {}) {
+  const rawGender = String(child.sex || child.gender || child.sexe || "")
+    .trim()
+    .toLowerCase();
+
+  if (["fille", "girl", "féminin", "feminin"].includes(rawGender)) {
+    return "fille";
+  }
+
+  if (["garcon", "garçon", "boy", "masculin"].includes(rawGender)) {
+    return "garcon";
+  }
+
+  return "tout";
+}
 
 function normalizePhotoPosition(position) {
   if (!position) return defaultPhotoPosition;
@@ -153,20 +206,32 @@ function PhotoImage({ src, alt, position, zoom = 1, className = "" }) {
   );
 }
 
-function PresetPhotoModal({ open, selectedPhoto, onClose, onChoose }) {
+function PresetPhotoModal({
+  open,
+  selectedPhoto,
+  onClose,
+  onChoose,
+  availablePhotos = fallbackPresetPhotos,
+}) {
   const [filter, setFilter] = useState("tout");
 
   if (!open) return null;
 
+  const photosToDisplay = Array.isArray(availablePhotos) && availablePhotos.length
+    ? availablePhotos
+    : fallbackPresetPhotos;
+
   const filteredPhotos =
     filter === "tout"
-      ? presetPhotos
-      : presetPhotos.filter((photo) => photo.category === filter);
+      ? photosToDisplay
+      : photosToDisplay.filter((photo) => photo.category === filter);
+
+  const availableCategories = new Set(photosToDisplay.map((photo) => photo.category));
 
   const filters = [
     { id: "tout", label: "Tout" },
-    { id: "fille", label: "Fille" },
-    { id: "garcon", label: "Garçon" },
+    ...(availableCategories.has("fille") ? [{ id: "fille", label: "Fille" }] : []),
+    ...(availableCategories.has("garcon") ? [{ id: "garcon", label: "Garçon" }] : []),
   ];
 
   return (
@@ -266,6 +331,7 @@ function PhotoPicker({
   onUpload,
   onPositionChange,
   onZoomChange,
+  presetPhotoOptions = fallbackPresetPhotos,
 }) {
   const [isCropping, setIsCropping] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -474,6 +540,7 @@ function PhotoPicker({
       <PresetPhotoModal
         open={showPresetModal}
         selectedPhoto={photo}
+        availablePhotos={presetPhotoOptions}
         onClose={() => setShowPresetModal(false)}
         onChoose={(url) => {
           onChoosePreset(url);
@@ -490,6 +557,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
   const [previewPhoto, setPreviewPhoto] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [presetPhotoOptions, setPresetPhotoOptions] = useState(fallbackPresetPhotos);
 
   const [newChild, setNewChild] = useState({
     id: createChildId(),
@@ -516,6 +584,47 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
   const textareaClass =
     "w-full min-h-[150px] rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold leading-6 text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch(`/profil-manifest.json?updated=${Date.now()}`, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("profil-manifest.json introuvable");
+        }
+
+        return response.json();
+      })
+      .then((manifest) => {
+        if (!isMounted) return;
+        setPresetPhotoOptions(normalizePresetPhotosFromManifest(manifest));
+      })
+      .catch((error) => {
+        console.warn(
+          "Images de profil automatiques non chargées, utilisation des images par défaut.",
+          error
+        );
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const getPresetPhotosForChild = (child = {}) => {
+    const category = getChildPresetCategory(child);
+
+    if (category === "tout") {
+      return presetPhotoOptions;
+    }
+
+    const filteredPhotos = presetPhotoOptions.filter(
+      (photo) => photo.category === category
+    );
+
+    return filteredPhotos.length ? filteredPhotos : presetPhotoOptions;
+  };
 
   const fileToDataUrl = (file) => {
     return new Promise((resolve, reject) => {
@@ -1021,6 +1130,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
               position={newChild.photoPosition}
               zoom={newChild.photoZoom || 1}
               fallback={<UserRound className="h-10 w-10" />}
+              presetPhotoOptions={getPresetPhotosForChild(newChild)}
               onChoosePreset={(url) => {
                 setPreviewPhoto("");
                 setNewChild((current) => ({
@@ -1364,6 +1474,7 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
               position={selectedChild.photoPosition || defaultPhotoPosition}
               zoom={selectedChild.photoZoom || 1}
               fallback={getInitials(selectedChild)}
+              presetPhotoOptions={getPresetPhotosForChild(selectedChild)}
               onChoosePreset={(url) =>
                 setSelectedChild((current) => ({
                   ...current,
