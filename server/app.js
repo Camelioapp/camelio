@@ -5287,10 +5287,8 @@ app.post(
       const promoPlan = CAMELIO_PLANS.famille_plus;
 
       const codeOwners = {
-  CAMELIOBETA: "Beta",
+  BETA: "Beta",
   PROMOALEX: "Alex",
-  PROMOEMMANUEL: "Emmanuel",
-  PROMOMELANIE: "Mélanie",
 };
 
       const codeOwner = codeOwners[submittedCode] || "Non défini";
