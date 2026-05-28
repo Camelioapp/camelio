@@ -961,61 +961,16 @@ export default function Documents({
         >
           <div className="grid !grid-cols-1 gap-3">
             <button
-  type="button"
-  onClick={() => {
-    openDocument(docMenu);
-    setDocMenu(null);
-  }}
-  className="flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
->
-  <Eye className="h-4 w-4" />
-  Ouvrir
-</button>
-
-<button
-  type="button"
-  onClick={() => openSharePopup(docMenu)}
-  className="flex items-center justify-center gap-2 rounded-2xl bg-[#F4F8FD] px-4 py-3 text-sm font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]"
->
-  <Link className="h-4 w-4" />
-  Partager par lien sécurisé
-</button>
-
-<button
-  type="button"
-  onClick={() => disableAllDocumentShareLinks(docMenu)}
-  disabled={disablingAllShares}
-  className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#9A7652] ring-1 ring-[#F0D8B8] disabled:cursor-not-allowed disabled:opacity-60"
->
-  {disablingAllShares ? (
-    <Loader2 className="h-4 w-4 animate-spin" />
-  ) : (
-    <LinkOff className="h-4 w-4" />
-  )}
-  {disablingAllShares
-    ? "Désactivation..."
-    : "Désactiver tous les liens sécurisés"}
-</button>
-
-<button
-  type="button"
-  onClick={() => {
-    deleteDocument(docMenu);
-    setDocMenu(null);
-  }}
-  className="flex items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
->
-  <Trash2 className="h-4 w-4" />
-  Supprimer
-</button>
-
-<button
-  type="button"
-  onClick={() => setDocMenu(null)}
-  className="flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
->
-  Annuler
-</button>
+              type="button"
+              onClick={() => {
+                openDocument(docMenu);
+                setDocMenu(null);
+              }}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+            >
+              <Eye className="h-4 w-4" />
+              Ouvrir
+            </button>
 
             <button
               type="button"
