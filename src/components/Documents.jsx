@@ -2,12 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Camera,
   ChevronRight,
+  Copy,
   Download,
   Eye,
   FileText,
+  Link,
   Loader2,
   MoreHorizontal,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -90,6 +93,24 @@ function getDocumentTitle(doc) {
 
 function getDocumentCategory(doc) {
   return doc.category || doc.type || "Document";
+}
+
+function generateAccessCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+
+  for (let i = 0; i < 4; i += 1) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  return code;
+}
+
+function getShareUrlFromResponse(data) {
+  if (data?.shareUrl) return data.shareUrl;
+  if (data?.url) return data.url;
+  if (data?.token) return `${window.location.origin}/shared-document/${data.token}`;
+  return "";
 }
 
 function isImageDocument(doc) {
@@ -293,6 +314,13 @@ export default function Documents({
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [docMenu, setDocMenu] = useState(null);
   const [deleteDoc, setDeleteDoc] = useState(null);
+  const [shareDoc, setShareDoc] = useState(null);
+  const [shareForm, setShareForm] = useState({
+    code: generateAccessCode(),
+    durationDays: 1,
+  });
+  const [shareResult, setShareResult] = useState(null);
+  const [sharing, setSharing] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -518,6 +546,90 @@ export default function Documents({
       window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(err.message || "Impossible de télécharger le document.");
+    }
+  };
+
+  const openSharePopup = (doc) => {
+    setError("");
+    setSuccess("");
+    setDocMenu(null);
+    setShareDoc(doc);
+    setShareResult(null);
+    setShareForm({
+      code: generateAccessCode(),
+      durationDays: 1,
+    });
+  };
+
+  const generateShareLink = async () => {
+    if (!shareDoc) return;
+
+    const cleanCode = String(shareForm.code || "")
+      .trim()
+      .toUpperCase();
+
+    if (!/^[A-Z0-9]{4}$/.test(cleanCode)) {
+      setError("Le code doit contenir exactement 4 caractères, lettres ou chiffres.");
+      return;
+    }
+
+    const durationDays = Number(shareForm.durationDays);
+
+    if (![1, 3, 7].includes(durationDays)) {
+      setError("Choisis une durée valide : 1 journée, 3 jours ou 7 jours.");
+      return;
+    }
+
+    setSharing(true);
+    setError("");
+    setShareResult(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/documents/${shareDoc.id}/share-link`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            code: cleanCode,
+            durationDays,
+          }),
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Impossible de générer le lien sécurisé.");
+      }
+
+      const shareUrl = getShareUrlFromResponse(data);
+
+      setShareResult({
+        shareUrl,
+        code: cleanCode,
+        expiresAt: data?.expiresAt || "",
+      });
+
+      setSuccess("Lien sécurisé créé.");
+    } catch (err) {
+      setError(err.message || "Impossible de générer le lien sécurisé.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const copyToClipboard = async (value, label = "Information") => {
+    if (!value) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setSuccess(`${label} copié.`);
+    } catch (err) {
+      setError("Impossible de copier automatiquement. Sélectionne le texte manuellement.");
     }
   };
 
@@ -754,6 +866,15 @@ export default function Documents({
 
             <button
               type="button"
+              onClick={() => openSharePopup(docMenu)}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#F4F8FD] px-4 py-3 text-sm font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]"
+            >
+              <Link className="h-4 w-4" />
+              Partager par lien sécurisé
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 setDeleteDoc(docMenu);
                 setDocMenu(null);
@@ -771,6 +892,195 @@ export default function Documents({
             >
               Annuler
             </button>
+          </div>
+        </Popup>
+      )}
+
+      {shareDoc && (
+        <Popup
+          title="Partager ce document"
+          kicker="Lien sécurisé"
+          close={() => {
+            setShareDoc(null);
+            setShareResult(null);
+            setError("");
+          }}
+        >
+          <div className="space-y-5">
+            <div className="rounded-3xl bg-[#F4F8FD] p-4 ring-1 ring-[#D3DFF1]">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#6A85AF] ring-1 ring-[#D3DFF1]">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="font-bold text-[#55534C]">
+                    {getDocumentTitle(shareDoc)}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-[#746F64]">
+                    Le lien sera protégé par un code de 4 caractères. Il sera automatiquement désactivé après la durée choisie.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {!shareResult && (
+              <>
+                <FormField label="Code d’accès, 4 caractères">
+                  <div className="flex gap-2">
+                    <input
+                      className={inputClass("uppercase tracking-[0.35em]")}
+                      value={shareForm.code}
+                      maxLength={4}
+                      onChange={(event) =>
+                        setShareForm((current) => ({
+                          ...current,
+                          code: event.target.value
+                            .toUpperCase()
+                            .replace(/[^A-Z0-9]/g, "")
+                            .slice(0, 4),
+                        }))
+                      }
+                      placeholder="A7K2"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShareForm((current) => ({
+                          ...current,
+                          code: generateAccessCode(),
+                        }))
+                      }
+                      className="shrink-0 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
+                    >
+                      Générer
+                    </button>
+                  </div>
+                </FormField>
+
+                <FormField label="Délai avant désactivation">
+                  <div className="grid !grid-cols-3 gap-2">
+                    {[1, 3, 7].map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() =>
+                          setShareForm((current) => ({
+                            ...current,
+                            durationDays: days,
+                          }))
+                        }
+                        className={`rounded-2xl px-3 py-3 text-sm font-bold ring-1 transition ${
+                          Number(shareForm.durationDays) === days
+                            ? "bg-[#A8B193] text-white ring-[#A8B193]"
+                            : "bg-white text-[#746F64] ring-[#DED6C9]"
+                        }`}
+                      >
+                        {days === 1 ? "1 journée" : `${days} jours`}
+                      </button>
+                    ))}
+                  </div>
+                </FormField>
+
+                <div className="grid !grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShareDoc(null);
+                      setShareResult(null);
+                      setError("");
+                    }}
+                    className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
+                  >
+                    Annuler
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={generateShareLink}
+                    disabled={sharing || String(shareForm.code || "").length !== 4}
+                    className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+                  >
+                    {sharing ? "Création..." : "Générer le lien"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {shareResult && (
+              <div className="space-y-4">
+                <div className="rounded-3xl bg-[#EEF6EA] p-4 ring-1 ring-[#D9E8CE]">
+                  <p className="text-sm font-bold text-[#6C8A58]">
+                    Lien sécurisé créé avec succès.
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-[#746F64]">
+                    Partage le lien et le code séparément lorsque possible.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
+                      Lien
+                    </p>
+                    <p className="mt-2 break-all text-sm font-semibold text-[#55534C]">
+                      {shareResult.shareUrl || "Lien non retourné par le serveur"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(shareResult.shareUrl, "Lien")}
+                      disabled={!shareResult.shareUrl}
+                      className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copier le lien
+                    </button>
+                  </div>
+
+                  <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2">
+                    <div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]">
+                      <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
+                        Code
+                      </p>
+                      <p className="mt-2 text-2xl font-black tracking-[0.35em] text-[#55534C]">
+                        {shareResult.code}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(shareResult.code, "Code")}
+                        className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
+                      >
+                        <Copy className="h-4 w-4" />
+                        Copier le code
+                      </button>
+                    </div>
+
+                    <div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]">
+                      <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
+                        Expiration
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#55534C]">
+                        {shareResult.expiresAt
+                          ? new Date(shareResult.expiresAt).toLocaleString("fr-CA")
+                          : `${shareForm.durationDays} jour(s)`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShareDoc(null);
+                    setShareResult(null);
+                  }}
+                  className="w-full rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white"
+                >
+                  Terminer
+                </button>
+              </div>
+            )}
           </div>
         </Popup>
       )}

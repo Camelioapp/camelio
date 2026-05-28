@@ -4,6 +4,7 @@ import Dashboard from "./components/Dashboard.jsx";
 import WelcomeScreen from "./components/WelcomeScreen.jsx";
 import Login from "./pages/Login.jsx";
 import Invitation from "./pages/Invitation.jsx";
+import SharedDocument from "./pages/SharedDocument.jsx";
 import LandingPage from "./LandingPage.jsx";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
@@ -143,6 +144,10 @@ export default function App() {
 
   if (path === "/accueil") {
     return <LandingPage onLogin={goToLogin} onSignup={goToSignup} />;
+  }
+
+  if (path.startsWith("/shared-document/")) {
+    return <SharedDocument />;
   }
 
   if (path === "/invitation") {
