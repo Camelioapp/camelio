@@ -481,13 +481,16 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
   const [docMenu, setDocMenu] = useState(null);
   const [deleteDoc, setDeleteDoc] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
-  const [shareForm, setShareForm] = useState({ code: generateAccessCode(), durationDays: 1 });
+  const [shareForm, setShareForm] = useState({ code: generateAccessCode(), requiresCode: true, durationDays: 1 });
   const [shareResult, setShareResult] = useState(null);
   const [shareError, setShareError] = useState("");
   const [sharing, setSharing] = useState(false);
   const [disablingShare, setDisablingShare] = useState(false);
   const [disablingAllShares, setDisablingAllShares] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [secureLinks, setSecureLinks] = useState([]);
+  const [loadingSecureLinks, setLoadingSecureLinks] = useState(false);
+  const [disablingTrackedLink, setDisablingTrackedLink] = useState("");
 
   const firstChildId = children.length ? getChildId(children[0]) : "";
   const [form, setForm] = useState({
@@ -547,9 +550,25 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
     }
   }, [setDocs]);
 
+  const loadSecureLinks = useCallback(async () => {
+    setLoadingSecureLinks(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/shared-documents`, { method: "GET", credentials: "include" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || "Impossible de charger les liens sécurisés.");
+      setSecureLinks(Array.isArray(data?.shares) ? data.shares : []);
+    } catch (err) {
+      // Le suivi des liens ne doit pas bloquer la section Documents.
+      console.warn(err);
+    } finally {
+      setLoadingSecureLinks(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadDocuments();
-  }, [loadDocuments]);
+    loadSecureLinks();
+  }, [loadDocuments, loadSecureLinks]);
 
   const childDocs = useCallback(
     (child) => {
@@ -764,19 +783,20 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
     setShareTarget(target);
     setShareResult(null);
     setShareError("");
-    setShareForm({ code: generateAccessCode(), durationDays: 1 });
+    setShareForm({ code: generateAccessCode(), requiresCode: true, durationDays: 1 });
   };
 
   const generateShareLink = async () => {
     if (!shareTarget) return;
-    const cleanCode = String(shareForm.code || "").trim().toUpperCase();
-    if (!/^[A-Z0-9]{4}$/.test(cleanCode)) {
+    const requiresCode = shareForm.requiresCode !== false;
+    const cleanCode = requiresCode ? String(shareForm.code || "").trim().toUpperCase() : "";
+    if (requiresCode && !/^[A-Z0-9]{4}$/.test(cleanCode)) {
       setShareError("Le code doit contenir exactement 4 caractères, lettres ou chiffres.");
       return;
     }
     const durationDays = Number(shareForm.durationDays);
-    if (![1, 3, 7].includes(durationDays)) {
-      setShareError("Choisis une durée valide : 1 journée, 3 jours ou 7 jours.");
+    if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+      setShareError("Choisis une durée entre 1 et 365 jours.");
       return;
     }
     setSharing(true);
@@ -791,7 +811,7 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ code: cleanCode, durationDays, accessMode: "view_only", allowDownload: false, folderName: shareTarget.name }),
+        body: JSON.stringify({ code: cleanCode, requiresCode, durationDays, accessMode: "view_only", allowDownload: false, folderName: shareTarget.name }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.message || "Impossible de générer le lien sécurisé.");
@@ -800,13 +820,15 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
       setShareResult({
         shareUrl,
         token,
-        code: cleanCode,
+        code: requiresCode ? cleanCode : "",
+        requiresCode,
         durationDays,
         expiresAt: data?.expiresAt || "",
         accessMode: data?.accessMode || "view_only",
         disabled: false,
         kind: shareTarget.kind,
       });
+      loadSecureLinks();
       setSuccess(shareTarget.kind === "folder" ? "Lien sécurisé du dossier créé." : "Lien sécurisé créé en mode visionnement seulement.");
     } catch (err) {
       setShareError(err.message || "Impossible de générer le lien sécurisé.");
@@ -827,11 +849,32 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.message || "Impossible de désactiver le lien.");
       setShareResult((current) => ({ ...current, disabled: true }));
+      loadSecureLinks();
       setSuccess("Lien sécurisé désactivé.");
     } catch (err) {
       setShareError(err.message || "Impossible de désactiver le lien sécurisé.");
     } finally {
       setDisablingShare(false);
+    }
+  };
+
+  const disableTrackedSecureLink = async (share) => {
+    if (!share?.token) return;
+    const confirmed = window.confirm("Désactiver ce lien sécurisé? Les personnes qui ont déjà reçu ce lien ne pourront plus l’utiliser.");
+    if (!confirmed) return;
+    setDisablingTrackedLink(share.token);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch(`${API_BASE}/api/shared-documents/${share.token}`, { method: "DELETE", credentials: "include" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || "Impossible de désactiver le lien.");
+      await loadSecureLinks();
+      setSuccess("Lien sécurisé désactivé.");
+    } catch (err) {
+      setError(err.message || "Impossible de désactiver le lien sécurisé.");
+    } finally {
+      setDisablingTrackedLink("");
     }
   };
 
@@ -1008,6 +1051,34 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
         </div>
       </div>
 
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-[#55534C]">Suivi des liens sécurisés</h3>
+            <p className="mt-1 text-sm leading-5 text-[#746F64]">Consultez les liens actifs et désactivez-les au besoin.</p>
+          </div>
+          <button type="button" onClick={loadSecureLinks} className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F8F3EA] text-[#746F64] ring-1 ring-[#EFE4D6]" title="Rafraîchir les liens">
+            {loadingSecureLinks ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
+          </button>
+        </div>
+        <div className="mt-4 space-y-3">
+          {secureLinks.length ? secureLinks.map((share) => (
+            <div key={share.token} className="rounded-3xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-black text-[#55534C]">{share.shareKind === "folder" ? "Dossier" : "Document"} · {share.folderName || share.documentName || share.fileName || "Lien Camelio"}</p>
+                  <p className="mt-1 text-xs font-semibold text-[#746F64]">{share.requiresCode ? "Mot de passe activé" : "Sans mot de passe"} · Expire le {share.expiresAt ? new Date(share.expiresAt).toLocaleDateString("fr-CA") : "date inconnue"} · {share.accessCount || 0} consultation{Number(share.accessCount || 0) > 1 ? "s" : ""}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => copyToClipboard(share.shareUrl || `${window.location.origin}/shared-document/${share.token}`, "Lien")} className="rounded-2xl bg-white px-4 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#DED6C9]"><Copy className="mr-1 inline h-3.5 w-3.5" /> Copier</button>
+                  <button type="button" onClick={() => disableTrackedSecureLink(share)} disabled={disablingTrackedLink === share.token} className="rounded-2xl bg-[#FBECEF] px-4 py-2 text-xs font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60">{disablingTrackedLink === share.token ? "Désactivation..." : "Désactiver"}</button>
+                </div>
+              </div>
+            </div>
+          )) : <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun lien sécurisé actif pour le moment.</div>}
+        </div>
+      </div>
+
       {selectedDocument && <DocumentViewer doc={selectedDocument} close={() => setSelectedDocument(null)} onDownload={downloadDocument} />}
 
       {folderDetails && (
@@ -1088,16 +1159,24 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
                 <FormField label="Mode de partage">
                   <div className="rounded-3xl bg-[#EEF6EA] p-4 ring-1 ring-[#D9E8CE]"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#6C8A58] ring-1 ring-[#D9E8CE]"><Eye className="h-5 w-5" /></div><div><p className="font-bold text-[#55534C]">Visionnement seulement</p><p className="mt-1 text-sm leading-6 text-[#746F64]">Le téléchargement est retiré de l’interface partagée. La personne peut consulter, mais aucun bouton de téléchargement n’est affiché.</p></div></div></div>
                 </FormField>
-                <FormField label="Code d’accès, 4 caractères"><div className="flex gap-2"><input className={inputClass("uppercase tracking-[0.35em]")} value={shareForm.code} maxLength={4} onChange={(event) => setShareForm((current) => ({ ...current, code: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) }))} placeholder="A7K2" /><button type="button" onClick={() => setShareForm((current) => ({ ...current, code: generateAccessCode() }))} className="shrink-0 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">Générer</button></div></FormField>
-                <FormField label="Délai avant désactivation"><div className="grid !grid-cols-3 gap-2">{[1, 3, 7].map((days) => <button key={days} type="button" onClick={() => setShareForm((current) => ({ ...current, durationDays: days }))} className={`rounded-2xl px-3 py-3 text-sm font-bold ring-1 transition ${Number(shareForm.durationDays) === days ? "bg-[#A8B193] text-white ring-[#A8B193]" : "bg-white text-[#746F64] ring-[#DED6C9]"}`}>{days === 1 ? "1 journée" : `${days} jours`}</button>)}</div></FormField>
-                <div className="grid !grid-cols-2 gap-3 pt-1"><button type="button" onClick={() => { setShareTarget(null); setShareResult(null); setError(""); }} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">Annuler</button><button type="button" onClick={generateShareLink} disabled={sharing || String(shareForm.code || "").length !== 4} className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{sharing ? "Création..." : "Générer le lien"}</button></div>
+                <FormField label="Mot de passe">
+                  <div className="grid !grid-cols-2 gap-2">
+                    {[true, false].map((enabled) => <button key={enabled ? "yes" : "no"} type="button" onClick={() => setShareForm((current) => ({ ...current, requiresCode: enabled, code: enabled && !current.code ? generateAccessCode() : current.code }))} className={`rounded-2xl px-4 py-3 text-sm font-bold ring-1 transition ${shareForm.requiresCode === enabled ? "bg-[#A8B193] text-white ring-[#A8B193]" : "bg-white text-[#746F64] ring-[#DED6C9]"}`}>{enabled ? "Oui" : "Non"}</button>)}
+                  </div>
+                </FormField>
+                {shareForm.requiresCode && <FormField label="Code d’accès, 4 caractères"><div className="flex gap-2"><input className={inputClass("uppercase tracking-[0.35em]")} value={shareForm.code} maxLength={4} onChange={(event) => setShareForm((current) => ({ ...current, code: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) }))} placeholder="A7K2" /><button type="button" onClick={() => setShareForm((current) => ({ ...current, code: generateAccessCode() }))} className="shrink-0 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">Générer</button></div></FormField>}
+                <FormField label="Délai avant désactivation">
+                  <div className="grid !grid-cols-4 gap-2">{[1, 3, 7, 14].map((days) => <button key={days} type="button" onClick={() => setShareForm((current) => ({ ...current, durationDays: days }))} className={`rounded-2xl px-3 py-3 text-sm font-bold ring-1 transition ${Number(shareForm.durationDays) === days ? "bg-[#A8B193] text-white ring-[#A8B193]" : "bg-white text-[#746F64] ring-[#DED6C9]"}`}>{days === 1 ? "1 jour" : `${days} jours`}</button>)}</div>
+                  <input type="number" min="1" max="365" className={`${inputClass()} mt-3`} value={shareForm.durationDays} onChange={(event) => setShareForm((current) => ({ ...current, durationDays: event.target.value }))} placeholder="Autre nombre de jours" />
+                </FormField>
+                <div className="grid !grid-cols-2 gap-3 pt-1"><button type="button" onClick={() => { setShareTarget(null); setShareResult(null); setError(""); }} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">Annuler</button><button type="button" onClick={generateShareLink} disabled={sharing || (shareForm.requiresCode && String(shareForm.code || "").length !== 4)} className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{sharing ? "Création..." : "Générer le lien"}</button></div>
               </>
             )}
             {shareResult && (
               <div className="space-y-4">
                 <div className={`rounded-3xl p-4 ring-1 ${shareResult.disabled ? "bg-[#F8F3EA] ring-[#EFE4D6]" : "bg-[#EEF6EA] ring-[#D9E8CE]"}`}><p className={`text-sm font-bold ${shareResult.disabled ? "text-[#746F64]" : "text-[#6C8A58]"}`}>{shareResult.disabled ? "Lien sécurisé désactivé." : "Lien sécurisé prêt à partager."}</p></div>
-                {!shareResult.disabled && <button type="button" onClick={() => copyToClipboard(`Voici le lien sécurisé pour visionner ${shareTarget.kind === "folder" ? "le dossier" : "le document"} :\n${shareResult.shareUrl || ""}\n\nCode d’accès : ${shareResult.code}\n\nLe lien sera actif pendant ${getDurationLabel(shareResult.durationDays)}${shareResult.expiresAt ? `, jusqu’au ${new Date(shareResult.expiresAt).toLocaleString("fr-CA")}` : ""}.\n\nAccès : visionnement seulement, téléchargement retiré de l’interface.`, "Message")} disabled={!shareResult.shareUrl} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"><Copy className="h-4 w-4" /> Copier le message complet</button>}
-                <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2"><div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]"><p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">Lien URL</p><p className="mt-2 break-all text-sm font-semibold text-[#55534C]">{shareResult.shareUrl || "Lien non retourné par le serveur"}</p><button type="button" onClick={() => copyToClipboard(shareResult.shareUrl, "Lien")} disabled={!shareResult.shareUrl || shareResult.disabled} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50"><Copy className="h-4 w-4" /> Copier le lien</button></div><div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]"><p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">Code d’accès</p><p className="mt-2 text-2xl font-black tracking-[0.35em] text-[#55534C]">{shareResult.code}</p><button type="button" onClick={() => copyToClipboard(shareResult.code, "Code")} disabled={shareResult.disabled} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50"><Copy className="h-4 w-4" /> Copier le code</button></div></div>
+                {!shareResult.disabled && <button type="button" onClick={() => copyToClipboard(`Voici le lien sécurisé pour visionner ${shareTarget.kind === "folder" ? "le dossier" : "le document"} :\n${shareResult.shareUrl || ""}\n\n${shareResult.requiresCode ? `Code d’accès : ${shareResult.code}\n\n` : ""}Le lien sera actif pendant ${getDurationLabel(shareResult.durationDays)}${shareResult.expiresAt ? `, jusqu’au ${new Date(shareResult.expiresAt).toLocaleString("fr-CA")}` : ""}.\n\nAccès : visionnement seulement, téléchargement retiré de l’interface.`, "Message")} disabled={!shareResult.shareUrl} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"><Copy className="h-4 w-4" /> Copier le message complet</button>}
+                <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2"><div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]"><p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">Lien URL</p><p className="mt-2 break-all text-sm font-semibold text-[#55534C]">{shareResult.shareUrl || "Lien non retourné par le serveur"}</p><button type="button" onClick={() => copyToClipboard(shareResult.shareUrl, "Lien")} disabled={!shareResult.shareUrl || shareResult.disabled} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50"><Copy className="h-4 w-4" /> Copier le lien</button></div>{shareResult.requiresCode ? <div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]"><p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">Code d’accès</p><p className="mt-2 text-2xl font-black tracking-[0.35em] text-[#55534C]">{shareResult.code}</p><button type="button" onClick={() => copyToClipboard(shareResult.code, "Code")} disabled={shareResult.disabled} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50"><Copy className="h-4 w-4" /> Copier le code</button></div> : <div className="rounded-2xl bg-[#EEF6EA] p-3 ring-1 ring-[#D9E8CE]"><p className="text-xs font-bold uppercase tracking-wide text-[#6C8A58]">Mot de passe</p><p className="mt-2 text-sm font-bold text-[#55534C]">Aucun mot de passe requis</p></div>}</div>
                 <div className="rounded-2xl bg-[#F8F3EA] p-3 ring-1 ring-[#EFE4D6]"><p className="text-xs leading-5 text-[#746F64]">Note : le mode visionnement seulement retire le téléchargement dans l’interface partagée, mais une personne peut toujours faire une capture d’écran.</p></div>
                 {!shareResult.disabled && <button type="button" onClick={disableShareLink} disabled={disablingShare} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60">{disablingShare ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />} {disablingShare ? "Désactivation..." : "Désactiver ce lien"}</button>}
               </div>

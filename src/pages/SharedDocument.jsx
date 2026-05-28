@@ -82,6 +82,13 @@ export default function SharedDocument() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  useEffect(() => {
+    if (documentInfo && documentInfo.requiresCode === false && !documents.length && !accessing) {
+      requestAccess();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentInfo?.requiresCode]);
+
   async function loadSharedDocument() {
     if (!token) {
       setError("Lien de partage invalide.");
@@ -103,8 +110,9 @@ export default function SharedDocument() {
   }
 
   async function requestAccess() {
+    const requiresCode = documentInfo?.requiresCode !== false;
     const cleanCode = String(code || "").trim().toUpperCase();
-    if (!/^[A-Z0-9]{4}$/.test(cleanCode)) {
+    if (requiresCode && !/^[A-Z0-9]{4}$/.test(cleanCode)) {
       setError("Entre le code d’accès de 4 caractères.");
       return;
     }
@@ -116,7 +124,7 @@ export default function SharedDocument() {
       const response = await fetch(`${API_BASE_URL}/api/shared-documents/${token}/access`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: cleanCode }),
+        body: JSON.stringify(requiresCode ? { code: cleanCode } : {}),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.message || "Code invalide ou lien expiré.");
@@ -137,6 +145,7 @@ export default function SharedDocument() {
         ...(current || {}),
         ...data,
         accessMode: data?.accessMode || current?.accessMode || "view_only",
+        requiresCode: data?.requiresCode ?? current?.requiresCode ?? true,
       }));
       setDocuments(returnedDocuments);
       setSelectedDocumentId(returnedDocuments[0]?.id || returnedDocuments[0]?.viewUrl || "");
@@ -207,22 +216,22 @@ export default function SharedDocument() {
                     <div className="flex items-start gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#A8B193] ring-1 ring-[#EFE4D6]"><Lock className="h-5 w-5" /></div>
                       <div>
-                        <p className="font-bold text-[#55534C]">Code d’accès requis</p>
-                        <p className="mt-1 text-sm leading-6 text-[#746F64]">Entre le code de 4 caractères fourni par la personne qui a partagé le lien.</p>
+                        <p className="font-bold text-[#55534C]">{documentInfo.requiresCode === false ? "Aucun mot de passe requis" : "Code d’accès requis"}</p>
+                        <p className="mt-1 text-sm leading-6 text-[#746F64]">{documentInfo.requiresCode === false ? "Le lien peut être ouvert directement tant qu’il est actif." : "Entre le code de 4 caractères fourni par la personne qui a partagé le lien."}</p>
                       </div>
                     </div>
                   </div>
                   {error && <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]">{error}</div>}
-                  <label className="block">
+                  {documentInfo.requiresCode !== false && <label className="block">
                     <span className="mb-2 block text-[0.72rem] font-bold uppercase tracking-[0.06em] text-[#8A8175]">Code d’accès</span>
                     <div className="relative flex-1">
                       <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B193]" />
                       <input value={code} maxLength={4} onChange={(event) => setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4))} onKeyDown={(event) => { if (event.key === "Enter") requestAccess(); }} placeholder="A7K2" className="w-full rounded-2xl border border-[#DED6C9] bg-[#F7F3EA] py-3 pl-11 pr-4 text-center text-lg font-black uppercase tracking-[0.35em] text-[#55534C] outline-none transition placeholder:text-[#A9A094] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/25" />
                     </div>
-                  </label>
-                  <button type="button" onClick={requestAccess} disabled={accessing || code.length !== 4} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-4 py-4 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:opacity-60">
+                  </label>}
+                  <button type="button" onClick={requestAccess} disabled={accessing || (documentInfo.requiresCode !== false && code.length !== 4)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-4 py-4 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:opacity-60">
                     {accessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                    {accessing ? "Vérification..." : isFolderShare ? "Visionner le dossier" : "Visionner le document"}
+                    {accessing ? "Ouverture..." : isFolderShare ? "Visionner le dossier" : "Visionner le document"}
                   </button>
                 </>
               )}

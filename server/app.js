@@ -5287,8 +5287,10 @@ app.post(
       const promoPlan = CAMELIO_PLANS.famille_plus;
 
       const codeOwners = {
-  BETA: "Beta",
+  CAMELIOBETA: "Beta",
   PROMOALEX: "Alex",
+  PROMOEMMANUEL: "Emmanuel",
+  PROMOMELANIE: "Mélanie",
 };
 
       const codeOwner = codeOwners[submittedCode] || "Non défini";
@@ -5701,21 +5703,22 @@ app.post(
   async (req, res, next) => {
     try {
       const { documentId } = req.params;
+      const requiresCode = req.body?.requiresCode !== false;
       const code = normalizeShareCode(req.body?.code);
       const durationDays = Number(req.body?.durationDays);
       const accessMode = "view_only";
 
-      if (!isValidShareCode(code)) {
+      if (requiresCode && !isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
           message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
         });
       }
 
-      if (![1, 3, 7].includes(durationDays)) {
+      if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
         return res.status(400).json({
           error: "invalid_duration",
-          message: "La durée doit être de 1 journée, 3 jours ou 7 jours.",
+          message: "La durée doit être entre 1 et 365 jours.",
         });
       }
 
@@ -5779,8 +5782,9 @@ app.post(
         childId: document.childId || "",
         childName: document.childName || "",
         s3Key: document.s3Key,
-        codeSalt: salt,
-        codeHash: hashShareCode(code, salt),
+        requiresCode,
+        codeSalt: requiresCode ? salt : "",
+        codeHash: requiresCode ? hashShareCode(code, salt) : "",
         durationDays,
         accessMode,
         allowDownload: false,
@@ -5810,6 +5814,7 @@ app.post(
         durationDays,
         accessMode,
         allowDownload: false,
+        requiresCode,
         message: `Lien sécurisé créé en mode visionnement seulement. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
       });
     } catch (error) {
@@ -5828,21 +5833,22 @@ app.post(
     try {
       const folderId = String(req.params.folderId || "").trim() || "other";
       const folderName = String(req.body?.folderName || "Dossier Camelio").trim() || "Dossier Camelio";
+      const requiresCode = req.body?.requiresCode !== false;
       const code = normalizeShareCode(req.body?.code);
       const durationDays = Number(req.body?.durationDays);
       const accessMode = "view_only";
 
-      if (!isValidShareCode(code)) {
+      if (requiresCode && !isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
           message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
         });
       }
 
-      if (![1, 3, 7].includes(durationDays)) {
+      if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
         return res.status(400).json({
           error: "invalid_duration",
-          message: "La durée doit être de 1 journée, 3 jours ou 7 jours.",
+          message: "La durée doit être entre 1 et 365 jours.",
         });
       }
 
@@ -5898,8 +5904,9 @@ app.post(
         fileType: "folder",
         fileSize: 0,
         documentCount: folderDocuments.length,
-        codeSalt: salt,
-        codeHash: hashShareCode(code, salt),
+        requiresCode,
+        codeSalt: requiresCode ? salt : "",
+        codeHash: requiresCode ? hashShareCode(code, salt) : "",
         durationDays,
         accessMode,
         allowDownload: false,
@@ -5929,10 +5936,66 @@ app.post(
         durationDays,
         accessMode,
         allowDownload: false,
+        requiresCode,
         shareKind: "folder",
         documentCount: folderDocuments.length,
         message: `Lien sécurisé créé pour le dossier. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.get(
+  "/api/shared-documents",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const currentUserId = req.session.user.sub;
+      const result = await dynamo.send(
+        new ScanCommand({
+          TableName: DYNAMODB_TABLE,
+          FilterExpression:
+            "begins_with(PK, :pkPrefix) AND SK = :sk AND #status = :status AND (ownerId = :userId OR createdByUserId = :userId)",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":pkPrefix": "PUBLIC_DOCUMENT_SHARE#",
+            ":sk": "METADATA",
+            ":status": "active",
+            ":userId": currentUserId,
+          },
+        })
+      );
+
+      const now = Date.now();
+      const shares = (result.Items || [])
+        .filter((share) => !share.expiresAt || new Date(share.expiresAt).getTime() > now)
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+        .map((share) => ({
+          token: share.token,
+          shareKind: share.shareKind || (share.folderId ? "folder" : "document"),
+          folderId: share.folderId || "",
+          folderName: share.folderName || "",
+          documentId: share.documentId || "",
+          documentName: share.documentName || share.fileName || "Document Camelio",
+          fileName: share.fileName || "",
+          childName: share.childName || "",
+          documentCount: share.documentCount || 0,
+          shareUrl: share.shareUrl || `${getPublicAppUrl()}/shared-document/${share.token}`,
+          requiresCode: share.requiresCode !== false,
+          accessMode: share.accessMode || "view_only",
+          allowDownload: false,
+          accessCount: share.accessCount || 0,
+          createdAt: share.createdAt || "",
+          expiresAt: share.expiresAt || "",
+          lastAccessedAt: share.lastAccessedAt || "",
+        }));
+
+      return res.json({ success: true, shares });
     } catch (error) {
       next(error);
     }
@@ -5986,7 +6049,7 @@ app.get(
         expiresAt: share.expiresAt,
         accessMode: share.accessMode || "view_only",
         allowDownload: false,
-        requiresCode: true,
+        requiresCode: share.requiresCode !== false,
       });
     } catch (error) {
       next(error);
@@ -6003,10 +6066,10 @@ app.post(
       const token = String(req.params.token || "").trim();
       const code = normalizeShareCode(req.body?.code);
 
-      if (!token || !isValidShareCode(code)) {
+      if (!token) {
         return res.status(400).json({
           error: "invalid_request",
-          message: "Lien ou code invalide.",
+          message: "Lien invalide.",
         });
       }
 
@@ -6029,30 +6092,41 @@ app.post(
         });
       }
 
-      const submittedHash = hashShareCode(code, share.codeSalt || "");
+      const requiresCode = share.requiresCode !== false;
 
-      if (!safeCompareHash(share.codeHash || "", submittedHash)) {
-        await dynamo.send(
-          new UpdateCommand({
-            TableName: DYNAMODB_TABLE,
-            Key: {
-              PK: getPublicDocumentSharePk(token),
-              SK: "METADATA",
-            },
-            UpdateExpression:
-              "SET failedAttempts = if_not_exists(failedAttempts, :zero) + :one, lastFailedAttemptAt = :now, updatedAt = :now",
-            ExpressionAttributeValues: {
-              ":zero": 0,
-              ":one": 1,
-              ":now": new Date().toISOString(),
-            },
-          })
-        );
+      if (requiresCode) {
+        if (!isValidShareCode(code)) {
+          return res.status(400).json({
+            error: "invalid_code",
+            message: "Code d’accès invalide.",
+          });
+        }
 
-        return res.status(403).json({
-          error: "invalid_code",
-          message: "Code d’accès invalide.",
-        });
+        const submittedHash = hashShareCode(code, share.codeSalt || "");
+
+        if (!safeCompareHash(share.codeHash || "", submittedHash)) {
+          await dynamo.send(
+            new UpdateCommand({
+              TableName: DYNAMODB_TABLE,
+              Key: {
+                PK: getPublicDocumentSharePk(token),
+                SK: "METADATA",
+              },
+              UpdateExpression:
+                "SET failedAttempts = if_not_exists(failedAttempts, :zero) + :one, lastFailedAttemptAt = :now, updatedAt = :now",
+              ExpressionAttributeValues: {
+                ":zero": 0,
+                ":one": 1,
+                ":now": new Date().toISOString(),
+              },
+            })
+          );
+
+          return res.status(403).json({
+            error: "invalid_code",
+            message: "Code d’accès invalide.",
+          });
+        }
       }
 
       if ((share.shareKind === "folder" || share.folderId) && !share.documentId) {
@@ -6128,6 +6202,7 @@ app.post(
           documents,
           accessMode: share.accessMode || "view_only",
           allowDownload: false,
+          requiresCode,
           expiresIn: 300,
         });
       }
@@ -6191,6 +6266,7 @@ app.post(
         expiresIn: 300,
         accessMode: share.accessMode || "view_only",
         allowDownload: false,
+        requiresCode,
         documentName: share.documentName || share.fileName || "Document Camelio",
         fileName: share.fileName || "",
         fileType: share.fileType || "",
