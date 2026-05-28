@@ -1315,6 +1315,15 @@ function isSafeS3KeyForOwner(s3Key = "", ownerId = "") {
   return String(s3Key).startsWith(`users/${ownerId}/`);
 }
 
+function normalizeDocumentFileName(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeShareCode(code = "") {
   return String(code || "")
     .trim()
@@ -5432,6 +5441,29 @@ app.post(
         });
       }
 
+      const existingDocsResult = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": accessContext.dataPk,
+            ":sk": "DOCUMENT#",
+          },
+        })
+      );
+
+      const normalizedIncomingFileName = normalizeDocumentFileName(payload.fileName);
+      const duplicateFile = (existingDocsResult.Items || []).find((item) => {
+        return normalizeDocumentFileName(item.fileName) === normalizedIncomingFileName;
+      });
+
+      if (duplicateFile) {
+        return res.status(409).json({
+          error: "duplicate_file_name",
+          message: "Un document avec ce même nom de fichier existe déjà. Renomme le fichier avant de l’ajouter.",
+        });
+      }
+
       const ownerId = accessContext.ownerId;
       const documentId = randomUUID();
       const now = new Date().toISOString();
@@ -5788,6 +5820,127 @@ app.post(
   }
 );
 
+
+app.post(
+  "/api/document-folders/:folderId/share-link",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const folderId = String(req.params.folderId || "").trim() || "other";
+      const folderName = String(req.body?.folderName || "Dossier Camelio").trim() || "Dossier Camelio";
+      const code = normalizeShareCode(req.body?.code);
+      const durationDays = Number(req.body?.durationDays);
+      const accessMode = "view_only";
+
+      if (!isValidShareCode(code)) {
+        return res.status(400).json({
+          error: "invalid_code",
+          message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
+        });
+      }
+
+      if (![1, 3, 7].includes(durationDays)) {
+        return res.status(400).json({
+          error: "invalid_duration",
+          message: "La durée doit être de 1 journée, 3 jours ou 7 jours.",
+        });
+      }
+
+      const accessContext = await getDataAccessContext(req, "documents", "edit");
+
+      const documentsResult = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": accessContext.dataPk,
+            ":sk": "DOCUMENT#",
+          },
+        })
+      );
+
+      const folderDocuments = (documentsResult.Items || []).filter((document) => {
+        const documentFolderId = document.folderId || document.folder || "other";
+        if (documentFolderId !== folderId) return false;
+        if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, document.childId)) return false;
+        return isSafeS3KeyForOwner(document.s3Key, accessContext.ownerId);
+      });
+
+      if (!folderDocuments.length) {
+        return res.status(400).json({
+          error: "empty_folder",
+          message: "Ce dossier ne contient aucun document à partager.",
+        });
+      }
+
+      const token = randomUUID().replace(/-/g, "");
+      const salt = randomUUID();
+      const now = new Date();
+      const expiresAtDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+      const expiresAt = expiresAtDate.toISOString();
+      const shareUrl = `${getPublicAppUrl()}/shared-document/${token}`;
+
+      const shareItem = {
+        PK: getPublicDocumentSharePk(token),
+        SK: "METADATA",
+        type: "public_document_folder_share",
+        token,
+        status: "active",
+        ownerId: accessContext.ownerId,
+        dataPk: accessContext.dataPk,
+        createdByUserId: req.session.user.sub,
+        createdByEmail: req.session.user.email || "",
+        shareKind: "folder",
+        folderId,
+        folderName,
+        documentName: folderName,
+        fileName: "",
+        fileType: "folder",
+        fileSize: 0,
+        documentCount: folderDocuments.length,
+        codeSalt: salt,
+        codeHash: hashShareCode(code, salt),
+        durationDays,
+        accessMode,
+        allowDownload: false,
+        shareUrl,
+        accessCount: 0,
+        failedAttempts: 0,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        expiresAt,
+        expiresAtEpoch: Math.floor(expiresAtDate.getTime() / 1000),
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: shareItem,
+          ConditionExpression: "attribute_not_exists(PK)",
+        })
+      );
+
+      return res.json({
+        success: true,
+        token,
+        shareUrl,
+        url: shareUrl,
+        expiresAt,
+        durationDays,
+        accessMode,
+        allowDownload: false,
+        shareKind: "folder",
+        documentCount: folderDocuments.length,
+        message: `Lien sécurisé créé pour le dossier. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 app.get(
   "/api/shared-documents/:token",
   validateAwsConfig,
@@ -5824,6 +5977,9 @@ app.get(
       return res.json({
         success: true,
         token,
+        shareKind: share.shareKind || (share.folderId ? "folder" : "document"),
+        folderName: share.folderName || "",
+        documentCount: share.documentCount || 0,
         documentName: share.documentName || share.fileName || "Document Camelio",
         fileName: share.fileName || "",
         fileType: share.fileType || "",
@@ -5901,6 +6057,83 @@ app.post(
         });
       }
 
+      if ((share.shareKind === "folder" || share.folderId) && !share.documentId) {
+        const documentsResult = await dynamo.send(
+          new QueryCommand({
+            TableName: DYNAMODB_TABLE,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues: {
+              ":pk": share.dataPk,
+              ":sk": "DOCUMENT#",
+            },
+          })
+        );
+
+        const folderDocuments = (documentsResult.Items || []).filter((document) => {
+          const documentFolderId = document.folderId || document.folder || "other";
+          return documentFolderId === share.folderId && isSafeS3KeyForOwner(document.s3Key, share.ownerId);
+        });
+
+        if (!folderDocuments.length) {
+          return res.status(404).json({
+            error: "folder_unavailable",
+            message: "Ce dossier ne contient plus de documents disponibles.",
+          });
+        }
+
+        const documents = await Promise.all(
+          folderDocuments.map(async (document) => {
+            const viewUrl = await getSignedUrl(
+              s3,
+              new GetObjectCommand({
+                Bucket: S3_DOCUMENTS_BUCKET,
+                Key: document.s3Key,
+              }),
+              { expiresIn: 300 }
+            );
+
+            return {
+              id: document.id,
+              documentName: document.title || document.fileName || "Document Camelio",
+              fileName: document.fileName || "",
+              fileType: document.fileType || "",
+              fileSize: document.fileSize || 0,
+              childName: document.childName || "",
+              viewUrl,
+              url: viewUrl,
+            };
+          })
+        );
+
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getPublicDocumentSharePk(token),
+              SK: "METADATA",
+            },
+            UpdateExpression:
+              "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now",
+            ExpressionAttributeValues: {
+              ":zero": 0,
+              ":one": 1,
+              ":now": new Date().toISOString(),
+            },
+          })
+        );
+
+        return res.json({
+          success: true,
+          shareKind: "folder",
+          folderName: share.folderName || share.documentName || "Dossier Camelio",
+          documentName: share.documentName || share.folderName || "Dossier Camelio",
+          documents,
+          accessMode: share.accessMode || "view_only",
+          allowDownload: false,
+          expiresIn: 300,
+        });
+      }
+
       const documentResult = await dynamo.send(
         new GetCommand({
           TableName: DYNAMODB_TABLE,
@@ -5963,6 +6196,18 @@ app.post(
         documentName: share.documentName || share.fileName || "Document Camelio",
         fileName: share.fileName || "",
         fileType: share.fileType || "",
+        documents: [
+          {
+            id: document.id,
+            documentName: share.documentName || share.fileName || "Document Camelio",
+            fileName: share.fileName || "",
+            fileType: share.fileType || "",
+            fileSize: share.fileSize || 0,
+            childName: share.childName || "",
+            viewUrl,
+            url: viewUrl,
+          },
+        ],
       });
     } catch (error) {
       next(error);
