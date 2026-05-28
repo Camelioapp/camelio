@@ -8,7 +8,6 @@ import {
   Eye,
   FileText,
   Folder,
-  FolderPlus,
   HeartPulse,
   Image as ImageIcon,
   Link,
@@ -479,6 +478,8 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
   const [selectedChildDocs, setSelectedChildDocs] = useState(null);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [docMenu, setDocMenu] = useState(null);
+  const [editDoc, setEditDoc] = useState(null);
+  const [editDocForm, setEditDocForm] = useState({ title: "", note: "", folderId: "other", childId: GENERAL_CHILD_ID });
   const [deleteDoc, setDeleteDoc] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
   const [shareForm, setShareForm] = useState({ code: generateAccessCode(), requiresCode: true, durationDays: 1 });
@@ -786,6 +787,62 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
     setShareForm({ code: generateAccessCode(), requiresCode: true, durationDays: 1 });
   };
 
+  const openEditDocument = (doc) => {
+    setDocMenu(null);
+    setError("");
+    setSuccess("");
+    setEditDoc(doc);
+    setEditDocForm({
+      title: getDocumentTitle(doc),
+      note: doc.note || "",
+      folderId: getDocFolderId(doc),
+      childId: doc.childId || GENERAL_CHILD_ID,
+    });
+  };
+
+  const saveDocumentInfo = async () => {
+    if (!editDoc?.id) return;
+    const title = editDocForm.title.trim();
+    if (!title) {
+      setError("Inscris un nom de document.");
+      return;
+    }
+    const isGeneral = editDocForm.childId === GENERAL_CHILD_ID;
+    const child = isGeneral ? null : children.find((item) => getChildId(item) === editDocForm.childId);
+    if (!isGeneral && !child) {
+      setError("L’enfant sélectionné est introuvable.");
+      return;
+    }
+    const selectedFolder = getFolderById(allFolders, editDocForm.folderId);
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch(`${API_BASE}/api/documents/${editDoc.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title,
+          note: editDocForm.note.trim(),
+          childId: isGeneral ? GENERAL_CHILD_ID : getChildId(child),
+          childName: isGeneral ? GENERAL_CHILD_NAME : getChildName(child),
+          folderId: selectedFolder?.id || "other",
+          folderName: selectedFolder?.name || "Autres documents",
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || "Impossible de modifier le document.");
+      await loadDocuments();
+      setEditDoc(null);
+      setSuccess("Document modifié.");
+    } catch (err) {
+      setError(err.message || "Impossible de modifier le document.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const generateShareLink = async () => {
     if (!shareTarget) return;
     const requiresCode = shareForm.requiresCode !== false;
@@ -959,14 +1016,9 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
             <h3 className="text-lg font-bold text-[#55534C]">Documents familiaux</h3>
             <p className="mt-1 text-sm leading-5 text-[#746F64]">Recherchez rapidement une carte d’assurance maladie, un carnet de vaccination, un certificat ou une note.</p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button type="button" onClick={() => setShowFolderPopup(true)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
-              <FolderPlus className="h-4 w-4" /> Créer un dossier
-            </button>
-            <button type="button" onClick={() => setShowDocPopup(true)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#EEC988] px-6 py-4 text-base font-black text-white shadow-md transition hover:-translate-y-0.5 hover:brightness-95">
-              <Upload className="h-5 w-5" /> Ajouter un document
-            </button>
-          </div>
+          <button type="button" onClick={() => setShowDocPopup(true)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#EEC988] px-6 py-4 text-base font-black text-white shadow-md transition hover:-translate-y-0.5 hover:brightness-95">
+            <Upload className="h-5 w-5" /> Ajouter un document
+          </button>
         </div>
 
         <div className="mt-5">
@@ -1134,6 +1186,7 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
         <Popup title={getDocumentTitle(docMenu)} kicker="Options du document" close={() => setDocMenu(null)}>
           <div className="grid !grid-cols-1 gap-3">
             <button type="button" onClick={() => { openDocument(docMenu); setDocMenu(null); }} className="flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"><Eye className="h-4 w-4" /> Ouvrir</button>
+            <button type="button" onClick={() => openEditDocument(docMenu)} className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#9A7652] ring-1 ring-[#F0D8B8]"><Edit3 className="h-4 w-4" /> Modifier les informations</button>
             <button type="button" onClick={() => openSharePopup({ kind: "document", id: docMenu.id, name: getDocumentTitle(docMenu) })} className="flex items-center justify-center gap-2 rounded-2xl bg-[#F4F8FD] px-4 py-3 text-sm font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]"><Link className="h-4 w-4" /> Partager par lien sécurisé</button>
             <button type="button" onClick={() => disableAllDocumentShareLinks(docMenu)} disabled={disablingAllShares} className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#9A7652] ring-1 ring-[#F0D8B8] disabled:cursor-not-allowed disabled:opacity-60">{disablingAllShares ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />} {disablingAllShares ? "Désactivation..." : "Désactiver tous les liens sécurisés"}</button>
             <button type="button" onClick={() => { setDeleteDoc(docMenu); setDocMenu(null); }} className="flex items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"><Trash2 className="h-4 w-4" /> Supprimer</button>
@@ -1212,7 +1265,29 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
       {showDocPopup && (
         <Popup title="Ajouter un document" kicker="Documents" close={() => { resetForm(); setShowDocPopup(false); }}>
           <div className="space-y-4">
-            <FormField label="Enfant associé"><select className={inputClass()} value={form.childId} onChange={(event) => setForm((current) => ({ ...current, childId: event.target.value }))}><option value={GENERAL_CHILD_ID}>Général, tous les enfants</option>{children.map((child) => <option key={getChildId(child)} value={getChildId(child)}>{getChildName(child)}</option>)}</select></FormField>
+            <FormField label="Enfant associé">
+              <div className="grid !grid-cols-2 gap-3 sm:!grid-cols-3">
+                <button type="button" onClick={() => setForm((current) => ({ ...current, childId: GENERAL_CHILD_ID }))} className={`rounded-3xl p-3 text-left ring-2 transition ${form.childId === GENERAL_CHILD_ID ? "bg-[#EEF6EA] ring-[#A8B193]" : "bg-[#FFFDF8] ring-[#EFE4D6]"}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#A8B193] ring-1 ring-[#D9E8CE]"><Folder className="h-5 w-5" /></div>
+                    <div className="min-w-0"><p className="truncate text-sm font-black text-[#55534C]">Général</p><p className="text-xs font-semibold text-[#746F64]">Tous les enfants</p></div>
+                  </div>
+                </button>
+                {children.map((child) => {
+                  const childId = getChildId(child);
+                  const photo = getChildPhoto(child);
+                  const isActive = form.childId === childId;
+                  return (
+                    <button key={childId} type="button" onClick={() => setForm((current) => ({ ...current, childId }))} className={`rounded-3xl p-3 text-left ring-2 transition ${isActive ? "bg-[#EEF6EA] ring-[#A8B193]" : "bg-[#FFFDF8] ring-[#EFE4D6]"}`}>
+                      <div className="flex items-center gap-3">
+                        {photo ? <img src={photo} alt={getChildName(child)} className="h-12 w-12 rounded-2xl object-cover ring-2 ring-white" /> : <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-lg font-black text-[#A8B193] ring-1 ring-[#D9E8CE]">{getChildName(child).slice(0, 1)}</div>}
+                        <div className="min-w-0"><p className="truncate text-sm font-black text-[#55534C]">{getChildName(child)}</p><p className="text-xs font-semibold text-[#746F64]">Enfant</p></div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </FormField>
             <div className="rounded-3xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]"><p className="text-sm font-bold text-[#55534C]">{form.childId === GENERAL_CHILD_ID ? "Document général, visible pour tous les enfants" : selectedChild ? `Document pour ${getChildName(selectedChild)}` : "Document pour un enfant"}</p></div>
             <FormField label="Dossier"><select className={inputClass()} value={form.folderId} onChange={(event) => setForm((current) => ({ ...current, folderId: event.target.value }))}>{allFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></FormField>
             <FormField label="Nom du document"><input className={inputClass()} value={form.title} readOnly placeholder="Le nom sera identique au fichier importé" /></FormField>
@@ -1220,6 +1295,35 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
             {selectedFile && <div className="rounded-2xl bg-[#F4F8FD] p-3 text-sm font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">{selectedFile.name} · {formatFileSize(selectedFile.size)}</div>}
             <FormField label="Note facultative"><textarea className={inputClass("min-h-[110px] resize-none")} value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} placeholder="Ajoutez une note pour retrouver le document plus facilement." /></FormField>
             <div className="grid !grid-cols-2 gap-3 pt-2"><button type="button" onClick={() => { resetForm(); setShowDocPopup(false); }} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">Annuler</button><button type="button" onClick={addDoc} disabled={saving || !selectedFile} className="rounded-2xl bg-[#EEC988] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{saving ? "Ajout..." : "Ajouter"}</button></div>
+          </div>
+        </Popup>
+      )}
+
+      {editDoc && (
+        <Popup title="Modifier le document" kicker={getDocumentTitle(editDoc)} close={() => setEditDoc(null)}>
+          <div className="space-y-4">
+            <FormField label="Nom du document"><input className={inputClass()} value={editDocForm.title} onChange={(event) => setEditDocForm((current) => ({ ...current, title: event.target.value }))} placeholder="Nom affiché dans Camelio" /></FormField>
+            <FormField label="Enfant associé">
+              <div className="grid !grid-cols-2 gap-3 sm:!grid-cols-3">
+                <button type="button" onClick={() => setEditDocForm((current) => ({ ...current, childId: GENERAL_CHILD_ID }))} className={`rounded-3xl p-3 text-left ring-2 transition ${editDocForm.childId === GENERAL_CHILD_ID ? "bg-[#EEF6EA] ring-[#A8B193]" : "bg-[#FFFDF8] ring-[#EFE4D6]"}`}>
+                  <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#A8B193] ring-1 ring-[#D9E8CE]"><Folder className="h-5 w-5" /></div><div className="min-w-0"><p className="truncate text-sm font-black text-[#55534C]">Général</p><p className="text-xs font-semibold text-[#746F64]">Tous les enfants</p></div></div>
+                </button>
+                {children.map((child) => {
+                  const childId = getChildId(child);
+                  const photo = getChildPhoto(child);
+                  const isActive = editDocForm.childId === childId;
+                  return (
+                    <button key={childId} type="button" onClick={() => setEditDocForm((current) => ({ ...current, childId }))} className={`rounded-3xl p-3 text-left ring-2 transition ${isActive ? "bg-[#EEF6EA] ring-[#A8B193]" : "bg-[#FFFDF8] ring-[#EFE4D6]"}`}>
+                      <div className="flex items-center gap-3">{photo ? <img src={photo} alt={getChildName(child)} className="h-12 w-12 rounded-2xl object-cover ring-2 ring-white" /> : <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-lg font-black text-[#A8B193] ring-1 ring-[#D9E8CE]">{getChildName(child).slice(0, 1)}</div>}<div className="min-w-0"><p className="truncate text-sm font-black text-[#55534C]">{getChildName(child)}</p><p className="text-xs font-semibold text-[#746F64]">Enfant</p></div></div>
+                    </button>
+                  );
+                })}
+              </div>
+            </FormField>
+            <FormField label="Dossier"><select className={inputClass()} value={editDocForm.folderId} onChange={(event) => setEditDocForm((current) => ({ ...current, folderId: event.target.value }))}>{allFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></FormField>
+            <FormField label="Note facultative"><textarea className={inputClass("min-h-[110px] resize-none")} value={editDocForm.note} onChange={(event) => setEditDocForm((current) => ({ ...current, note: event.target.value }))} placeholder="Ajoutez une note pour retrouver le document plus facilement." /></FormField>
+            <div className="rounded-2xl bg-[#FFFDF8] p-3 text-xs leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">Le fichier original reste le même. Ici, tu modifies le nom affiché dans Camelio, le dossier, l’enfant associé et la note.</div>
+            <div className="grid !grid-cols-2 gap-3 pt-2"><button type="button" onClick={() => setEditDoc(null)} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">Annuler</button><button type="button" onClick={saveDocumentInfo} disabled={saving} className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{saving ? "Enregistrement..." : "Enregistrer"}</button></div>
           </div>
         </Popup>
       )}

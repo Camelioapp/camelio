@@ -5622,6 +5622,98 @@ app.get(
   }
 );
 
+app.patch(
+  "/api/documents/:documentId",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const { documentId } = req.params;
+      const title = String(req.body?.title || "").trim().slice(0, 180);
+      const note = String(req.body?.note || "").trim().slice(0, 1000);
+      const childId = String(req.body?.childId || "").trim();
+      const childName = String(req.body?.childName || "").trim().slice(0, 120);
+      const folderId = String(req.body?.folderId || "other").trim().slice(0, 120) || "other";
+      const folderName = String(req.body?.folderName || "Autres documents").trim().slice(0, 180) || "Autres documents";
+
+      if (!title) {
+        return res.status(400).json({
+          error: "invalid_title",
+          message: "Le nom du document est requis.",
+        });
+      }
+
+      if (!childId) {
+        return res.status(400).json({
+          error: "invalid_child",
+          message: "L’enfant associé est requis.",
+        });
+      }
+
+      const accessContext = await getDataAccessContext(req, "documents", "edit");
+
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: accessContext.dataPk,
+            SK: `DOCUMENT#${documentId}`,
+          },
+        })
+      );
+
+      const document = result.Item;
+
+      if (!document) {
+        return res.status(404).json({
+          error: "not_found",
+          message: "Document introuvable.",
+        });
+      }
+
+      if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, document.childId)) {
+        return res.status(403).json({
+          error: "guest_child_forbidden",
+          message: "Accès refusé à ce document.",
+        });
+      }
+
+      const updatedAt = new Date().toISOString();
+
+      const updateResult = await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: accessContext.dataPk,
+            SK: `DOCUMENT#${documentId}`,
+          },
+          UpdateExpression:
+            "SET title = :title, note = :note, childId = :childId, childName = :childName, folderId = :folderId, folderName = :folderName, category = :category, updatedAt = :updatedAt",
+          ExpressionAttributeValues: {
+            ":title": title,
+            ":note": note,
+            ":childId": childId,
+            ":childName": childName || (childId === "general" ? "Général" : "Enfant"),
+            ":folderId": folderId,
+            ":folderName": folderName,
+            ":category": "Document",
+            ":updatedAt": updatedAt,
+          },
+          ReturnValues: "ALL_NEW",
+        })
+      );
+
+      res.json({
+        success: true,
+        document: updateResult.Attributes,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+
 app.delete(
   "/api/documents/:documentId",
   requireAuth,
