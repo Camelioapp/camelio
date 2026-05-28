@@ -1232,6 +1232,7 @@ function cleanDocumentPayload(body = {}) {
     childId: body.childId || "",
     childName: body.childName || "",
     category: body.category || body.type || "Document",
+    folderId: body.folderId || "other",
     title: body.title || fileName || "Document",
     note: body.note || "",
   };
@@ -5464,6 +5465,7 @@ app.post(
   childId: payload.childId,
   childName: payload.childName,
   category: payload.category,
+  folderId: payload.folderId,
   title: payload.title,
   note: payload.note,
   fileName: payload.fileName,
@@ -5669,6 +5671,9 @@ app.post(
       const { documentId } = req.params;
       const code = normalizeShareCode(req.body?.code);
       const durationDays = Number(req.body?.durationDays);
+      const accessMode = ["view_only", "view_download"].includes(req.body?.accessMode)
+        ? req.body.accessMode
+        : "view_only";
 
       if (!isValidShareCode(code)) {
         return res.status(400).json({
@@ -5747,6 +5752,7 @@ app.post(
         codeSalt: salt,
         codeHash: hashShareCode(code, salt),
         durationDays,
+        accessMode,
         shareUrl,
         accessCount: 0,
         failedAttempts: 0,
@@ -5771,6 +5777,7 @@ app.post(
         url: shareUrl,
         expiresAt,
         durationDays,
+        accessMode,
         message: `Lien sécurisé créé. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
       });
     } catch (error) {
@@ -5822,6 +5829,7 @@ app.get(
         childName: share.childName || "",
         expiresAt: share.expiresAt,
         requiresCode: true,
+        accessMode: share.accessMode || "view_only",
       });
     } catch (error) {
       next(error);
@@ -5948,6 +5956,9 @@ app.post(
         url: downloadUrl,
         expiresIn: 300,
         documentName: share.documentName || share.fileName || "Document Camelio",
+        fileName: share.fileName || "",
+        fileType: share.fileType || "",
+        accessMode: share.accessMode || "view_only",
       });
     } catch (error) {
       next(error);

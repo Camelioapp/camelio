@@ -1,25 +1,81 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Baby,
   Camera,
   ChevronRight,
   Copy,
+  CreditCard,
   Download,
   Eye,
   FileText,
+  Folder,
+  FolderPlus,
+  HeartPulse,
+  Image,
   Link,
   LinkOff,
   Loader2,
+  Lock,
   MoreHorizontal,
   RefreshCw,
+  Scale,
+  School,
+  Search,
   ShieldCheck,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 
 import { Popup, SectionTitle } from "./shared.jsx";
 import { displayName, getColor } from "./sectionsData.js";
 
-const API_BASE = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+const API_BASE = import.meta.env.VITE_API_URL || "https://api.camelio.app";
+
+
+const DEFAULT_DOCUMENT_FOLDERS = [
+  { id: "health-card", name: "Carte d’assurance maladie", icon: CreditCard, color: "#a2badf", category: "Assurance" },
+  { id: "vaccination-record", name: "Carnet de vaccination", icon: HeartPulse, color: "#a8b193", category: "Santé" },
+  { id: "birth-certificate", name: "Certificat de naissance", icon: Baby, color: "#eec988", category: "Document" },
+  { id: "sin", name: "Numéro d’assurance sociale", icon: Lock, color: "#b5a7c8", category: "Document", sensitive: true },
+  { id: "passport-photo", name: "Photo de passeport", icon: Image, color: "#eaa5af", category: "Passeport" },
+  { id: "medical", name: "Documents médicaux", icon: HeartPulse, color: "#a2badf", category: "Médical" },
+  { id: "school", name: "Documents scolaires", icon: School, color: "#eec988", category: "École" },
+  { id: "legal", name: "Documents légaux", icon: Scale, color: "#b5a7c8", category: "Jugement" },
+  { id: "other", name: "Autres documents", icon: Folder, color: "#a8b193", category: "Autre" },
+];
+
+function normalizeSearch(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getFolderById(folderId, folders = DEFAULT_DOCUMENT_FOLDERS) {
+  return folders.find((folder) => folder.id === folderId) || null;
+}
+
+function getDocumentFolderId(doc) {
+  if (doc.folderId) return doc.folderId;
+
+  const category = normalizeSearch(doc.category || doc.type);
+  const title = normalizeSearch(`${doc.title || ""} ${doc.fileName || ""}`);
+
+  if (title.includes("vaccin")) return "vaccination-record";
+  if (title.includes("assurance maladie") || title.includes("ramq")) return "health-card";
+  if (title.includes("naissance")) return "birth-certificate";
+  if (title.includes("nas") || title.includes("assurance sociale")) return "sin";
+  if (title.includes("passeport")) return "passport-photo";
+  if (category.includes("medical") || category.includes("sante")) return "medical";
+  if (category.includes("ecole")) return "school";
+  if (category.includes("jugement") || category.includes("entente")) return "legal";
+  if (category.includes("passeport")) return "passport-photo";
+  if (category.includes("assurance")) return "health-card";
+
+  return "other";
+}
 
 const documentTypes = [
   "Document",
@@ -152,7 +208,7 @@ function isPdfDocument(doc) {
   return fileType === "application/pdf" || fileName.endsWith(".pdf");
 }
 
-function DocumentRow({ doc, onView, onMenu }) {
+function DocumentRow({ doc, onView, onMenu, folder }) {
   return (
     <div className="relative rounded-2xl bg-white ring-1 ring-[#EFE4D6] transition hover:bg-[#FFFDF8]">
       <button
@@ -170,7 +226,7 @@ function DocumentRow({ doc, onView, onMenu }) {
           </div>
 
           <p className="mt-1 text-sm text-[#746F64]">
-            {doc.childName || "Enfant"} · {getDocumentCategory(doc)}
+            {doc.childName || "Enfant"} · {folder?.name || getDocumentCategory(doc)}
           </p>
 
           {doc.fileName && (
@@ -340,6 +396,7 @@ export default function Documents({
   const [shareForm, setShareForm] = useState({
     code: generateAccessCode(),
     durationDays: 1,
+    accessMode: "view_only",
   });
   const [shareResult, setShareResult] = useState(null);
   const [shareError, setShareError] = useState("");
@@ -348,6 +405,23 @@ export default function Documents({
   const [disablingAllShares, setDisablingAllShares] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFolderId, setSelectedFolderId] = useState("all");
+  const [showFolderPopup, setShowFolderPopup] = useState(false);
+  const [customFolders, setCustomFolders] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem("camelio-document-folders");
+      const parsed = JSON.parse(stored || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  });
+  const [folderForm, setFolderForm] = useState({ name: "" });
+
+  const allFolders = useMemo(() => {
+    return [...DEFAULT_DOCUMENT_FOLDERS, ...customFolders];
+  }, [customFolders]);
 
   const firstChildId = children.length ? getChildId(children[0]) : "";
 
@@ -355,6 +429,7 @@ export default function Documents({
     title: "",
     childId: firstChildId,
     type: "Document",
+    folderId: "health-card",
     note: "",
     fileName: "",
     fileSize: null,
@@ -369,6 +444,17 @@ export default function Documents({
       }));
     }
   }, [firstChildId, form.childId]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "camelio-document-folders",
+        JSON.stringify(customFolders)
+      );
+    } catch (error) {
+      // Le stockage local peut être bloqué, l’interface reste fonctionnelle.
+    }
+  }, [customFolders]);
 
   const selectedChild = useMemo(() => {
     return children.find((child) => getChildId(child) === form.childId) || null;
@@ -414,6 +500,62 @@ export default function Documents({
     [docs]
   );
 
+
+  const getFolderDocCount = useCallback(
+    (folderId) => docs.filter((doc) => getDocumentFolderId(doc) === folderId).length,
+    [docs]
+  );
+
+  const filteredDocs = useMemo(() => {
+    const query = normalizeSearch(searchQuery);
+
+    return docs.filter((doc) => {
+      const folderId = getDocumentFolderId(doc);
+      const folder = getFolderById(folderId, allFolders);
+
+      if (selectedFolderId !== "all" && folderId !== selectedFolderId) {
+        return false;
+      }
+
+      if (!query) return true;
+
+      const searchableText = normalizeSearch([
+        getDocumentTitle(doc),
+        doc.fileName,
+        doc.childName,
+        getDocumentCategory(doc),
+        doc.note,
+        folder?.name,
+      ].join(" "));
+
+      return searchableText.includes(query);
+    });
+  }, [allFolders, docs, searchQuery, selectedFolderId]);
+
+  const createFolder = () => {
+    const name = String(folderForm.name || "").trim();
+
+    if (!name) {
+      setError("Inscris un nom de dossier.");
+      return;
+    }
+
+    const folder = {
+      id: `custom-${Date.now()}`,
+      name,
+      icon: Folder,
+      color: "#a8b193",
+      category: "Autre",
+      custom: true,
+    };
+
+    setCustomFolders((current) => [...current, folder]);
+    setFolderForm({ name: "" });
+    setSelectedFolderId(folder.id);
+    setShowFolderPopup(false);
+    setSuccess("Dossier créé.");
+  };
+
   const handleFileSelection = (file) => {
     if (!file) return;
 
@@ -432,6 +574,7 @@ export default function Documents({
       title: "",
       childId: firstChildId,
       type: "Document",
+      folderId: "health-card",
       note: "",
       fileName: "",
       fileSize: null,
@@ -483,6 +626,7 @@ export default function Documents({
           childId: getChildId(child),
           childName: getChildName(child),
           category: form.type,
+          folderId: form.folderId,
           title: form.title.trim() || selectedFile.name,
           note: form.note.trim(),
         }),
@@ -584,6 +728,7 @@ export default function Documents({
     setShareForm({
       code: generateAccessCode(),
       durationDays: 1,
+      accessMode: "view_only",
     });
   };
 
@@ -623,6 +768,7 @@ export default function Documents({
           body: JSON.stringify({
             code: cleanCode,
             durationDays,
+            accessMode: shareForm.accessMode || "view_only",
           }),
         }
       );
@@ -641,6 +787,7 @@ export default function Documents({
         token,
         code: cleanCode,
         durationDays,
+        accessMode: data?.accessMode || shareForm.accessMode || "view_only",
         expiresAt: data?.expiresAt || "",
         disabled: false,
       });
@@ -912,7 +1059,92 @@ export default function Documents({
       </div>
 
       <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-[#55534C]">
+              Dossiers importants
+            </h3>
+            <p className="mt-1 text-sm leading-5 text-[#746F64]">
+              Retrouvez rapidement les documents essentiels comme la carte d’assurance maladie, le carnet de vaccination ou le certificat de naissance.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowFolderPopup(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+          >
+            <FolderPlus className="h-4 w-4" />
+            Créer un dossier
+          </button>
+        </div>
+
+        <div className="mt-5 grid !grid-cols-1 gap-3 sm:!grid-cols-2 lg:!grid-cols-3">
+          <button
+            type="button"
+            onClick={() => setSelectedFolderId("all")}
+            className={`rounded-3xl p-4 text-left ring-1 transition ${
+              selectedFolderId === "all"
+                ? "bg-[#EEF6EA] ring-[#D9E8CE]"
+                : "bg-[#FFFDF8] ring-[#EFE4D6] hover:bg-white"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#A8B193] ring-1 ring-[#EFE4D6]">
+                <Folder className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-black text-[#55534C]">Tous les dossiers</p>
+                <p className="mt-1 text-xs font-bold text-[#746F64]">
+                  {docs.length} document{docs.length > 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {allFolders.map((folder) => {
+            const Icon = folder.icon || Folder;
+            const count = getFolderDocCount(folder.id);
+
+            return (
+              <button
+                key={folder.id}
+                type="button"
+                onClick={() => setSelectedFolderId(folder.id)}
+                className={`rounded-3xl p-4 text-left ring-1 transition ${
+                  selectedFolderId === folder.id
+                    ? "bg-[#EEF6EA] ring-[#D9E8CE]"
+                    : "bg-[#FFFDF8] ring-[#EFE4D6] hover:bg-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
+                    style={{ backgroundColor: folder.color || "#A8B193" }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-black text-[#55534C]">{folder.name}</p>
+                      {folder.sensitive && (
+                        <Lock className="h-3.5 w-3.5 shrink-0 text-[#B5A7C8]" />
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs font-bold text-[#746F64]">
+                      {count} document{count > 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-lg font-bold text-[#55534C]">
               Tous les documents
@@ -922,24 +1154,62 @@ export default function Documents({
             </p>
           </div>
 
-          <span className="rounded-full bg-[#F4F8FD] px-3 py-1 text-xs font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">
-            {docs.length}
+          <span className="w-fit rounded-full bg-[#F4F8FD] px-3 py-1 text-xs font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">
+            {filteredDocs.length} / {docs.length}
           </span>
         </div>
 
+        <div className="mt-5 flex flex-col gap-3 lg:flex-row">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B193]" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Rechercher un document, un dossier ou un enfant..."
+              className="w-full rounded-2xl border border-[#DED6C9] bg-[#F7F3EA] py-3 pl-11 pr-11 text-sm font-semibold text-[#55534C] outline-none transition placeholder:text-[#A9A094] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/25"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#746F64] ring-1 ring-[#EFE4D6]"
+                aria-label="Effacer la recherche"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {selectedFolderId !== "all" && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-[#EEF6EA] px-3 py-1 text-xs font-bold text-[#6C8A58] ring-1 ring-[#D9E8CE]">
+              Dossier : {getFolderById(selectedFolderId, allFolders)?.name || "Dossier"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedFolderId("all")}
+              className="rounded-full bg-[#F8F3EA] px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+            >
+              Voir tous
+            </button>
+          </div>
+        )}
+
         <div className="mt-5 space-y-3">
-          {docs.length ? (
-            docs.map((doc) => (
+          {filteredDocs.length ? (
+            filteredDocs.map((doc) => (
               <DocumentRow
                 key={doc.id || doc.s3Key}
                 doc={doc}
                 onView={openDocument}
                 onMenu={setDocMenu}
+                folder={getFolderById(getDocumentFolderId(doc), allFolders)}
               />
             ))
           ) : (
             <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-              Aucun document enregistré.
+              Aucun document ne correspond à cette recherche.
             </div>
           )}
         </div>
@@ -1105,6 +1375,42 @@ export default function Documents({
                     ))}
                   </div>
                 </FormField>
+
+                <FormField label="Accès au document">
+                  <div className="grid !grid-cols-1 gap-2 sm:!grid-cols-2">
+                    {[
+                      { value: "view_only", label: "Visionnement seulement", detail: "Téléchargement masqué" },
+                      { value: "view_download", label: "Visionnement + téléchargement", detail: "Autoriser l’ouverture externe" },
+                    ].map((mode) => (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() =>
+                          setShareForm((current) => ({
+                            ...current,
+                            accessMode: mode.value,
+                          }))
+                        }
+                        className={`rounded-2xl px-3 py-3 text-left text-sm font-bold ring-1 transition ${
+                          shareForm.accessMode === mode.value
+                            ? "bg-[#A8B193] text-white ring-[#A8B193]"
+                            : "bg-white text-[#746F64] ring-[#DED6C9]"
+                        }`}
+                      >
+                        <span className="block">{mode.label}</span>
+                        <span className={`mt-1 block text-xs ${
+                          shareForm.accessMode === mode.value ? "text-white/80" : "text-[#8A8175]"
+                        }`}>
+                          {mode.detail}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </FormField>
+
+                <div className="rounded-2xl bg-[#FFF8ED] p-3 text-xs leading-5 text-[#9A7652] ring-1 ring-[#F0D8B8]">
+                  En mode visionnement seulement, Camelio masque les options de téléchargement dans la page partagée. Une capture d’écran demeure toujours possible sur le web.
+                </div>
 
                 <div className="grid !grid-cols-2 gap-3 pt-1">
                   <button
@@ -1355,6 +1661,7 @@ export default function Documents({
                     doc={doc}
                     onView={openDocument}
                     onMenu={setDocMenu}
+                    folder={getFolderById(getDocumentFolderId(doc), allFolders)}
                   />
                 ))
               ) : (
@@ -1362,6 +1669,58 @@ export default function Documents({
                   Aucun document pour cet enfant.
                 </div>
               )}
+            </div>
+          </div>
+        </Popup>
+      )}
+
+      {showFolderPopup && (
+        <Popup
+          title="Créer un dossier"
+          kicker="Classement des documents"
+          close={() => {
+            setShowFolderPopup(false);
+            setFolderForm({ name: "" });
+            setError("");
+          }}
+        >
+          <div className="space-y-5">
+            <div className="rounded-3xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
+              <p className="text-sm leading-6 text-[#746F64]">
+                Crée un dossier personnalisé pour regrouper des documents comme orthophonie, camp de jour, voyage, garderie ou activités sportives.
+              </p>
+            </div>
+
+            <FormField label="Nom du dossier">
+              <input
+                className={inputClass()}
+                value={folderForm.name}
+                onChange={(event) => setFolderForm({ name: event.target.value })}
+                placeholder="Ex. Orthophonie"
+                autoFocus
+              />
+            </FormField>
+
+            <div className="grid !grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFolderPopup(false);
+                  setFolderForm({ name: "" });
+                  setError("");
+                }}
+                className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                onClick={createFolder}
+                className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white"
+              >
+                Créer
+              </button>
             </div>
           </div>
         </Popup>
@@ -1424,6 +1783,27 @@ export default function Documents({
                 </select>
               </FormField>
             </div>
+
+            <FormField label="Dossier">
+              <select
+                className={inputClass()}
+                value={form.folderId}
+                onChange={(event) => {
+                  const folder = getFolderById(event.target.value, allFolders);
+                  setForm({
+                    ...form,
+                    folderId: event.target.value,
+                    type: folder?.category || form.type,
+                  });
+                }}
+              >
+                {allFolders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>
+                    {folder.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
 
             {selectedChild && (
               <div
