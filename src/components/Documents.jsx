@@ -926,12 +926,7 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
           </div>
         </div>
 
-        <div className="mt-5 grid !grid-cols-1 gap-3 md:!grid-cols-[220px_1fr]">
-          <select className={inputClass("py-4")} value={childFilter} onChange={(event) => setChildFilter(event.target.value)}>
-            <option value="all">Tous les enfants</option>
-            <option value={GENERAL_CHILD_ID}>Général</option>
-            {children.map((child) => <option key={getChildId(child)} value={getChildId(child)}>{getChildName(child)}</option>)}
-          </select>
+        <div className="mt-5">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#A8B193]" />
             <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Rechercher un document, un dossier ou une note..." className="w-full rounded-2xl border border-[#DED6C9] bg-[#F7F3EA] py-4 pl-12 pr-4 text-sm font-semibold text-[#55534C] outline-none transition placeholder:text-[#A9A094] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/25" />
@@ -942,6 +937,11 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
           <button type="button" onClick={openAllDocs} className="rounded-full bg-[#FFFDF8] px-4 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
             Tous les documents · {matchingDocsForSearch.length}
           </button>
+          {childFilter !== "all" && (
+            <button type="button" onClick={() => setChildFilter("all")} className="rounded-full bg-[#EEF6EA] px-4 py-2 text-xs font-bold text-[#6C8A58] ring-1 ring-[#D9E8CE]">
+              Réinitialiser le filtre enfant
+            </button>
+          )}
           <span className="rounded-full bg-[#EEF6EA] px-4 py-2 text-xs font-bold text-[#6C8A58] ring-1 ring-[#D9E8CE]">
             Dossiers affichés · {visibleFolders.length}
           </span>
@@ -949,10 +949,46 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
       </div>
 
       <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-[#55534C]">Documents par enfant</h3>
+            <p className="mt-1 text-sm leading-5 text-[#746F64]">Choisissez un enfant pour filtrer les dossiers importants. Les documents généraux apparaissent pour chaque enfant.</p>
+          </div>
+          <button type="button" onClick={() => setChildFilter("all")} className={`rounded-full px-4 py-2 text-xs font-bold ring-1 transition ${childFilter === "all" ? "bg-[#A8B193] text-white ring-[#A8B193]" : "bg-[#FFFDF8] text-[#746F64] ring-[#EFE4D6]"}`}>
+            Tous
+          </button>
+        </div>
+        {!children.length && <div className="mt-5 rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun enfant n’est disponible. Ajoute un enfant dans la section Profil enfant avant d’ajouter des documents.</div>}
+        <div className="mt-5 grid !grid-cols-1 gap-3 sm:!grid-cols-2">
+          {children.map((child) => {
+            const childId = getChildId(child);
+            const color = getColor(child.color);
+            const documentsForChild = childDocs(child);
+            const count = documentsForChild.length;
+            const photo = getChildPhoto(child);
+            const isActive = childFilter === childId;
+            return (
+              <button key={childId} type="button" onClick={() => setChildFilter(isActive ? "all" : childId)} className={`group rounded-3xl p-4 text-left shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${isActive ? "bg-[#EEF6EA] ring-[#A8B193]" : `bg-white ${color.soft}`}`}>
+                <div className="flex items-center gap-4">
+                  {photo ? <img src={photo} alt={getChildName(child)} className="h-16 w-16 rounded-3xl object-cover shadow-sm ring-4 ring-white" /> : <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-xl font-extrabold text-[#A8B193] shadow-sm ring-4 ring-white">{getChildName(child).slice(0, 1)}</div>}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-lg font-extrabold text-[#55534C]">{getChildName(child)}</p>
+                    <p className="mt-1 text-sm font-semibold text-[#746F64]">Filtrer les dossiers</p>
+                    <p className="mt-2 inline-flex rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-white">{count} document{count > 1 ? "s" : ""}</p>
+                  </div>
+                  <ChevronRight className={`h-5 w-5 shrink-0 text-[#A8B193] transition ${isActive ? "rotate-90" : "group-hover:translate-x-0.5"}`} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-[#55534C]">Dossiers importants</h3>
-            <p className="mt-1 text-sm text-[#746F64]">Filtrez par enfant, puis ouvrez un dossier pour voir ses documents.</p>
+            <p className="mt-1 text-sm text-[#746F64]">{childFilter === "all" ? "Ouvrez un dossier pour voir ses documents." : "Les dossiers sont filtrés selon l’enfant sélectionné."}</p>
           </div>
           <button type="button" onClick={loadDocuments} className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F8F3EA] text-[#746F64] ring-1 ring-[#EFE4D6]" title="Rafraîchir">
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
@@ -969,37 +1005,6 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
             <p className="mt-3 font-black text-[#55534C]">Créer un dossier</p>
             <p className="mt-1 text-xs leading-5 text-[#746F64]">Ajoutez un dossier personnalisé, par exemple garderie, sport ou voyage.</p>
           </button>
-        </div>
-      </div>
-
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-[#55534C]">Documents par enfant</h3>
-            <p className="mt-1 text-sm leading-5 text-[#746F64]">Les documents généraux apparaissent dans la fiche de chaque enfant.</p>
-          </div>
-        </div>
-        {!children.length && <div className="mt-5 rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun enfant n’est disponible. Ajoute un enfant dans la section Profil enfant avant d’ajouter des documents.</div>}
-        <div className="mt-5 grid !grid-cols-1 gap-3 sm:!grid-cols-2">
-          {children.map((child) => {
-            const color = getColor(child.color);
-            const documentsForChild = childDocs(child);
-            const count = documentsForChild.length;
-            const photo = getChildPhoto(child);
-            return (
-              <button key={getChildId(child)} type="button" onClick={() => setSelectedChildDocs(child)} className={`group rounded-3xl bg-white p-4 text-left shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${color.soft}`}>
-                <div className="flex items-center gap-4">
-                  {photo ? <img src={photo} alt={getChildName(child)} className="h-16 w-16 rounded-3xl object-cover shadow-sm ring-4 ring-white" /> : <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-xl font-extrabold text-[#A8B193] shadow-sm ring-4 ring-white">{getChildName(child).slice(0, 1)}</div>}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg font-extrabold text-[#55534C]">{getChildName(child)}</p>
-                    <p className="mt-1 text-sm font-semibold text-[#746F64]">Fiche documents</p>
-                    <p className="mt-2 inline-flex rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-white">{count} document{count > 1 ? "s" : ""}</p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 shrink-0 text-[#A8B193] transition group-hover:translate-x-0.5" />
-                </div>
-              </button>
-            );
-          })}
         </div>
       </div>
 
