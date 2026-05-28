@@ -1008,14 +1008,6 @@ export default function Documents({
               <Trash2 className="h-4 w-4" />
               Supprimer
             </button>
-
-            <button
-              type="button"
-              onClick={() => setDocMenu(null)}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
-            >
-              Annuler
-            </button>
           </div>
         </Popup>
       )}
