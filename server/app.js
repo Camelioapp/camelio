@@ -3805,7 +3805,7 @@ app.post(
 );
 
 
-aapp.post(
+app.post(
   "/api/profile-shares/redeem-code",
   sensitiveLimiter,
   requireAuth,
