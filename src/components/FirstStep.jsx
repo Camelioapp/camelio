@@ -47,6 +47,7 @@ const FAMILY_SITUATIONS = [
 ];
 
 const ALL_SECTIONS = [
+  { id: "children", label: "Profil enfant" },
   { id: "calendar", label: "Calendrier" },
   { id: "documents", label: "Documents" },
   { id: "photos", label: "Photos" },
@@ -56,6 +57,8 @@ const ALL_SECTIONS = [
   { id: "parental-plan", label: "Plan parental" },
   { id: "calculator", label: "Calculateur de journées" },
   { id: "memorable-phrases", label: "Phrases mémorables" },
+  { id: "carnet-souvenirs", label: "Carnet souvenir" },
+  { id: "profile-sharing", label: "Partage de profil" },
 ];
 
 /*
@@ -119,55 +122,8 @@ function getFallbackAvatar(index, gender = "") {
   return avatars[index % avatars.length] || PUBLIC_AVATARS[0];
 }
 
-function getRecommendedSectionIds(situation) {
-  if (situation === "couple") {
-    return [
-      "children",
-      "calendar",
-      "documents",
-      "photos",
-      "sante",
-      "notes",
-      "memorable-phrases",
-    ];
-  }
-
-  if (situation === "single_full") {
-    return [
-      "children",
-      "calendar",
-      "documents",
-      "photos",
-      "sante",
-      "notes",
-      "memorable-phrases",
-    ];
-  }
-
-  if (situation === "solo_shared") {
-    return [
-      "children",
-      "calendar",
-      "documents",
-      "photos",
-      "sante",
-      "invoices",
-      "notes",
-      "parental-plan",
-      "calculator",
-      "memorable-phrases",
-    ];
-  }
-
-  return [
-    "children",
-    "calendar",
-    "documents",
-    "photos",
-    "sante",
-    "notes",
-    "memorable-phrases",
-  ];
+function getRecommendedSectionIds() {
+  return ALL_SECTIONS.map((section) => section.id);
 }
 
 function getDisabledSectionLabels(situation) {

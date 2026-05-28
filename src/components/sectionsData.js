@@ -11,6 +11,7 @@ import {
   StickyNote,
   Settings,
   Share2,
+  BookOpen,
 } from "lucide-react";
 
 export const sectionThemes = {
@@ -114,6 +115,13 @@ export const sections = [
     description: "Citations et mots d’enfants.",
     icon: Quote,
     defaultTheme: "mauve",
+  },
+  {
+    id: "carnet-souvenirs",
+    title: "Carnet souvenir",
+    description: "Échographies, premiers moments, croissance et souvenirs précieux.",
+    icon: BookOpen,
+    defaultTheme: "sand",
   },
   {
     id: "calendar",
