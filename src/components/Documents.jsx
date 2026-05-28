@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Baby,
-  Camera,
   ChevronRight,
   Copy,
   CreditCard,
@@ -11,71 +9,121 @@ import {
   Folder,
   FolderPlus,
   HeartPulse,
-  Image,
+  Image as ImageIcon,
+  KeyRound,
   Link,
   LinkOff,
   Loader2,
   Lock,
   MoreHorizontal,
+  Plus,
   RefreshCw,
-  Scale,
   School,
   Search,
   ShieldCheck,
+  Syringe,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
 
 import { Popup, SectionTitle } from "./shared.jsx";
 import { displayName, getColor } from "./sectionsData.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://api.camelio.app";
-
+const CUSTOM_FOLDERS_STORAGE_KEY = "camelio_document_custom_folders_v1";
 
 const DEFAULT_DOCUMENT_FOLDERS = [
-  { id: "health-card", name: "Carte d’assurance maladie", icon: CreditCard, color: "#a2badf", category: "Assurance" },
-  { id: "vaccination-record", name: "Carnet de vaccination", icon: HeartPulse, color: "#a8b193", category: "Santé" },
-  { id: "birth-certificate", name: "Certificat de naissance", icon: Baby, color: "#eec988", category: "Document" },
-  { id: "sin", name: "Numéro d’assurance sociale", icon: Lock, color: "#b5a7c8", category: "Document", sensitive: true },
-  { id: "passport-photo", name: "Photo de passeport", icon: Image, color: "#eaa5af", category: "Passeport" },
-  { id: "medical", name: "Documents médicaux", icon: HeartPulse, color: "#a2badf", category: "Médical" },
-  { id: "school", name: "Documents scolaires", icon: School, color: "#eec988", category: "École" },
-  { id: "legal", name: "Documents légaux", icon: Scale, color: "#b5a7c8", category: "Jugement" },
-  { id: "other", name: "Autres documents", icon: Folder, color: "#a8b193", category: "Autre" },
+  {
+    id: "health-card",
+    name: "Carte d’assurance maladie",
+    icon: CreditCard,
+    color: "#A2BADF",
+    bg: "bg-[#F4F8FD]",
+    ring: "ring-[#D3DFF1]",
+    text: "text-[#6A85AF]",
+    description: "Carte RAMQ ou assurance maladie de l’enfant.",
+  },
+  {
+    id: "vaccination-record",
+    name: "Carnet de vaccination",
+    icon: Syringe,
+    color: "#A8B193",
+    bg: "bg-[#EEF6EA]",
+    ring: "ring-[#D9E8CE]",
+    text: "text-[#6C8A58]",
+    description: "Vaccins, rappels et preuves de vaccination.",
+  },
+  {
+    id: "birth-certificate",
+    name: "Certificat de naissance",
+    icon: FileText,
+    color: "#EEC988",
+    bg: "bg-[#FFFAEF]",
+    ring: "ring-[#F1DDAE]",
+    text: "text-[#B68E3D]",
+    description: "Certificat ou acte de naissance.",
+  },
+  {
+    id: "sin",
+    name: "Numéro d’assurance sociale",
+    icon: Lock,
+    color: "#B5A7C8",
+    bg: "bg-[#F7F3FB]",
+    ring: "ring-[#DED2EC]",
+    text: "text-[#806C98]",
+    description: "Document sensible lié au NAS de l’enfant.",
+  },
+  {
+    id: "passport-photo",
+    name: "Photo de passeport",
+    icon: ImageIcon,
+    color: "#EAA5AF",
+    bg: "bg-[#FFF1F3]",
+    ring: "ring-[#F3CDD3]",
+    text: "text-[#B96B77]",
+    description: "Photo officielle ou document de passeport.",
+  },
+  {
+    id: "medical",
+    name: "Documents médicaux",
+    icon: HeartPulse,
+    color: "#A2BADF",
+    bg: "bg-[#F4F8FD]",
+    ring: "ring-[#D3DFF1]",
+    text: "text-[#6A85AF]",
+    description: "Rapports médicaux, prescriptions ou suivis.",
+  },
+  {
+    id: "school",
+    name: "Documents scolaires",
+    icon: School,
+    color: "#EEC988",
+    bg: "bg-[#FFFAEF]",
+    ring: "ring-[#F1DDAE]",
+    text: "text-[#B68E3D]",
+    description: "Bulletins, communications et documents scolaires.",
+  },
+  {
+    id: "legal",
+    name: "Documents légaux",
+    icon: ShieldCheck,
+    color: "#B5A7C8",
+    bg: "bg-[#F7F3FB]",
+    ring: "ring-[#DED2EC]",
+    text: "text-[#806C98]",
+    description: "Jugements, ententes parentales ou autorisations.",
+  },
+  {
+    id: "other",
+    name: "Autres documents",
+    icon: Folder,
+    color: "#A8B193",
+    bg: "bg-[#EEF6EA]",
+    ring: "ring-[#D9E8CE]",
+    text: "text-[#6C8A58]",
+    description: "Documents divers.",
+  },
 ];
-
-function normalizeSearch(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-function getFolderById(folderId, folders = DEFAULT_DOCUMENT_FOLDERS) {
-  return folders.find((folder) => folder.id === folderId) || null;
-}
-
-function getDocumentFolderId(doc) {
-  if (doc.folderId) return doc.folderId;
-
-  const category = normalizeSearch(doc.category || doc.type);
-  const title = normalizeSearch(`${doc.title || ""} ${doc.fileName || ""}`);
-
-  if (title.includes("vaccin")) return "vaccination-record";
-  if (title.includes("assurance maladie") || title.includes("ramq")) return "health-card";
-  if (title.includes("naissance")) return "birth-certificate";
-  if (title.includes("nas") || title.includes("assurance sociale")) return "sin";
-  if (title.includes("passeport")) return "passport-photo";
-  if (category.includes("medical") || category.includes("sante")) return "medical";
-  if (category.includes("ecole")) return "school";
-  if (category.includes("jugement") || category.includes("entente")) return "legal";
-  if (category.includes("passeport")) return "passport-photo";
-  if (category.includes("assurance")) return "health-card";
-
-  return "other";
-}
 
 const documentTypes = [
   "Document",
@@ -92,12 +140,11 @@ const documentTypes = [
 const allowedAccept =
   ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,image/png,image/jpeg,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-  function getFileType(file) {
+function getFileType(file) {
   const fileName = String(file?.name || "").toLowerCase();
   const fileType = String(file?.type || "").trim();
 
   if (fileType) return fileType;
-
   if (fileName.endsWith(".pdf")) return "application/pdf";
   if (fileName.endsWith(".png")) return "image/png";
   if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) return "image/jpeg";
@@ -152,6 +199,14 @@ function getDocumentCategory(doc) {
   return doc.category || doc.type || "Document";
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function generateAccessCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -195,10 +250,7 @@ function isImageDocument(doc) {
   const fileName = String(doc.fileName || "").toLowerCase();
   const fileType = String(doc.fileType || "").toLowerCase();
 
-  return (
-    fileType.startsWith("image/") ||
-    /\.(jpg|jpeg|png|webp|gif)$/.test(fileName)
-  );
+  return fileType.startsWith("image/") || /\.(jpg|jpeg|png|webp|gif)$/.test(fileName);
 }
 
 function isPdfDocument(doc) {
@@ -208,14 +260,33 @@ function isPdfDocument(doc) {
   return fileType === "application/pdf" || fileName.endsWith(".pdf");
 }
 
-function DocumentRow({ doc, onView, onMenu, folder }) {
+function readStoredFolders() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CUSTOM_FOLDERS_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function storeFolders(folders) {
+  localStorage.setItem(CUSTOM_FOLDERS_STORAGE_KEY, JSON.stringify(folders));
+}
+
+function getDocFolderId(doc) {
+  return doc.folderId || doc.folder || "other";
+}
+
+function getFolderById(folders, folderId) {
+  return folders.find((folder) => folder.id === folderId) || folders.find((folder) => folder.id === "other");
+}
+
+function DocumentRow({ doc, folder, onView, onMenu }) {
+  const FolderIcon = folder?.icon || Folder;
+
   return (
     <div className="relative rounded-2xl bg-white ring-1 ring-[#EFE4D6] transition hover:bg-[#FFFDF8]">
-      <button
-        type="button"
-        onClick={() => onView(doc)}
-        className="w-full p-4 pr-14 text-left"
-      >
+      <button type="button" onClick={() => onView(doc)} className="w-full p-4 pr-14 text-left">
         <div className="min-w-0">
           <div className="flex flex-wrap items-start gap-2">
             <p className="font-bold text-[#55534C]">{getDocumentTitle(doc)}</p>
@@ -226,8 +297,15 @@ function DocumentRow({ doc, onView, onMenu, folder }) {
           </div>
 
           <p className="mt-1 text-sm text-[#746F64]">
-            {doc.childName || "Enfant"} · {folder?.name || getDocumentCategory(doc)}
+            {doc.childName || "Enfant"} · {getDocumentCategory(doc)}
           </p>
+
+          {folder && (
+            <p className={`mt-2 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ring-1 ${folder.bg} ${folder.text} ${folder.ring}`}>
+              <FolderIcon className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{folder.name}</span>
+            </p>
+          )}
 
           {doc.fileName && (
             <p className="mt-2 inline-flex max-w-full rounded-full bg-[#F4F8FD] px-3 py-1 text-xs font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">
@@ -236,16 +314,10 @@ function DocumentRow({ doc, onView, onMenu, folder }) {
           )}
 
           {doc.fileSize && (
-            <p className="mt-2 text-xs font-semibold text-[#8A8175]">
-              {formatFileSize(doc.fileSize)}
-            </p>
+            <p className="mt-2 text-xs font-semibold text-[#8A8175]">{formatFileSize(doc.fileSize)}</p>
           )}
 
-          {doc.note && (
-            <p className="mt-2 text-xs leading-5 text-[#746F64]">
-              {doc.note}
-            </p>
-          )}
+          {doc.note && <p className="mt-2 text-xs leading-5 text-[#746F64]">{doc.note}</p>}
         </div>
       </button>
 
@@ -264,24 +336,42 @@ function DocumentRow({ doc, onView, onMenu, folder }) {
   );
 }
 
+function FolderCard({ folder, count, active, onClick }) {
+  const Icon = folder.icon || Folder;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-3xl p-4 text-left ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${folder.bg} ${folder.ring} ${active ? "shadow-md outline outline-2 outline-[#A8B193]/35" : "shadow-sm"}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white ${folder.text} ring-1 ${folder.ring}`}>
+          <Icon className="h-6 w-6" />
+        </div>
+        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-white">
+          {count}
+        </span>
+      </div>
+      <p className="mt-3 font-black text-[#55534C]">{folder.name}</p>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#746F64]">{folder.description}</p>
+    </button>
+  );
+}
+
 function DocumentViewer({ doc, close, onDownload }) {
   const fileName = doc.fileName || "Document";
   const isImage = isImageDocument(doc);
   const isPdf = isPdfDocument(doc);
+  const pdfUrl = doc.fileUrl ? `${doc.fileUrl}#toolbar=0&navpanes=0` : "";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
       <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-white md:h-[96vh] md:w-[96vw] md:rounded-[2rem] md:shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-[#EFE4D6] bg-white px-5 py-4">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#A8B193]">
-              Aperçu document
-            </p>
-
-            <h3 className="mt-1 truncate text-xl font-bold text-[#55534C]">
-              {getDocumentTitle(doc)}
-            </h3>
-
+            <p className="text-xs font-bold uppercase tracking-wide text-[#A8B193]">Aperçu document</p>
+            <h3 className="mt-1 truncate text-xl font-bold text-[#55534C]">{getDocumentTitle(doc)}</h3>
             <p className="mt-1 truncate text-xs text-[#746F64]">{fileName}</p>
           </div>
 
@@ -297,11 +387,7 @@ function DocumentViewer({ doc, close, onDownload }) {
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={close}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F8F3EA] text-lg font-bold text-[#746F64]"
-            >
+            <button type="button" onClick={close} className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F8F3EA] text-lg font-bold text-[#746F64]">
               ×
             </button>
           </div>
@@ -310,39 +396,21 @@ function DocumentViewer({ doc, close, onDownload }) {
         <div className="flex min-h-0 flex-1 bg-slate-950 p-2 md:p-4">
           {doc.fileUrl && isImage && (
             <div className="flex h-full w-full items-center justify-center">
-              <img
-                src={doc.fileUrl}
-                alt={getDocumentTitle(doc)}
-                className="max-h-full max-w-full rounded-2xl object-contain"
-              />
+              <img src={doc.fileUrl} alt={getDocumentTitle(doc)} className="max-h-full max-w-full rounded-2xl object-contain" />
             </div>
           )}
 
-          {doc.fileUrl && isPdf && (
-            <iframe
-              src={doc.fileUrl}
-              title={getDocumentTitle(doc)}
-              className="h-full w-full rounded-2xl bg-white"
-            />
-          )}
+          {doc.fileUrl && isPdf && <iframe src={pdfUrl} title={getDocumentTitle(doc)} className="h-full w-full rounded-2xl bg-white" />}
 
           {doc.fileUrl && !isImage && !isPdf && (
             <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white p-5 text-center">
               <div>
                 <FileText className="mx-auto h-12 w-12 text-[#A8B193]" />
-                <p className="mt-3 text-lg font-bold text-[#55534C]">
-                  Aperçu non disponible
-                </p>
+                <p className="mt-3 text-lg font-bold text-[#55534C]">Aperçu non disponible</p>
                 <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-[#746F64]">
-                  Ce type de fichier est conservé dans Camelio, mais l’aperçu
-                  intégré est limité aux PDF et aux images.
+                  Ce type de fichier est conservé dans Camelio, mais l’aperçu intégré est limité aux PDF et aux images.
                 </p>
-
-                <button
-                  type="button"
-                  onClick={() => onDownload(doc)}
-                  className="mt-5 rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white"
-                >
+                <button type="button" onClick={() => onDownload(doc)} className="mt-5 rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white">
                   Ouvrir le document
                 </button>
               </div>
@@ -353,9 +421,7 @@ function DocumentViewer({ doc, close, onDownload }) {
             <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white p-5 text-center">
               <div>
                 <Loader2 className="mx-auto h-12 w-12 animate-spin text-[#A8B193]" />
-                <p className="mt-3 text-lg font-bold text-[#55534C]">
-                  Chargement du document
-                </p>
+                <p className="mt-3 text-lg font-bold text-[#55534C]">Chargement du document</p>
               </div>
             </div>
           )}
@@ -371,21 +437,22 @@ function DocumentViewer({ doc, close, onDownload }) {
   );
 }
 
-export default function Documents({
-  children = [],
-  docs: externalDocs,
-  setDocs: externalSetDocs,
-}) {
+export default function Documents({ children = [], docs: externalDocs, setDocs: externalSetDocs }) {
   const [internalDocs, setInternalDocs] = useState([]);
   const docs = Array.isArray(externalDocs) ? externalDocs : internalDocs;
-  const setDocs =
-    typeof externalSetDocs === "function" ? externalSetDocs : setInternalDocs;
+  const setDocs = typeof externalSetDocs === "function" ? externalSetDocs : setInternalDocs;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [customFolders, setCustomFolders] = useState(() => readStoredFolders());
+  const allFolders = useMemo(() => [...DEFAULT_DOCUMENT_FOLDERS, ...customFolders], [customFolders]);
+  const [selectedFolderId, setSelectedFolderId] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFolderPopup, setShowFolderPopup] = useState(false);
+  const [folderForm, setFolderForm] = useState({ name: "", description: "" });
 
   const [showDocPopup, setShowDocPopup] = useState(false);
   const [selectedChildDocs, setSelectedChildDocs] = useState(null);
@@ -393,35 +460,13 @@ export default function Documents({
   const [docMenu, setDocMenu] = useState(null);
   const [deleteDoc, setDeleteDoc] = useState(null);
   const [shareDoc, setShareDoc] = useState(null);
-  const [shareForm, setShareForm] = useState({
-    code: generateAccessCode(),
-    durationDays: 1,
-    accessMode: "view_only",
-  });
+  const [shareForm, setShareForm] = useState({ code: generateAccessCode(), durationDays: 1, accessMode: "view_only" });
   const [shareResult, setShareResult] = useState(null);
   const [shareError, setShareError] = useState("");
   const [sharing, setSharing] = useState(false);
   const [disablingShare, setDisablingShare] = useState(false);
   const [disablingAllShares, setDisablingAllShares] = useState(false);
-
   const [selectedFile, setSelectedFile] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFolderId, setSelectedFolderId] = useState("all");
-  const [showFolderPopup, setShowFolderPopup] = useState(false);
-  const [customFolders, setCustomFolders] = useState(() => {
-    try {
-      const stored = window.localStorage.getItem("camelio-document-folders");
-      const parsed = JSON.parse(stored || "[]");
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-      return [];
-    }
-  });
-  const [folderForm, setFolderForm] = useState({ name: "" });
-
-  const allFolders = useMemo(() => {
-    return [...DEFAULT_DOCUMENT_FOLDERS, ...customFolders];
-  }, [customFolders]);
 
   const firstChildId = children.length ? getChildId(children[0]) : "";
 
@@ -429,7 +474,7 @@ export default function Documents({
     title: "",
     childId: firstChildId,
     type: "Document",
-    folderId: "health-card",
+    folderId: "other",
     note: "",
     fileName: "",
     fileSize: null,
@@ -438,38 +483,51 @@ export default function Documents({
 
   useEffect(() => {
     if (!form.childId && firstChildId) {
-      setForm((current) => ({
-        ...current,
-        childId: firstChildId,
-      }));
+      setForm((current) => ({ ...current, childId: firstChildId }));
     }
   }, [firstChildId, form.childId]);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        "camelio-document-folders",
-        JSON.stringify(customFolders)
-      );
-    } catch (error) {
-      // Le stockage local peut être bloqué, l’interface reste fonctionnelle.
-    }
-  }, [customFolders]);
+  const selectedChild = useMemo(() => children.find((child) => getChildId(child) === form.childId) || null, [children, form.childId]);
 
-  const selectedChild = useMemo(() => {
-    return children.find((child) => getChildId(child) === form.childId) || null;
-  }, [children, form.childId]);
+  const folderCounts = useMemo(() => {
+    const counts = new Map();
+    docs.forEach((doc) => {
+      const id = getDocFolderId(doc);
+      counts.set(id, (counts.get(id) || 0) + 1);
+    });
+    return counts;
+  }, [docs]);
+
+  const filteredDocs = useMemo(() => {
+    const query = normalizeText(searchQuery);
+
+    return docs.filter((doc) => {
+      const folder = getFolderById(allFolders, getDocFolderId(doc));
+      const matchesFolder = selectedFolderId === "all" || getDocFolderId(doc) === selectedFolderId;
+
+      if (!matchesFolder) return false;
+      if (!query) return true;
+
+      const searchable = normalizeText([
+        getDocumentTitle(doc),
+        getDocumentCategory(doc),
+        doc.childName,
+        doc.fileName,
+        doc.note,
+        folder?.name,
+        folder?.description,
+      ].join(" "));
+
+      return searchable.includes(query);
+    });
+  }, [allFolders, docs, searchQuery, selectedFolderId]);
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/documents`, {
-        method: "GET",
-        credentials: "include",
-      });
-
+      const response = await fetch(`${API_BASE}/api/documents`, { method: "GET", credentials: "include" });
       const data = await response.json();
 
       if (!response.ok) {
@@ -492,69 +550,10 @@ export default function Documents({
     (child) => {
       const id = getChildId(child);
       const name = getChildName(child);
-
-      return docs.filter(
-        (doc) => doc.childId === id || (!doc.childId && doc.childName === name)
-      );
+      return docs.filter((doc) => doc.childId === id || (!doc.childId && doc.childName === name));
     },
     [docs]
   );
-
-
-  const getFolderDocCount = useCallback(
-    (folderId) => docs.filter((doc) => getDocumentFolderId(doc) === folderId).length,
-    [docs]
-  );
-
-  const filteredDocs = useMemo(() => {
-    const query = normalizeSearch(searchQuery);
-
-    return docs.filter((doc) => {
-      const folderId = getDocumentFolderId(doc);
-      const folder = getFolderById(folderId, allFolders);
-
-      if (selectedFolderId !== "all" && folderId !== selectedFolderId) {
-        return false;
-      }
-
-      if (!query) return true;
-
-      const searchableText = normalizeSearch([
-        getDocumentTitle(doc),
-        doc.fileName,
-        doc.childName,
-        getDocumentCategory(doc),
-        doc.note,
-        folder?.name,
-      ].join(" "));
-
-      return searchableText.includes(query);
-    });
-  }, [allFolders, docs, searchQuery, selectedFolderId]);
-
-  const createFolder = () => {
-    const name = String(folderForm.name || "").trim();
-
-    if (!name) {
-      setError("Inscris un nom de dossier.");
-      return;
-    }
-
-    const folder = {
-      id: `custom-${Date.now()}`,
-      name,
-      icon: Folder,
-      color: "#a8b193",
-      category: "Autre",
-      custom: true,
-    };
-
-    setCustomFolders((current) => [...current, folder]);
-    setFolderForm({ name: "" });
-    setSelectedFolderId(folder.id);
-    setShowFolderPopup(false);
-    setSuccess("Dossier créé.");
-  };
 
   const handleFileSelection = (file) => {
     if (!file) return;
@@ -574,14 +573,45 @@ export default function Documents({
       title: "",
       childId: firstChildId,
       type: "Document",
-      folderId: "health-card",
+      folderId: selectedFolderId !== "all" ? selectedFolderId : "other",
       note: "",
       fileName: "",
       fileSize: null,
       fileType: "",
     });
-
     setSelectedFile(null);
+  };
+
+  const createCustomFolder = () => {
+    const name = folderForm.name.trim();
+    const description = folderForm.description.trim();
+
+    if (!name) {
+      setError("Inscris un nom de dossier.");
+      return;
+    }
+
+    const id = `custom-${Date.now().toString(36)}`;
+    const newFolder = {
+      id,
+      name,
+      description: description || "Dossier personnalisé.",
+      icon: Folder,
+      color: "#A8B193",
+      bg: "bg-[#EEF6EA]",
+      ring: "ring-[#D9E8CE]",
+      text: "text-[#6C8A58]",
+      isCustom: true,
+    };
+
+    const nextFolders = [...customFolders, newFolder];
+    setCustomFolders(nextFolders);
+    storeFolders(nextFolders);
+    setSelectedFolderId(id);
+    setForm((current) => ({ ...current, folderId: id }));
+    setFolderForm({ name: "", description: "" });
+    setShowFolderPopup(false);
+    setSuccess("Dossier personnalisé créé.");
   };
 
   const addDoc = async () => {
@@ -610,23 +640,23 @@ export default function Documents({
       return;
     }
 
+    const selectedFolder = getFolderById(allFolders, form.folderId);
     setSaving(true);
 
     try {
       const presignResponse = await fetch(`${API_BASE}/api/documents/presign`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           fileName: selectedFile.name,
-          fileType: selectedFile.type,
+          fileType: getFileType(selectedFile),
           fileSize: selectedFile.size,
           childId: getChildId(child),
           childName: getChildName(child),
           category: form.type,
-          folderId: form.folderId,
+          folderId: selectedFolder?.id || "other",
+          folderName: selectedFolder?.name || "Autres documents",
           title: form.title.trim() || selectedFile.name,
           note: form.note.trim(),
         }),
@@ -635,16 +665,12 @@ export default function Documents({
       const presignData = await presignResponse.json();
 
       if (!presignResponse.ok) {
-        throw new Error(
-          presignData.message || "Impossible de préparer l’envoi du document."
-        );
+        throw new Error(presignData.message || "Impossible de préparer l’envoi du document.");
       }
 
       const uploadResponse = await fetch(presignData.uploadUrl, {
         method: "PUT",
-        headers: {
-  "Content-Type": getFileType(selectedFile),
-},
+        headers: { "Content-Type": getFileType(selectedFile) },
         body: selectedFile,
       });
 
@@ -653,7 +679,6 @@ export default function Documents({
       }
 
       await loadDocuments();
-
       setSuccess("Document ajouté avec succès.");
       resetForm();
       setShowDocPopup(false);
@@ -666,30 +691,17 @@ export default function Documents({
 
   const openDocument = async (doc) => {
     setError("");
-    setSelectedDocument({
-      ...doc,
-      fileUrl: "",
-    });
+    setSelectedDocument({ ...doc, fileUrl: "" });
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/documents/${doc.id}/download`,
-        {
-          method: "GET",
-          credentials: "include",
-        }
-      );
-
+      const response = await fetch(`${API_BASE}/api/documents/${doc.id}/download`, { method: "GET", credentials: "include" });
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.message || "Impossible d’ouvrir le document.");
       }
 
-      setSelectedDocument({
-        ...doc,
-        fileUrl: data.downloadUrl,
-      });
+      setSelectedDocument({ ...doc, fileUrl: data.downloadUrl });
     } catch (err) {
       setSelectedDocument(null);
       setError(err.message || "Impossible d’ouvrir le document.");
@@ -698,14 +710,7 @@ export default function Documents({
 
   const downloadDocument = async (doc) => {
     try {
-      const response = await fetch(
-        `${API_BASE}/api/documents/${doc.id}/download`,
-        {
-          method: "GET",
-          credentials: "include",
-        }
-      );
-
+      const response = await fetch(`${API_BASE}/api/documents/${doc.id}/download`, { method: "GET", credentials: "include" });
       const data = await response.json();
 
       if (!response.ok) {
@@ -725,19 +730,13 @@ export default function Documents({
     setShareDoc(doc);
     setShareResult(null);
     setShareError("");
-    setShareForm({
-      code: generateAccessCode(),
-      durationDays: 1,
-      accessMode: "view_only",
-    });
+    setShareForm({ code: generateAccessCode(), durationDays: 1, accessMode: "view_only" });
   };
 
   const generateShareLink = async () => {
     if (!shareDoc) return;
 
-    const cleanCode = String(shareForm.code || "")
-      .trim()
-      .toUpperCase();
+    const cleanCode = String(shareForm.code || "").trim().toUpperCase();
 
     if (!/^[A-Z0-9]{4}$/.test(cleanCode)) {
       setShareError("Le code doit contenir exactement 4 caractères, lettres ou chiffres.");
@@ -757,21 +756,12 @@ export default function Documents({
     setShareResult(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/documents/${shareDoc.id}/share-link`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            code: cleanCode,
-            durationDays,
-            accessMode: shareForm.accessMode || "view_only",
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE}/api/documents/${shareDoc.id}/share-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ code: cleanCode, durationDays, accessMode: "view_only", allowDownload: false }),
+      });
 
       const data = await response.json().catch(() => null);
 
@@ -787,12 +777,12 @@ export default function Documents({
         token,
         code: cleanCode,
         durationDays,
-        accessMode: data?.accessMode || shareForm.accessMode || "view_only",
         expiresAt: data?.expiresAt || "",
+        accessMode: data?.accessMode || "view_only",
         disabled: false,
       });
 
-      setSuccess("Lien sécurisé créé.");
+      setSuccess("Lien sécurisé créé en mode visionnement seulement.");
     } catch (err) {
       setShareError(err.message || "Impossible de générer le lien sécurisé.");
     } finally {
@@ -810,24 +800,14 @@ export default function Documents({
     setShareError("");
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/shared-documents/${shareResult.token}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
-
+      const response = await fetch(`${API_BASE}/api/shared-documents/${shareResult.token}`, { method: "DELETE", credentials: "include" });
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
         throw new Error(data?.message || "Impossible de désactiver le lien.");
       }
 
-      setShareResult((current) => ({
-        ...current,
-        disabled: true,
-      }));
+      setShareResult((current) => ({ ...current, disabled: true }));
       setSuccess("Lien sécurisé désactivé.");
     } catch (err) {
       setShareError(err.message || "Impossible de désactiver le lien sécurisé.");
@@ -836,17 +816,13 @@ export default function Documents({
     }
   };
 
-
   const disableAllDocumentShareLinks = async (doc) => {
     if (!doc?.id) {
       setError("Impossible de désactiver les liens sécurisés, document introuvable.");
       return;
     }
 
-    const confirmed = window.confirm(
-      "Désactiver tous les liens sécurisés associés à ce document? Les personnes qui ont déjà reçu un lien ne pourront plus l’utiliser."
-    );
-
+    const confirmed = window.confirm("Désactiver tous les liens sécurisés associés à ce document? Les personnes qui ont déjà reçu un lien ne pourront plus l’utiliser.");
     if (!confirmed) return;
 
     setDisablingAllShares(true);
@@ -854,30 +830,17 @@ export default function Documents({
     setSuccess("");
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/documents/${doc.id}/share-links`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
-
+      const response = await fetch(`${API_BASE}/api/documents/${doc.id}/share-links`, { method: "DELETE", credentials: "include" });
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(
-          data?.message || "Impossible de désactiver les liens sécurisés."
-        );
+        throw new Error(data?.message || "Impossible de désactiver les liens sécurisés.");
       }
 
       setDocMenu(null);
-      setSuccess(
-        data?.message || "Tous les liens sécurisés de ce document ont été désactivés."
-      );
+      setSuccess(data?.message || "Tous les liens sécurisés de ce document ont été désactivés.");
     } catch (err) {
-      setError(
-        err.message || "Impossible de désactiver les liens sécurisés de ce document."
-      );
+      setError(err.message || "Impossible de désactiver les liens sécurisés de ce document.");
     } finally {
       setDisablingAllShares(false);
     }
@@ -892,11 +855,8 @@ export default function Documents({
       if (shareDoc) setShareError("");
     } catch (err) {
       const message = "Impossible de copier automatiquement. Sélectionne le texte manuellement.";
-      if (shareDoc) {
-        setShareError(message);
-      } else {
-        setError(message);
-      }
+      if (shareDoc) setShareError(message);
+      else setError(message);
     }
   };
 
@@ -907,11 +867,7 @@ export default function Documents({
     setSaving(true);
 
     try {
-      const response = await fetch(`${API_BASE}/api/documents/${deleteDoc.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
+      const response = await fetch(`${API_BASE}/api/documents/${deleteDoc.id}`, { method: "DELETE", credentials: "include" });
       const data = await response.json();
 
       if (!response.ok) {
@@ -919,7 +875,6 @@ export default function Documents({
       }
 
       await loadDocuments();
-
       setDeleteDoc(null);
       setDocMenu(null);
       setSelectedDocument(null);
@@ -931,81 +886,127 @@ export default function Documents({
     }
   };
 
+  const selectedFolder = selectedFolderId === "all" ? null : getFolderById(allFolders, selectedFolderId);
+
   return (
     <div className="space-y-6">
-      <SectionTitle
-        title="Documents"
-        subtitle="Classer les documents liés à chaque enfant avec stockage sécurisé."
-        icon={FileText}
-      />
+      <SectionTitle title="Documents" subtitle="Classer, retrouver et partager les documents importants de chaque enfant." icon={FileText} />
 
-      {error && (
-        <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="rounded-2xl bg-[#EEF6EA] p-4 text-sm font-bold text-[#6C8A58] ring-1 ring-[#D9E8CE]">
-          {success}
-        </div>
-      )}
-
-      <div className="rounded-[2rem] bg-[#FFFAEF] p-5 shadow-sm ring-1 ring-[#F1DDAE]">
-        <div className="rounded-[1.75rem] bg-white p-5 ring-1 ring-[#EFE4D6]">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EEC988] text-white shadow-sm">
-            <FileText className="h-6 w-6" />
-          </div>
-
-          <h3 className="mt-3 text-xl font-bold text-[#55534C]">
-            Ajouter un document
-          </h3>
-
-          <p className="mt-2 text-sm leading-6 text-[#746F64]">
-            Le document sera ajouté dans un espace sécurisé accessible à partir du profil de l’enfant sélectionné.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowDocPopup(true)}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#EEC988] px-4 py-4 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
-        >
-          <Upload className="h-4 w-4" />
-          Ajouter un document
-        </button>
-      </div>
+      {error && <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]">{error}</div>}
+      {success && <div className="rounded-2xl bg-[#EEF6EA] p-4 text-sm font-bold text-[#6C8A58] ring-1 ring-[#D9E8CE]">{success}</div>}
 
       <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-lg font-bold text-[#55534C]">
-              Documents par enfant
-            </h3>
-
+            <h3 className="text-lg font-bold text-[#55534C]">Documents familiaux</h3>
             <p className="mt-1 text-sm leading-5 text-[#746F64]">
-              Chaque document doit être associé à un enfant.
+              Recherchez rapidement une carte d’assurance maladie, un carnet de vaccination, un certificat ou une note.
             </p>
           </div>
 
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFolderPopup(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+            >
+              <FolderPlus className="h-4 w-4" />
+              Créer un dossier
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDocPopup(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#EEC988] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+            >
+              <Upload className="h-4 w-4" />
+              Ajouter
+            </button>
+          </div>
+        </div>
+
+        <div className="relative mt-5">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#A8B193]" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Rechercher un document, un enfant, un dossier ou une note..."
+            className="w-full rounded-2xl border border-[#DED6C9] bg-[#F7F3EA] py-4 pl-12 pr-4 text-sm font-semibold text-[#55534C] outline-none transition placeholder:text-[#A9A094] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/25"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedFolderId("all")}
+            className={`rounded-full px-4 py-2 text-xs font-bold ring-1 ${selectedFolderId === "all" ? "bg-[#A8B193] text-white ring-[#A8B193]" : "bg-[#FFFDF8] text-[#746F64] ring-[#EFE4D6]"}`}
+          >
+            Tous les dossiers · {docs.length}
+          </button>
+          {children.map((child) => (
+            <button
+              key={getChildId(child)}
+              type="button"
+              onClick={() => setSearchQuery(getChildName(child))}
+              className="rounded-full bg-[#FFFDF8] px-4 py-2 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+            >
+              {getChildName(child)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-[#55534C]">Dossiers importants</h3>
+            <p className="mt-1 text-sm text-[#746F64]">Les dossiers essentiels sont créés par défaut.</p>
+          </div>
           <button
             type="button"
             onClick={loadDocuments}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F8F3EA] text-[#746F64] ring-1 ring-[#EFE4D6]"
             title="Rafraîchir"
           >
-            {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-5 w-5" />
-            )}
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
           </button>
+        </div>
+
+        <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2 xl:!grid-cols-3">
+          {allFolders.map((folder) => (
+            <FolderCard
+              key={folder.id}
+              folder={folder}
+              count={folderCounts.get(folder.id) || 0}
+              active={selectedFolderId === folder.id}
+              onClick={() => setSelectedFolderId(folder.id)}
+            />
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setShowFolderPopup(true)}
+            className="rounded-3xl border-2 border-dashed border-[#DED6C9] bg-[#FFFDF8] p-4 text-left transition hover:bg-white"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#A8B193] ring-1 ring-[#EFE4D6]">
+              <Plus className="h-6 w-6" />
+            </div>
+            <p className="mt-3 font-black text-[#55534C]">Créer un dossier</p>
+            <p className="mt-1 text-xs leading-5 text-[#746F64]">Ajoutez un dossier personnalisé, par exemple garderie, sport ou voyage.</p>
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-[#55534C]">Documents par enfant</h3>
+            <p className="mt-1 text-sm leading-5 text-[#746F64]">Chaque document doit être associé à un enfant.</p>
+          </div>
         </div>
 
         {!children.length && (
           <div className="mt-5 rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-            Aucun enfant n’est disponible. Ajoute un enfant dans la section
-            Profil enfant avant d’ajouter des documents.
+            Aucun enfant n’est disponible. Ajoute un enfant dans la section Profil enfant avant d’ajouter des documents.
           </div>
         )}
 
@@ -1025,11 +1026,7 @@ export default function Documents({
               >
                 <div className="flex items-center gap-4">
                   {photo ? (
-                    <img
-                      src={photo}
-                      alt={getChildName(child)}
-                      className="h-16 w-16 rounded-3xl object-cover shadow-sm ring-4 ring-white"
-                    />
+                    <img src={photo} alt={getChildName(child)} className="h-16 w-16 rounded-3xl object-cover shadow-sm ring-4 ring-white" />
                   ) : (
                     <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-xl font-extrabold text-[#A8B193] shadow-sm ring-4 ring-white">
                       {getChildName(child).slice(0, 1)}
@@ -1037,14 +1034,8 @@ export default function Documents({
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg font-extrabold text-[#55534C]">
-                      {getChildName(child)}
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-[#746F64]">
-                      Fiche documents
-                    </p>
-
+                    <p className="truncate text-lg font-extrabold text-[#55534C]">{getChildName(child)}</p>
+                    <p className="mt-1 text-sm font-semibold text-[#746F64]">Fiche documents</p>
                     <p className="mt-2 inline-flex rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-white">
                       {count} document{count > 1 ? "s" : ""}
                     </p>
@@ -1059,222 +1050,53 @@ export default function Documents({
       </div>
 
       <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-[#55534C]">
-              Dossiers importants
-            </h3>
-            <p className="mt-1 text-sm leading-5 text-[#746F64]">
-              Retrouvez rapidement les documents essentiels comme la carte d’assurance maladie, le carnet de vaccination ou le certificat de naissance.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowFolderPopup(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
-          >
-            <FolderPlus className="h-4 w-4" />
-            Créer un dossier
-          </button>
-        </div>
-
-        <div className="mt-5 grid !grid-cols-1 gap-3 sm:!grid-cols-2 lg:!grid-cols-3">
-          <button
-            type="button"
-            onClick={() => setSelectedFolderId("all")}
-            className={`rounded-3xl p-4 text-left ring-1 transition ${
-              selectedFolderId === "all"
-                ? "bg-[#EEF6EA] ring-[#D9E8CE]"
-                : "bg-[#FFFDF8] ring-[#EFE4D6] hover:bg-white"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#A8B193] ring-1 ring-[#EFE4D6]">
-                <Folder className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate font-black text-[#55534C]">Tous les dossiers</p>
-                <p className="mt-1 text-xs font-bold text-[#746F64]">
-                  {docs.length} document{docs.length > 1 ? "s" : ""}
-                </p>
-              </div>
-            </div>
-          </button>
-
-          {allFolders.map((folder) => {
-            const Icon = folder.icon || Folder;
-            const count = getFolderDocCount(folder.id);
-
-            return (
-              <button
-                key={folder.id}
-                type="button"
-                onClick={() => setSelectedFolderId(folder.id)}
-                className={`rounded-3xl p-4 text-left ring-1 transition ${
-                  selectedFolderId === folder.id
-                    ? "bg-[#EEF6EA] ring-[#D9E8CE]"
-                    : "bg-[#FFFDF8] ring-[#EFE4D6] hover:bg-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
-                    style={{ backgroundColor: folder.color || "#A8B193" }}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-black text-[#55534C]">{folder.name}</p>
-                      {folder.sensitive && (
-                        <Lock className="h-3.5 w-3.5 shrink-0 text-[#B5A7C8]" />
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs font-bold text-[#746F64]">
-                      {count} document{count > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-[#EFE4D6]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-[#55534C]">
-              Tous les documents
-            </h3>
+            <h3 className="text-lg font-bold text-[#55534C]">{selectedFolder ? selectedFolder.name : "Tous les documents"}</h3>
             <p className="mt-1 text-sm text-[#746F64]">
-              Liste complète des documents enregistrés.
+              {searchQuery ? `Résultats pour “${searchQuery}”.` : "Liste complète des documents enregistrés."}
             </p>
           </div>
 
-          <span className="w-fit rounded-full bg-[#F4F8FD] px-3 py-1 text-xs font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">
-            {filteredDocs.length} / {docs.length}
+          <span className="rounded-full bg-[#F4F8FD] px-3 py-1 text-xs font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">
+            {filteredDocs.length}
           </span>
         </div>
-
-        <div className="mt-5 flex flex-col gap-3 lg:flex-row">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B193]" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Rechercher un document, un dossier ou un enfant..."
-              className="w-full rounded-2xl border border-[#DED6C9] bg-[#F7F3EA] py-3 pl-11 pr-11 text-sm font-semibold text-[#55534C] outline-none transition placeholder:text-[#A9A094] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/25"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#746F64] ring-1 ring-[#EFE4D6]"
-                aria-label="Effacer la recherche"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {selectedFolderId !== "all" && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-[#EEF6EA] px-3 py-1 text-xs font-bold text-[#6C8A58] ring-1 ring-[#D9E8CE]">
-              Dossier : {getFolderById(selectedFolderId, allFolders)?.name || "Dossier"}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedFolderId("all")}
-              className="rounded-full bg-[#F8F3EA] px-3 py-1 text-xs font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
-            >
-              Voir tous
-            </button>
-          </div>
-        )}
 
         <div className="mt-5 space-y-3">
           {filteredDocs.length ? (
             filteredDocs.map((doc) => (
-              <DocumentRow
-                key={doc.id || doc.s3Key}
-                doc={doc}
-                onView={openDocument}
-                onMenu={setDocMenu}
-                folder={getFolderById(getDocumentFolderId(doc), allFolders)}
-              />
+              <DocumentRow key={doc.id || doc.s3Key} doc={doc} folder={getFolderById(allFolders, getDocFolderId(doc))} onView={openDocument} onMenu={setDocMenu} />
             ))
           ) : (
             <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-              Aucun document ne correspond à cette recherche.
+              Aucun document trouvé.
             </div>
           )}
         </div>
       </div>
 
-      {selectedDocument && (
-        <DocumentViewer
-          doc={selectedDocument}
-          close={() => setSelectedDocument(null)}
-          onDownload={downloadDocument}
-        />
-      )}
+      {selectedDocument && <DocumentViewer doc={selectedDocument} close={() => setSelectedDocument(null)} onDownload={downloadDocument} />}
 
       {docMenu && (
-        <Popup
-          title={getDocumentTitle(docMenu)}
-          kicker="Options du document"
-          close={() => setDocMenu(null)}
-        >
+        <Popup title={getDocumentTitle(docMenu)} kicker="Options du document" close={() => setDocMenu(null)}>
           <div className="grid !grid-cols-1 gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                openDocument(docMenu);
-                setDocMenu(null);
-              }}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
-            >
+            <button type="button" onClick={() => { openDocument(docMenu); setDocMenu(null); }} className="flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
               <Eye className="h-4 w-4" />
               Ouvrir
             </button>
 
-            <button
-              type="button"
-              onClick={() => openSharePopup(docMenu)}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#F4F8FD] px-4 py-3 text-sm font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]"
-            >
+            <button type="button" onClick={() => openSharePopup(docMenu)} className="flex items-center justify-center gap-2 rounded-2xl bg-[#F4F8FD] px-4 py-3 text-sm font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">
               <Link className="h-4 w-4" />
               Partager par lien sécurisé
             </button>
 
-            <button
-              type="button"
-              onClick={() => disableAllDocumentShareLinks(docMenu)}
-              disabled={disablingAllShares}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#9A7652] ring-1 ring-[#F0D8B8] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {disablingAllShares ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <LinkOff className="h-4 w-4" />
-              )}
-              {disablingAllShares
-                ? "Désactivation..."
-                : "Désactiver tous les liens sécurisés"}
+            <button type="button" onClick={() => disableAllDocumentShareLinks(docMenu)} disabled={disablingAllShares} className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#9A7652] ring-1 ring-[#F0D8B8] disabled:cursor-not-allowed disabled:opacity-60">
+              {disablingAllShares ? <Loader2 className="h-4 w-4 animate-spin" /> : <LinkOff className="h-4 w-4" />}
+              {disablingAllShares ? "Désactivation..." : "Désactiver tous les liens sécurisés"}
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setDeleteDoc(docMenu);
-                setDocMenu(null);
-              }}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
-            >
+            <button type="button" onClick={() => { setDeleteDoc(docMenu); setDocMenu(null); }} className="flex items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]">
               <Trash2 className="h-4 w-4" />
               Supprimer
             </button>
@@ -1283,70 +1105,46 @@ export default function Documents({
       )}
 
       {shareDoc && (
-        <Popup
-          title="Partager ce document"
-          kicker="Lien sécurisé"
-          close={() => {
-            setShareDoc(null);
-            setShareResult(null);
-            setShareError("");
-            setError("");
-          }}
-        >
+        <Popup title="Partager ce document" kicker="Lien sécurisé" close={() => { setShareDoc(null); setShareResult(null); setShareError(""); setError(""); }}>
           <div className="space-y-5">
             <div className="rounded-3xl bg-[#F4F8FD] p-4 ring-1 ring-[#D3DFF1]">
               <div className="flex items-start gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#6A85AF] ring-1 ring-[#D3DFF1]">
                   <ShieldCheck className="h-5 w-5" />
                 </div>
-
                 <div className="min-w-0">
-                  <p className="font-bold text-[#55534C]">
-                    {getDocumentTitle(shareDoc)}
-                  </p>
+                  <p className="font-bold text-[#55534C]">{getDocumentTitle(shareDoc)}</p>
                   <p className="mt-1 text-sm leading-6 text-[#746F64]">
-                    Le lien sera protégé par un code de 4 caractères. Il sera automatiquement désactivé après la durée choisie.
+                    Le lien sera protégé par un code de 4 caractères. Le destinataire pourra seulement visionner le document dans Camelio.
                   </p>
                 </div>
               </div>
             </div>
 
-            {shareError && (
-              <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]">
-                {shareError}
-              </div>
-            )}
+            {shareError && <div className="rounded-2xl bg-[#FBECEF] p-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]">{shareError}</div>}
 
             {!shareResult && (
               <>
+                <FormField label="Mode de partage">
+                  <div className="rounded-3xl bg-[#EEF6EA] p-4 ring-1 ring-[#D9E8CE]">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#6C8A58] ring-1 ring-[#D9E8CE]">
+                        <Eye className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-[#55534C]">Visionnement seulement</p>
+                        <p className="mt-1 text-sm leading-6 text-[#746F64]">
+                          Le téléchargement est retiré de l’interface partagée. La personne peut consulter le document, mais aucun bouton de téléchargement n’est affiché.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </FormField>
+
                 <FormField label="Code d’accès, 4 caractères">
                   <div className="flex gap-2">
-                    <input
-                      className={inputClass("uppercase tracking-[0.35em]")}
-                      value={shareForm.code}
-                      maxLength={4}
-                      onChange={(event) =>
-                        setShareForm((current) => ({
-                          ...current,
-                          code: event.target.value
-                            .toUpperCase()
-                            .replace(/[^A-Z0-9]/g, "")
-                            .slice(0, 4),
-                        }))
-                      }
-                      placeholder="A7K2"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShareForm((current) => ({
-                          ...current,
-                          code: generateAccessCode(),
-                        }))
-                      }
-                      className="shrink-0 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
-                    >
+                    <input className={inputClass("uppercase tracking-[0.35em]")} value={shareForm.code} maxLength={4} onChange={(event) => setShareForm((current) => ({ ...current, code: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) }))} placeholder="A7K2" />
+                    <button type="button" onClick={() => setShareForm((current) => ({ ...current, code: generateAccessCode() }))} className="shrink-0 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">
                       Générer
                     </button>
                   </div>
@@ -1355,82 +1153,18 @@ export default function Documents({
                 <FormField label="Délai avant désactivation">
                   <div className="grid !grid-cols-3 gap-2">
                     {[1, 3, 7].map((days) => (
-                      <button
-                        key={days}
-                        type="button"
-                        onClick={() =>
-                          setShareForm((current) => ({
-                            ...current,
-                            durationDays: days,
-                          }))
-                        }
-                        className={`rounded-2xl px-3 py-3 text-sm font-bold ring-1 transition ${
-                          Number(shareForm.durationDays) === days
-                            ? "bg-[#A8B193] text-white ring-[#A8B193]"
-                            : "bg-white text-[#746F64] ring-[#DED6C9]"
-                        }`}
-                      >
+                      <button key={days} type="button" onClick={() => setShareForm((current) => ({ ...current, durationDays: days }))} className={`rounded-2xl px-3 py-3 text-sm font-bold ring-1 transition ${Number(shareForm.durationDays) === days ? "bg-[#A8B193] text-white ring-[#A8B193]" : "bg-white text-[#746F64] ring-[#DED6C9]"}`}>
                         {days === 1 ? "1 journée" : `${days} jours`}
                       </button>
                     ))}
                   </div>
                 </FormField>
 
-                <FormField label="Accès au document">
-                  <div className="grid !grid-cols-1 gap-2 sm:!grid-cols-2">
-                    {[
-                      { value: "view_only", label: "Visionnement seulement", detail: "Téléchargement masqué" },
-                      { value: "view_download", label: "Visionnement + téléchargement", detail: "Autoriser l’ouverture externe" },
-                    ].map((mode) => (
-                      <button
-                        key={mode.value}
-                        type="button"
-                        onClick={() =>
-                          setShareForm((current) => ({
-                            ...current,
-                            accessMode: mode.value,
-                          }))
-                        }
-                        className={`rounded-2xl px-3 py-3 text-left text-sm font-bold ring-1 transition ${
-                          shareForm.accessMode === mode.value
-                            ? "bg-[#A8B193] text-white ring-[#A8B193]"
-                            : "bg-white text-[#746F64] ring-[#DED6C9]"
-                        }`}
-                      >
-                        <span className="block">{mode.label}</span>
-                        <span className={`mt-1 block text-xs ${
-                          shareForm.accessMode === mode.value ? "text-white/80" : "text-[#8A8175]"
-                        }`}>
-                          {mode.detail}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </FormField>
-
-                <div className="rounded-2xl bg-[#FFF8ED] p-3 text-xs leading-5 text-[#9A7652] ring-1 ring-[#F0D8B8]">
-                  En mode visionnement seulement, Camelio masque les options de téléchargement dans la page partagée. Une capture d’écran demeure toujours possible sur le web.
-                </div>
-
                 <div className="grid !grid-cols-2 gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShareDoc(null);
-                      setShareResult(null);
-                      setError("");
-                    }}
-                    className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
-                  >
+                  <button type="button" onClick={() => { setShareDoc(null); setShareResult(null); setError(""); }} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">
                     Annuler
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={generateShareLink}
-                    disabled={sharing || String(shareForm.code || "").length !== 4}
-                    className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
-                  >
+                  <button type="button" onClick={generateShareLink} disabled={sharing || String(shareForm.code || "").length !== 4} className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
                     {sharing ? "Création..." : "Générer le lien"}
                   </button>
                 </div>
@@ -1439,66 +1173,28 @@ export default function Documents({
 
             {shareResult && (
               <div className="space-y-4">
-                <div className={`rounded-3xl p-4 ring-1 ${
-                  shareResult.disabled
-                    ? "bg-[#F8F3EA] ring-[#EFE4D6]"
-                    : "bg-[#EEF6EA] ring-[#D9E8CE]"
-                }`}>
-                  <p className={`text-sm font-bold ${
-                    shareResult.disabled ? "text-[#746F64]" : "text-[#6C8A58]"
-                  }`}>
-                    {shareResult.disabled
-                      ? "Lien sécurisé désactivé."
-                      : "Lien sécurisé créé avec succès."}
+                <div className={`rounded-3xl p-4 ring-1 ${shareResult.disabled ? "bg-[#F8F3EA] ring-[#EFE4D6]" : "bg-[#EEF6EA] ring-[#D9E8CE]"}`}>
+                  <p className={`text-sm font-bold ${shareResult.disabled ? "text-[#746F64]" : "text-[#6C8A58]"}`}>
+                    {shareResult.disabled ? "Lien sécurisé désactivé." : "Lien sécurisé créé avec succès."}
                   </p>
                   <p className="mt-1 text-sm leading-6 text-[#746F64]">
-                    {shareResult.disabled
-                      ? "Ce lien ne devrait plus permettre l’accès au document."
-                      : `Ce lien sera actif pendant ${getDurationLabel(shareResult.durationDays)}. Partage le lien URL et le code d’accès avec la personne concernée.`}
+                    {shareResult.disabled ? "Ce lien ne devrait plus permettre l’accès au document." : `Ce lien sera actif pendant ${getDurationLabel(shareResult.durationDays)}. Il est en mode visionnement seulement.`}
                   </p>
                 </div>
 
                 {!shareResult.disabled && (
                   <div className="rounded-3xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
-                      Message à partager
-                    </p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">Message à partager</p>
                     <div className="mt-3 rounded-2xl bg-white p-3 text-sm leading-6 text-[#55534C] ring-1 ring-[#EFE4D6]">
-                      <p>Voici le lien sécurisé pour consulter le document :</p>
-                      <p className="mt-2 break-all font-bold">
-                        {shareResult.shareUrl || "Lien non retourné par le serveur"}
-                      </p>
+                      <p>Voici le lien sécurisé pour visionner le document :</p>
+                      <p className="mt-2 break-all font-bold">{shareResult.shareUrl || "Lien non retourné par le serveur"}</p>
+                      <p className="mt-2">Code d’accès : <strong>{shareResult.code}</strong></p>
                       <p className="mt-2">
-                        Code d’accès : <strong>{shareResult.code}</strong>
+                        Le lien sera actif pendant {getDurationLabel(shareResult.durationDays)}{shareResult.expiresAt ? `, jusqu’au ${new Date(shareResult.expiresAt).toLocaleString("fr-CA")}` : ""}.
                       </p>
-                      <p className="mt-2">
-                        Le lien sera actif pendant {getDurationLabel(shareResult.durationDays)}
-                        {shareResult.expiresAt
-                          ? `, jusqu’au ${new Date(shareResult.expiresAt).toLocaleString("fr-CA")}`
-                          : ""}
-                        .
-                      </p>
+                      <p className="mt-2 font-bold text-[#6C8A58]">Accès : visionnement seulement, téléchargement retiré de l’interface.</p>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyToClipboard(
-                          `Voici le lien sécurisé pour consulter le document :\n${
-                            shareResult.shareUrl || ""
-                          }\n\nCode d’accès : ${shareResult.code}\n\nLe lien sera actif pendant ${getDurationLabel(
-                            shareResult.durationDays
-                          )}${
-                            shareResult.expiresAt
-                              ? `, jusqu’au ${new Date(shareResult.expiresAt).toLocaleString("fr-CA")}`
-                              : ""
-                          }.`,
-                          "Message"
-                        )
-                      }
-                      disabled={!shareResult.shareUrl}
-                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
-                    >
+                    <button type="button" onClick={() => copyToClipboard(`Voici le lien sécurisé pour visionner le document :\n${shareResult.shareUrl || ""}\n\nCode d’accès : ${shareResult.code}\n\nLe lien sera actif pendant ${getDurationLabel(shareResult.durationDays)}${shareResult.expiresAt ? `, jusqu’au ${new Date(shareResult.expiresAt).toLocaleString("fr-CA")}` : ""}.\n\nAccès : visionnement seulement, téléchargement retiré de l’interface.`, "Message")} disabled={!shareResult.shareUrl} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
                       <Copy className="h-4 w-4" />
                       Copier le message complet
                     </button>
@@ -1507,36 +1203,18 @@ export default function Documents({
 
                 <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2">
                   <div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
-                      Lien URL
-                    </p>
-                    <p className="mt-2 break-all text-sm font-semibold text-[#55534C]">
-                      {shareResult.shareUrl || "Lien non retourné par le serveur"}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(shareResult.shareUrl, "Lien")}
-                      disabled={!shareResult.shareUrl || shareResult.disabled}
-                      className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50"
-                    >
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">Lien URL</p>
+                    <p className="mt-2 break-all text-sm font-semibold text-[#55534C]">{shareResult.shareUrl || "Lien non retourné par le serveur"}</p>
+                    <button type="button" onClick={() => copyToClipboard(shareResult.shareUrl, "Lien")} disabled={!shareResult.shareUrl || shareResult.disabled} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50">
                       <Copy className="h-4 w-4" />
                       Copier le lien
                     </button>
                   </div>
 
                   <div className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
-                      Code d’accès
-                    </p>
-                    <p className="mt-2 text-2xl font-black tracking-[0.35em] text-[#55534C]">
-                      {shareResult.code}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(shareResult.code, "Code")}
-                      disabled={shareResult.disabled}
-                      className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50"
-                    >
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">Code d’accès</p>
+                    <p className="mt-2 text-2xl font-black tracking-[0.35em] text-[#55534C]">{shareResult.code}</p>
+                    <button type="button" onClick={() => copyToClipboard(shareResult.code, "Code")} disabled={shareResult.disabled} className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9] disabled:opacity-50">
                       <Copy className="h-4 w-4" />
                       Copier le code
                     </button>
@@ -1544,181 +1222,37 @@ export default function Documents({
                 </div>
 
                 <div className="rounded-2xl bg-[#F8F3EA] p-3 ring-1 ring-[#EFE4D6]">
-                  <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
-                    Durée active
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-[#55534C]">
-                    {shareResult.disabled
-                      ? "Lien désactivé manuellement"
-                      : shareResult.expiresAt
-                      ? `Actif jusqu’au ${new Date(shareResult.expiresAt).toLocaleString("fr-CA")}`
-                      : `Actif pendant ${getDurationLabel(shareResult.durationDays)}`}
+                  <p className="text-xs leading-5 text-[#746F64]">
+                    Note : le mode visionnement seulement retire le téléchargement dans l’interface partagée, mais une personne peut toujours faire une capture d’écran.
                   </p>
                 </div>
 
-                <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={disableShareLink}
-                    disabled={disablingShare || shareResult.disabled || !shareResult.token}
-                    className="rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-50"
-                  >
-                    {disablingShare ? "Désactivation..." : "Désactiver le lien"}
+                {!shareResult.disabled && (
+                  <button type="button" onClick={disableShareLink} disabled={disablingShare} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60">
+                    {disablingShare ? <Loader2 className="h-4 w-4 animate-spin" /> : <LinkOff className="h-4 w-4" />}
+                    {disablingShare ? "Désactivation..." : "Désactiver ce lien"}
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShareDoc(null);
-                      setShareResult(null);
-                      setShareError("");
-                    }}
-                    className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white"
-                  >
-                    Terminer
-                  </button>
-                </div>
+                )}
               </div>
             )}
           </div>
         </Popup>
       )}
 
-      {deleteDoc && (
-        <Popup
-          title="Supprimer ce document?"
-          kicker="Confirmation"
-          close={() => setDeleteDoc(null)}
-        >
-          <div className="space-y-4">
-            <p className="text-sm leading-6 text-[#746F64]">
-              Es-tu certain de vouloir supprimer « {getDocumentTitle(deleteDoc)} »?
-            </p>
-
-            <div className="grid !grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteDoc(null)}
-                className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
-              >
-                Annuler
-              </button>
-
-              <button
-                type="button"
-                onClick={confirmDeleteDoc}
-                disabled={saving}
-                className="rounded-2xl bg-[#B96B77] px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
-              >
-                {saving ? "Suppression..." : "Supprimer"}
-              </button>
-            </div>
-          </div>
-        </Popup>
-      )}
-
-      {selectedChildDocs && (
-        <Popup
-          title={`Documents de ${getChildName(selectedChildDocs)}`}
-          kicker="Fiche enfant"
-          close={() => setSelectedChildDocs(null)}
-        >
-          <div className="space-y-4">
-            <div
-              className={`flex items-center gap-3 rounded-3xl p-4 ring-1 ${
-                getColor(selectedChildDocs.color).soft
-              }`}
-            >
-              {getChildPhoto(selectedChildDocs) ? (
-                <img
-                  src={getChildPhoto(selectedChildDocs)}
-                  alt={getChildName(selectedChildDocs)}
-                  className="h-14 w-14 rounded-2xl object-cover"
-                />
-              ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-lg font-extrabold text-[#A8B193]">
-                  {getChildName(selectedChildDocs).slice(0, 1)}
-                </div>
-              )}
-
-              <div>
-                <p className="font-bold text-[#55534C]">
-                  {getChildName(selectedChildDocs)}
-                </p>
-
-                <p className="text-sm text-[#746F64]">
-                  {childDocs(selectedChildDocs).length} document
-                  {childDocs(selectedChildDocs).length > 1 ? "s" : ""}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {childDocs(selectedChildDocs).length ? (
-                childDocs(selectedChildDocs).map((doc) => (
-                  <DocumentRow
-                    key={doc.id || doc.s3Key}
-                    doc={doc}
-                    onView={openDocument}
-                    onMenu={setDocMenu}
-                    folder={getFolderById(getDocumentFolderId(doc), allFolders)}
-                  />
-                ))
-              ) : (
-                <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-                  Aucun document pour cet enfant.
-                </div>
-              )}
-            </div>
-          </div>
-        </Popup>
-      )}
-
       {showFolderPopup && (
-        <Popup
-          title="Créer un dossier"
-          kicker="Classement des documents"
-          close={() => {
-            setShowFolderPopup(false);
-            setFolderForm({ name: "" });
-            setError("");
-          }}
-        >
-          <div className="space-y-5">
-            <div className="rounded-3xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
-              <p className="text-sm leading-6 text-[#746F64]">
-                Crée un dossier personnalisé pour regrouper des documents comme orthophonie, camp de jour, voyage, garderie ou activités sportives.
-              </p>
-            </div>
-
+        <Popup title="Créer un dossier" kicker="Dossier personnalisé" close={() => setShowFolderPopup(false)}>
+          <div className="space-y-4">
             <FormField label="Nom du dossier">
-              <input
-                className={inputClass()}
-                value={folderForm.name}
-                onChange={(event) => setFolderForm({ name: event.target.value })}
-                placeholder="Ex. Orthophonie"
-                autoFocus
-              />
+              <input className={inputClass()} value={folderForm.name} onChange={(event) => setFolderForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ex. Garderie, soccer, orthophonie" />
             </FormField>
-
-            <div className="grid !grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowFolderPopup(false);
-                  setFolderForm({ name: "" });
-                  setError("");
-                }}
-                className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
-              >
+            <FormField label="Description facultative">
+              <textarea className={inputClass("min-h-[100px] resize-none")} value={folderForm.description} onChange={(event) => setFolderForm((current) => ({ ...current, description: event.target.value }))} placeholder="Ajoutez une courte description pour retrouver ce dossier plus facilement." />
+            </FormField>
+            <div className="grid !grid-cols-2 gap-3">
+              <button type="button" onClick={() => setShowFolderPopup(false)} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">
                 Annuler
               </button>
-
-              <button
-                type="button"
-                onClick={createFolder}
-                className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white"
-              >
+              <button type="button" onClick={createCustomFolder} className="rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white">
                 Créer
               </button>
             </div>
@@ -1727,196 +1261,89 @@ export default function Documents({
       )}
 
       {showDocPopup && (
-        <Popup
-          title="Ajouter un document"
-          kicker="Nouveau document"
-          close={() => {
-            setShowDocPopup(false);
-            setError("");
-          }}
-        >
-          <div className="space-y-5">
-            <FormField label="Titre">
-              <input
-                className={inputClass()}
-                value={form.title}
-                onChange={(event) =>
-                  setForm({ ...form, title: event.target.value })
-                }
-                placeholder="Ex. Carte assurance maladie"
-                autoFocus
-              />
-            </FormField>
-
-            <div className="grid !grid-cols-1 gap-3 sm:!grid-cols-2">
-              <FormField label="Type de document">
-                <select
-                  className={inputClass()}
-                  value={form.type}
-                  onChange={(event) =>
-                    setForm({ ...form, type: event.target.value })
-                  }
-                >
-                  {documentTypes.map((type) => (
-                    <option key={type}>{type}</option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Associé à l’enfant">
-                <select
-                  className={inputClass()}
-                  value={form.childId}
-                  onChange={(event) =>
-                    setForm({ ...form, childId: event.target.value })
-                  }
-                >
-                  {!children.length && (
-                    <option value="">Aucun enfant disponible</option>
-                  )}
-
-                  {children.map((child) => (
-                    <option key={getChildId(child)} value={getChildId(child)}>
-                      {getChildName(child)}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-            </div>
-
-            <FormField label="Dossier">
-              <select
-                className={inputClass()}
-                value={form.folderId}
-                onChange={(event) => {
-                  const folder = getFolderById(event.target.value, allFolders);
-                  setForm({
-                    ...form,
-                    folderId: event.target.value,
-                    type: folder?.category || form.type,
-                  });
-                }}
-              >
-                {allFolders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </option>
+        <Popup title="Ajouter un document" kicker="Documents" close={() => { resetForm(); setShowDocPopup(false); }}>
+          <div className="space-y-4">
+            <FormField label="Enfant associé">
+              <select className={inputClass()} value={form.childId} onChange={(event) => setForm((current) => ({ ...current, childId: event.target.value }))}>
+                {!children.length && <option value="">Aucun enfant disponible</option>}
+                {children.map((child) => (
+                  <option key={getChildId(child)} value={getChildId(child)}>{getChildName(child)}</option>
                 ))}
               </select>
             </FormField>
 
             {selectedChild && (
-              <div
-                className={`rounded-3xl p-4 ring-1 ${
-                  getColor(selectedChild.color).soft
-                }`}
-              >
-                <p className="text-xs font-bold uppercase tracking-wide text-[#8A8175]">
-                  Document associé à
-                </p>
-                <p className="mt-1 text-lg font-extrabold text-[#55534C]">
-                  {getChildName(selectedChild)}
-                </p>
+              <div className="rounded-3xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
+                <p className="text-sm font-bold text-[#55534C]">Document pour {getChildName(selectedChild)}</p>
               </div>
             )}
 
-            <div className="rounded-2xl bg-[#F8F3EA] p-4 ring-1 ring-[#DED6C9]">
-              <p className="text-[0.72rem] font-bold uppercase tracking-[0.06em] text-[#8A8175]">
-                Fichier
-              </p>
-
-              <div className="mt-3 grid !grid-cols-1 gap-3 sm:!grid-cols-2">
-                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-white px-3 py-4 text-center text-xs font-bold text-[#746F64] ring-1 ring-[#DED6C9]">
-                  <Download className="h-5 w-5" />
-                  Choisir un document
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept={allowedAccept}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      handleFileSelection(file);
-                    }}
-                  />
-                </label>
-
-                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-white px-3 py-4 text-center text-xs font-bold text-[#746F64] ring-1 ring-[#DED6C9]">
-                  <Camera className="h-5 w-5" />
-                  Prendre une photo
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/png,image/jpeg,image/webp"
-                    capture="environment"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      handleFileSelection(file);
-                    }}
-                  />
-                </label>
-              </div>
-
-              {form.fileName && (
-                <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white p-3 text-sm ring-1 ring-[#DED6C9]">
-                  <div className="min-w-0">
-                    <p className="truncate font-bold text-[#55534C]">
-                      {form.fileName}
-                    </p>
-                    <p className="text-xs text-[#746F64]">
-                      {formatFileSize(form.fileSize)} · Document sélectionné
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedFile(null);
-                      setForm({
-                        ...form,
-                        fileName: "",
-                        fileSize: null,
-                        fileType: "",
-                      });
-                    }}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FBECEF] text-lg font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <FormField label="Note">
-              <textarea
-                className={inputClass("resize-none")}
-                rows={4}
-                value={form.note}
-                onChange={(event) =>
-                  setForm({ ...form, note: event.target.value })
-                }
-                placeholder="Information utile sur ce document..."
-              />
+            <FormField label="Dossier">
+              <select className={inputClass()} value={form.folderId} onChange={(event) => setForm((current) => ({ ...current, folderId: event.target.value }))}>
+                {allFolders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>{folder.name}</option>
+                ))}
+              </select>
             </FormField>
 
-            <div className="grid !grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDocPopup(false);
-                  setError("");
-                }}
-                className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]"
-              >
+            <FormField label="Type de document">
+              <select className={inputClass()} value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}>
+                {documentTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </FormField>
+
+            <FormField label="Nom du document">
+              <input className={inputClass()} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Ex. Carte d’assurance maladie" />
+            </FormField>
+
+            <FormField label="Fichier">
+              <input type="file" accept={allowedAccept} onChange={(event) => handleFileSelection(event.target.files?.[0])} className="block w-full rounded-2xl border border-dashed border-[#DED6C9] bg-[#FFFDF8] px-4 py-4 text-sm font-semibold text-[#746F64]" />
+            </FormField>
+
+            {selectedFile && (
+              <div className="rounded-2xl bg-[#F4F8FD] p-3 text-sm font-bold text-[#6A85AF] ring-1 ring-[#D3DFF1]">
+                {selectedFile.name} · {formatFileSize(selectedFile.size)}
+              </div>
+            )}
+
+            <FormField label="Note facultative">
+              <textarea className={inputClass("min-h-[110px] resize-none")} value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} placeholder="Ajoutez une note pour retrouver le document plus facilement." />
+            </FormField>
+
+            <div className="grid !grid-cols-2 gap-3 pt-2">
+              <button type="button" onClick={() => { resetForm(); setShowDocPopup(false); }} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">
                 Annuler
               </button>
+              <button type="button" onClick={addDoc} disabled={saving} className="rounded-2xl bg-[#EEC988] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+                {saving ? "Ajout..." : "Ajouter"}
+              </button>
+            </div>
+          </div>
+        </Popup>
+      )}
 
-              <button
-                type="button"
-                onClick={addDoc}
-                disabled={saving || !children.length}
-                className="rounded-2xl bg-[#EEC988] px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
-              >
-                {saving ? "Envoi..." : "Ajouter"}
+      {selectedChildDocs && (
+        <Popup title={`Documents de ${getChildName(selectedChildDocs)}`} kicker="Documents par enfant" close={() => setSelectedChildDocs(null)}>
+          <div className="space-y-3">
+            {childDocs(selectedChildDocs).length ? (
+              childDocs(selectedChildDocs).map((doc) => <DocumentRow key={doc.id || doc.s3Key} doc={doc} folder={getFolderById(allFolders, getDocFolderId(doc))} onView={openDocument} onMenu={setDocMenu} />)
+            ) : (
+              <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun document pour cet enfant.</div>
+            )}
+          </div>
+        </Popup>
+      )}
+
+      {deleteDoc && (
+        <Popup title="Supprimer ce document?" kicker="Confirmation" close={() => setDeleteDoc(null)}>
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-[#746F64]">Cette action supprimera le document de Camelio. Elle ne peut pas être annulée.</p>
+            <div className="grid !grid-cols-2 gap-3">
+              <button type="button" onClick={() => setDeleteDoc(null)} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#DED6C9]">
+                Annuler
+              </button>
+              <button type="button" onClick={confirmDeleteDoc} disabled={saving} className="rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60">
+                {saving ? "Suppression..." : "Supprimer"}
               </button>
             </div>
           </div>

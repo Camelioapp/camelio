@@ -28,7 +28,7 @@ const inputClass =
 const APP_VERSION = "1.0.0";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+  import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
 const themeChoices = [
   {

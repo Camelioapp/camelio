@@ -19,7 +19,7 @@ import { Popup, SectionTitle } from "./shared.jsx";
 import { displayName } from "./sectionsData.js";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
+  import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
 const defaultPhotoPosition = { x: 50, y: 50 };
 

@@ -1232,7 +1232,8 @@ function cleanDocumentPayload(body = {}) {
     childId: body.childId || "",
     childName: body.childName || "",
     category: body.category || body.type || "Document",
-    folderId: body.folderId || "other",
+    folderId: body.folderId || body.folder || "other",
+    folderName: body.folderName || "Autres documents",
     title: body.title || fileName || "Document",
     note: body.note || "",
   };
@@ -5465,7 +5466,8 @@ app.post(
   childId: payload.childId,
   childName: payload.childName,
   category: payload.category,
-  folderId: payload.folderId,
+  folderId: payload.folderId || "other",
+  folderName: payload.folderName || "Autres documents",
   title: payload.title,
   note: payload.note,
   fileName: payload.fileName,
@@ -5671,9 +5673,7 @@ app.post(
       const { documentId } = req.params;
       const code = normalizeShareCode(req.body?.code);
       const durationDays = Number(req.body?.durationDays);
-      const accessMode = ["view_only", "view_download"].includes(req.body?.accessMode)
-        ? req.body.accessMode
-        : "view_only";
+      const accessMode = "view_only";
 
       if (!isValidShareCode(code)) {
         return res.status(400).json({
@@ -5753,6 +5753,7 @@ app.post(
         codeHash: hashShareCode(code, salt),
         durationDays,
         accessMode,
+        allowDownload: false,
         shareUrl,
         accessCount: 0,
         failedAttempts: 0,
@@ -5778,7 +5779,8 @@ app.post(
         expiresAt,
         durationDays,
         accessMode,
-        message: `Lien sécurisé créé. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
+        allowDownload: false,
+        message: `Lien sécurisé créé en mode visionnement seulement. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
       });
     } catch (error) {
       next(error);
@@ -5828,8 +5830,9 @@ app.get(
         fileSize: share.fileSize || 0,
         childName: share.childName || "",
         expiresAt: share.expiresAt,
-        requiresCode: true,
         accessMode: share.accessMode || "view_only",
+        allowDownload: false,
+        requiresCode: true,
       });
     } catch (error) {
       next(error);
@@ -5924,7 +5927,7 @@ app.post(
         });
       }
 
-      const downloadUrl = await getSignedUrl(
+      const viewUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({
           Bucket: S3_DOCUMENTS_BUCKET,
@@ -5952,13 +5955,14 @@ app.post(
 
       return res.json({
         success: true,
-        downloadUrl,
-        url: downloadUrl,
+        viewUrl,
+        url: viewUrl,
         expiresIn: 300,
+        accessMode: share.accessMode || "view_only",
+        allowDownload: false,
         documentName: share.documentName || share.fileName || "Document Camelio",
         fileName: share.fileName || "",
         fileType: share.fileType || "",
-        accessMode: share.accessMode || "view_only",
       });
     } catch (error) {
       next(error);
