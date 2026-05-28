@@ -7,6 +7,7 @@ import {
   Eye,
   FileText,
   Link,
+  LinkOff,
   Loader2,
   MoreHorizontal,
   RefreshCw,
@@ -344,6 +345,7 @@ export default function Documents({
   const [shareError, setShareError] = useState("");
   const [sharing, setSharing] = useState(false);
   const [disablingShare, setDisablingShare] = useState(false);
+  const [disablingAllShares, setDisablingAllShares] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -687,6 +689,53 @@ export default function Documents({
     }
   };
 
+
+  const disableAllDocumentShareLinks = async (doc) => {
+    if (!doc?.id) {
+      setError("Impossible de désactiver les liens sécurisés, document introuvable.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Désactiver tous les liens sécurisés associés à ce document? Les personnes qui ont déjà reçu un lien ne pourront plus l’utiliser."
+    );
+
+    if (!confirmed) return;
+
+    setDisablingAllShares(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/documents/${doc.id}/share-links`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message || "Impossible de désactiver les liens sécurisés."
+        );
+      }
+
+      setDocMenu(null);
+      setSuccess(
+        data?.message || "Tous les liens sécurisés de ce document ont été désactivés."
+      );
+    } catch (err) {
+      setError(
+        err.message || "Impossible de désactiver les liens sécurisés de ce document."
+      );
+    } finally {
+      setDisablingAllShares(false);
+    }
+  };
+
   const copyToClipboard = async (value, label = "Information") => {
     if (!value) return;
 
@@ -920,19 +969,7 @@ export default function Documents({
               className="flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
             >
               <Eye className="h-4 w-4" />
-              Ouvrir le document
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                downloadDocument(docMenu);
-                setDocMenu(null);
-              }}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
-            >
-              <Download className="h-4 w-4" />
-              Télécharger
+              Ouvrir
             </button>
 
             <button
@@ -946,6 +983,22 @@ export default function Documents({
 
             <button
               type="button"
+              onClick={() => disableAllDocumentShareLinks(docMenu)}
+              disabled={disablingAllShares}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#9A7652] ring-1 ring-[#F0D8B8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {disablingAllShares ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LinkOff className="h-4 w-4" />
+              )}
+              {disablingAllShares
+                ? "Désactivation..."
+                : "Désactiver tous les liens sécurisés"}
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 setDeleteDoc(docMenu);
                 setDocMenu(null);
@@ -953,7 +1006,7 @@ export default function Documents({
               className="flex items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
             >
               <Trash2 className="h-4 w-4" />
-              Supprimer le document
+              Supprimer
             </button>
 
             <button
