@@ -4,6 +4,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  ListChecks,
+  Palette,
   Plus,
   Trash2,
   UserRound,
@@ -12,8 +14,7 @@ import {
 import { Field, Popup, SectionTitle } from "./shared.jsx";
 import { displayName, getColor } from "./sectionsData.js";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://api.camelio.app";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
 const MONTHS = [
   "Janvier",
@@ -31,9 +32,17 @@ const MONTHS = [
 ];
 
 const WEEK_DAYS = ["D", "L", "M", "M", "J", "V", "S"];
+const WEEK_DAYS_LONG = [
+  "Dimanche",
+  "Lundi",
+  "Mardi",
+  "Mercredi",
+  "Jeudi",
+  "Vendredi",
+  "Samedi",
+];
 
 const EMOJIS = ["⚑", "🏥", "🦷", "⚽", "🎒", "🎵", "🎂", "🚗"];
-
 const RECURRENCES = [
   "Aucune",
   "Chaque semaine",
@@ -60,6 +69,18 @@ const calendarColorOptions = [
   { id: "sand", label: "Sable", hex: "#D8C49A" },
 ];
 
+const inputClass =
+  "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
+
+const selectClass =
+  "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
+
+const textareaClass =
+  "w-full min-h-[140px] rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold leading-6 text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20 resize-none";
+
+const timeButtonClass =
+  "mt-2 flex w-full items-center justify-between rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-left text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition hover:bg-white focus:border-[#A8B193] focus:ring-2 focus:ring-[#A8B193]/20";
+
 function getCalendarColor(colorId) {
   if (!colorId) return calendarColorOptions[0];
 
@@ -81,18 +102,6 @@ function getHexColor(colorId) {
   return getCalendarColor(colorId).hex;
 }
 
-const inputClass =
-  "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
-
-const selectClass =
-  "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
-
-const textareaClass =
-  "w-full min-h-[150px] rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold leading-6 text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20 resize-none";
-
-const timeButtonClass =
-  "mt-2 flex w-full items-center justify-between rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-left text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition hover:bg-white focus:border-[#A8B193] focus:ring-2 focus:ring-[#A8B193]/20";
-
 function getDaysInMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
@@ -109,23 +118,25 @@ function dateToKey(date) {
 
 function getStartOfWeek(date) {
   const nextDate = new Date(date);
-  const dayIndex = nextDate.getDay();
-
-  nextDate.setDate(nextDate.getDate() - dayIndex);
+  nextDate.setDate(nextDate.getDate() - nextDate.getDay());
   nextDate.setHours(0, 0, 0, 0);
-
   return nextDate;
 }
 
-function getWeekDates(year, month, day) {
-  const selectedDate = new Date(year, month, day);
-  const startOfWeek = getStartOfWeek(selectedDate);
+function getWeekDates(date) {
+  const startOfWeek = getStartOfWeek(date);
 
   return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(startOfWeek);
-    date.setDate(startOfWeek.getDate() + index);
-    return date;
+    const nextDate = new Date(startOfWeek);
+    nextDate.setDate(startOfWeek.getDate() + index);
+    return nextDate;
   });
+}
+
+function formatLongDate(date) {
+  return `${WEEK_DAYS_LONG[date.getDay()]} ${date.getDate()} ${MONTHS[
+    date.getMonth()
+  ].toLowerCase()} ${date.getFullYear()}`;
 }
 
 function getChildPhoto(child) {
@@ -133,11 +144,9 @@ function getChildPhoto(child) {
 }
 
 function getChildInitials(child) {
-  const first =
-    child?.firstName?.trim()?.[0] || child?.name?.trim()?.[0] || "";
+  const first = child?.firstName?.trim()?.[0] || child?.name?.trim()?.[0] || "";
   const last = child?.lastName?.trim()?.[0] || "";
   const initials = `${first}${last}`.toUpperCase();
-
   return initials || "";
 }
 
@@ -145,7 +154,7 @@ function formatEventFromServer(event) {
   return {
     id: event.id,
     title: event.title || "",
-    eventType: event.eventType || event.type || "Garde",
+    eventType: event.eventType || event.type || "custody",
     childIds: Array.isArray(event.childIds) ? event.childIds : [],
     childNames: Array.isArray(event.childNames) ? event.childNames : [],
     date: event.date || "",
@@ -177,13 +186,25 @@ function isAppointmentEvent(event) {
   );
 }
 
+function eventTypeLabel(event) {
+  if (event.eventType === "custody" || event.eventType === "Garde") {
+    return "Garde";
+  }
+
+  if (event.eventType === "appointment" || event.eventType === "Rendez-vous") {
+    return "Rendez-vous";
+  }
+
+  if (event.eventType === "both") return "Garde et rendez-vous";
+
+  return event.eventType || "Événement";
+}
+
 function TimeDropdown({ label, value, onChange }) {
   const [open, setOpen] = useState(false);
-
   const hours = Array.from({ length: 24 }, (_, index) =>
     String(index).padStart(2, "0")
   );
-
   const minutes = ["00", "15", "30", "45"];
   const [hour, minute] = value ? value.split(":") : ["", ""];
 
@@ -270,86 +291,79 @@ function TimeDropdown({ label, value, onChange }) {
   );
 }
 
-function QuickList({ title, items, childrenList, type, onEdit }) {
+function ChildAvatar({ child, checked = false }) {
+  const photo = getChildPhoto(child);
+  const initials = getChildInitials(child);
+
   return (
-    <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm">
-      <h3 className="text-lg font-bold text-[#55534C]">{title}</h3>
+    <span
+      className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#EEF0E7] text-sm font-bold text-[#8F9874] ring-1 ${
+        checked ? "ring-[#A8B193]" : "ring-[#E5D9CA]"
+      }`}
+    >
+      {photo ? (
+        <img
+          src={photo}
+          alt={displayName(child)}
+          className="h-full w-full object-cover"
+        />
+      ) : initials ? (
+        initials
+      ) : (
+        <UserRound className="h-5 w-5" />
+      )}
+    </span>
+  );
+}
 
-      <div className="mt-4 space-y-3">
-        {items.length ? (
-          items.map((item) => {
-            const childNames =
-              item.childNames?.length > 0
-                ? item.childNames.join(", ")
-                : item.childIds
-                    .map((childId) => {
-                      const child = childrenList.find(
-                        (currentChild) => currentChild.id === childId
-                      );
-                      return child ? displayName(child) : "";
-                    })
-                    .filter(Boolean)
-                    .join(", ");
-
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onEdit(item)}
-                className="w-full rounded-2xl bg-[#FFFDF8] p-4 text-left ring-1 ring-[#EFE4D6] transition hover:bg-white hover:shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-[#55534C]">
-                      {item.title || item.eventType}
-                    </p>
-
-                    <p className="mt-1 text-sm text-[#746F64]">
-                      {item.note || item.date}
-                    </p>
-
-                    {(item.start || item.end) && (
-                      <p className="mt-1 text-xs font-bold text-[#6A85AF]">
-                        Heure : {item.start || "--:--"}
-                        {item.end ? ` à ${item.end}` : ""}
-                      </p>
-                    )}
-
-                    {childNames && (
-                      <p className="mt-1 text-xs font-bold text-[#8A8175]">
-                        Enfant : {childNames}
-                      </p>
-                    )}
-
-                    {item.recurrence && item.recurrence !== "Aucune" && (
-                      <p className="mt-1 text-xs font-bold text-[#8475A5]">
-                        Fréquence : {item.recurrence}
-                      </p>
-                    )}
-                  </div>
-
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-sm font-bold ${
-                      type === "appointment"
-                        ? "bg-[#FFFAEF] text-[#B68E3D] ring-1 ring-[#F1DDAE]"
-                        : "bg-[#F0F3EA] text-[#7A8564] ring-1 ring-[#DDE4D2]"
-                    }`}
-                  >
-                    {type === "appointment"
-                      ? item.appointmentEmoji || "⚑"
-                      : "✓"}
-                  </span>
-                </div>
-              </button>
-            );
+function EventCard({ event, childrenList, onClick }) {
+  const color = getColor(event.color);
+  const childNames =
+    event.childNames?.length > 0
+      ? event.childNames
+      : event.childIds
+          .map((childId) => {
+            const child = childrenList.find((item) => item.id === childId);
+            return child ? displayName(child) : "";
           })
-        ) : (
-          <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-            Aucun élément à venir ce mois-ci.
-          </div>
+          .filter(Boolean);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(event)}
+      className={`w-full rounded-3xl p-4 text-left ring-1 transition hover:brightness-[0.98] ${color.soft}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-bold text-[#4F4A45]">
+            {isAppointmentEvent(event) ? `${event.appointmentEmoji || "⚑"} ` : ""}
+            {event.title || eventTypeLabel(event)}
+          </p>
+          <p className="mt-1 text-xs font-bold text-[#746F64]">
+            {eventTypeLabel(event)}
+          </p>
+        </div>
+
+        {(event.start || event.end) && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-[#55534C]">
+            <Clock className="h-3.5 w-3.5" />
+            {event.start || "--:--"}
+            {event.end ? ` - ${event.end}` : ""}
+          </span>
         )}
       </div>
-    </div>
+
+      {childNames.length > 0 && (
+        <p className="mt-3 text-sm font-semibold text-[#5F5A52]">
+          {childNames.join(", ")}
+        </p>
+      )}
+
+      {event.note && (
+        <p className="mt-2 text-sm leading-5 text-[#746F64]">{event.note}</p>
+      )}
+    </button>
   );
 }
 
@@ -358,25 +372,27 @@ export default function CalendarView({ children = [] }) {
   const startYear = today.getFullYear();
   const maxYear = 2030;
 
-  const [viewMode, setViewMode] = useState("month");
-
+  const [viewMode, setViewMode] = useState("today");
   const [year, setYear] = useState(startYear);
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(today.getDate());
+  const [selectedChildId, setSelectedChildId] = useState("all");
 
   const [events, setEvents] = useState([]);
   const [showEditor, setShowEditor] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
-
   const [openCalendarColors, setOpenCalendarColors] = useState(false);
   const [appointmentColor, setAppointmentColor] = useState("sage");
   const [appointmentEmoji, setAppointmentEmoji] = useState("⚑");
-
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const selectedDateKey = toDateKey(year, month, selectedDay);
-  const monthStartOffset = new Date(year, month, 1).getDay();
+  const selectedDate = useMemo(
+    () => new Date(year, month, selectedDay),
+    [year, month, selectedDay]
+  );
+  const selectedDateKey = dateToKey(selectedDate);
+  const todayKey = dateToKey(today);
 
   const [draft, setDraft] = useState({
     title: "",
@@ -395,30 +411,27 @@ export default function CalendarView({ children = [] }) {
     loadEvents();
   }, []);
 
+  const filteredEvents = useMemo(() => {
+    if (selectedChildId === "all") return events;
+    return events.filter((event) => event.childIds.includes(selectedChildId));
+  }, [events, selectedChildId]);
+
   const selectedDateEvents = useMemo(() => {
-    return events.filter((event) => event.date === selectedDateKey);
-  }, [events, selectedDateKey]);
+    return filteredEvents
+      .filter((event) => event.date === selectedDateKey)
+      .sort((a, b) => String(a.start || "99:99").localeCompare(String(b.start || "99:99")));
+  }, [filteredEvents, selectedDateKey]);
 
-  const days = useMemo(() => {
-    const totalDays = getDaysInMonth(year, month);
-
-    return Array.from({ length: totalDays }, (_, index) => {
-      const day = index + 1;
-      const dateKey = toDateKey(year, month, day);
-      const dayEvents = events.filter((event) => event.date === dateKey);
-
-      return {
-        day,
-        dateKey,
-        events: dayEvents,
-      };
-    });
-  }, [year, month, events]);
+  const todayEvents = useMemo(() => {
+    return events
+      .filter((event) => event.date === todayKey)
+      .sort((a, b) => String(a.start || "99:99").localeCompare(String(b.start || "99:99")));
+  }, [events, todayKey]);
 
   const weekDays = useMemo(() => {
-    return getWeekDates(year, month, selectedDay).map((date) => {
+    return getWeekDates(selectedDate).map((date) => {
       const dateKey = dateToKey(date);
-      const dayEvents = events.filter((event) => event.date === dateKey);
+      const dayEvents = filteredEvents.filter((event) => event.date === dateKey);
 
       return {
         date,
@@ -429,26 +442,39 @@ export default function CalendarView({ children = [] }) {
         events: dayEvents,
       };
     });
-  }, [year, month, selectedDay, events]);
+  }, [selectedDate, filteredEvents]);
 
-  const upcomingAppointments = useMemo(() => {
-    return events
-      .filter((event) => event.date >= selectedDateKey && isAppointmentEvent(event))
-      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-      .slice(0, 5);
-  }, [events, selectedDateKey]);
+  const days = useMemo(() => {
+    const totalDays = getDaysInMonth(year, month);
 
-  const upcomingCustody = useMemo(() => {
-    return events
-      .filter(
-        (event) =>
-          event.date >= selectedDateKey &&
-          isCustodyEvent(event) &&
-          event.childIds.length > 0
-      )
-      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-      .slice(0, 5);
-  }, [events, selectedDateKey]);
+    return Array.from({ length: totalDays }, (_, index) => {
+      const day = index + 1;
+      const dateKey = toDateKey(year, month, day);
+      const dayEvents = filteredEvents.filter((event) => event.date === dateKey);
+
+      return {
+        day,
+        dateKey,
+        events: dayEvents,
+      };
+    });
+  }, [year, month, filteredEvents]);
+
+  const monthStartOffset = new Date(year, month, 1).getDay();
+
+  const upcomingEvents = useMemo(() => {
+    return filteredEvents
+      .filter((event) => event.date >= todayKey)
+      .sort((a, b) => {
+        const dateCompare = String(a.date).localeCompare(String(b.date));
+        if (dateCompare !== 0) return dateCompare;
+        return String(a.start || "99:99").localeCompare(String(b.start || "99:99"));
+      })
+      .slice(0, 8);
+  }, [filteredEvents, todayKey]);
+
+  const weekStart = weekDays[0]?.date || selectedDate;
+  const weekEnd = weekDays[6]?.date || selectedDate;
 
   async function loadEvents() {
     try {
@@ -482,37 +508,23 @@ export default function CalendarView({ children = [] }) {
     }
   }
 
-  function previousMonth() {
-    if (year === startYear && month === today.getMonth()) return;
-
-    if (month === 0) {
-      setYear((current) => Math.max(startYear, current - 1));
-      setMonth(11);
-      setSelectedDay(1);
-      return;
-    }
-
-    setMonth((current) => current - 1);
-    setSelectedDay(1);
+  function goToToday() {
+    setYear(today.getFullYear());
+    setMonth(today.getMonth());
+    setSelectedDay(today.getDate());
+    setViewMode("today");
   }
 
-  function nextMonth() {
-    if (year === maxYear && month === 11) return;
-
-    if (month === 11) {
-      setYear((current) => Math.min(maxYear, current + 1));
-      setMonth(0);
-      setSelectedDay(1);
-      return;
-    }
-
-    setMonth((current) => current + 1);
-    setSelectedDay(1);
-  }
-
-  function previousWeek() {
+  function previousPeriod() {
     const currentDate = new Date(year, month, selectedDay);
-    currentDate.setDate(currentDate.getDate() - 7);
+
+    if (viewMode === "month") {
+      if (year === startYear && month === today.getMonth()) return;
+      currentDate.setMonth(currentDate.getMonth() - 1);
+      currentDate.setDate(1);
+    } else {
+      currentDate.setDate(currentDate.getDate() - 7);
+    }
 
     if (currentDate.getFullYear() < startYear) return;
 
@@ -521,9 +533,16 @@ export default function CalendarView({ children = [] }) {
     setSelectedDay(currentDate.getDate());
   }
 
-  function nextWeek() {
+  function nextPeriod() {
     const currentDate = new Date(year, month, selectedDay);
-    currentDate.setDate(currentDate.getDate() + 7);
+
+    if (viewMode === "month") {
+      if (year === maxYear && month === 11) return;
+      currentDate.setMonth(currentDate.getMonth() + 1);
+      currentDate.setDate(1);
+    } else {
+      currentDate.setDate(currentDate.getDate() + 7);
+    }
 
     if (currentDate.getFullYear() > maxYear) return;
 
@@ -532,28 +551,11 @@ export default function CalendarView({ children = [] }) {
     setSelectedDay(currentDate.getDate());
   }
 
-  function handlePreviousPeriod() {
-    if (viewMode === "week") {
-      previousWeek();
-      return;
-    }
-
-    previousMonth();
-  }
-
-  function handleNextPeriod() {
-    if (viewMode === "week") {
-      nextWeek();
-      return;
-    }
-
-    nextMonth();
-  }
-
-  function selectDate(nextYear, nextMonth, nextDay) {
+  function selectDate(nextYear, nextMonth, nextDay, nextView = null) {
     setYear(nextYear);
     setMonth(nextMonth);
     setSelectedDay(nextDay);
+    if (nextView) setViewMode(nextView);
   }
 
   function getChildNamesFromIds(childIds) {
@@ -568,7 +570,6 @@ export default function CalendarView({ children = [] }) {
   function getPrimaryColor(childIds = []) {
     const firstChildId = childIds[0];
     const firstChild = children.find((child) => child.id === firstChildId);
-
     return firstChild?.color || appointmentColor || "sage";
   }
 
@@ -579,9 +580,7 @@ export default function CalendarView({ children = [] }) {
       if (!isCustodyEvent(event)) return;
 
       event.childIds.forEach((childId) => {
-        if (!childIds.includes(childId)) {
-          childIds.push(childId);
-        }
+        if (!childIds.includes(childId)) childIds.push(childId);
       });
     });
 
@@ -596,13 +595,28 @@ export default function CalendarView({ children = [] }) {
     });
   }
 
-  function openNewEvent() {
+  function getChildTodaySummary(child) {
+    const childEvents = todayEvents.filter((event) => event.childIds.includes(child.id));
+    const custody = childEvents.find(isCustodyEvent);
+    const appointment = childEvents.find(isAppointmentEvent);
+
+    return {
+      custodyText: custody?.title || custody?.note || "Aucune garde prévue",
+      appointmentText: appointment
+        ? `${appointment.start ? `${appointment.start} · ` : ""}${appointment.title || "Rendez-vous"}`
+        : "Aucun rendez-vous",
+      hasCustody: Boolean(custody),
+      hasAppointment: Boolean(appointment),
+    };
+  }
+
+  function openNewEvent(dateKey = selectedDateKey) {
     setSelectedEventId(null);
     setDraft({
       title: "",
       eventType: "custody",
-      childIds: [],
-      date: selectedDateKey,
+      childIds: selectedChildId === "all" ? [] : [selectedChildId],
+      date: dateKey,
       start: "",
       end: "",
       note: "",
@@ -610,6 +624,13 @@ export default function CalendarView({ children = [] }) {
       appointmentEmoji,
       recurrence: "Aucune",
     });
+
+    const parts = dateKey.split("-");
+    if (parts.length === 3) {
+      setYear(Number(parts[0]));
+      setMonth(Number(parts[1]) - 1);
+      setSelectedDay(Number(parts[2]));
+    }
 
     setShowEditor(true);
   }
@@ -620,11 +641,7 @@ export default function CalendarView({ children = [] }) {
     const nextMonth = Number(dateParts[1]) - 1;
     const nextDay = Number(dateParts[2]);
 
-    if (
-      !Number.isNaN(nextYear) &&
-      !Number.isNaN(nextMonth) &&
-      !Number.isNaN(nextDay)
-    ) {
+    if (!Number.isNaN(nextYear) && !Number.isNaN(nextMonth) && !Number.isNaN(nextDay)) {
       setYear(nextYear);
       setMonth(nextMonth);
       setSelectedDay(nextDay);
@@ -648,10 +665,7 @@ export default function CalendarView({ children = [] }) {
   }
 
   function updateDraft(updates) {
-    setDraft((current) => ({
-      ...current,
-      ...updates,
-    }));
+    setDraft((current) => ({ ...current, ...updates }));
   }
 
   function hasType(type) {
@@ -705,9 +719,7 @@ export default function CalendarView({ children = [] }) {
   function buildEventPayload(dateOverride = null) {
     const childNames = getChildNamesFromIds(draft.childIds);
     const selectedColor =
-      draft.eventType === "appointment"
-        ? appointmentColor
-        : getPrimaryColor(draft.childIds);
+      draft.eventType === "appointment" ? appointmentColor : getPrimaryColor(draft.childIds);
 
     return {
       title:
@@ -740,9 +752,7 @@ export default function CalendarView({ children = [] }) {
     const response = await fetch(url, {
       method,
       credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -762,15 +772,12 @@ export default function CalendarView({ children = [] }) {
   async function saveEvent() {
     try {
       setIsSaving(true);
-
       const payload = buildEventPayload();
       const savedEvent = await saveSingleEvent(payload, selectedEventId);
 
       setEvents((current) => {
         if (selectedEventId) {
-          return current.map((event) =>
-            event.id === selectedEventId ? savedEvent : event
-          );
+          return current.map((event) => (event.id === selectedEventId ? savedEvent : event));
         }
 
         return [...current, savedEvent];
@@ -789,7 +796,6 @@ export default function CalendarView({ children = [] }) {
   async function saveDayAndApplyFrequency() {
     try {
       setIsSaving(true);
-
       const frequency = draft.recurrence || "Aucune";
 
       if (frequency === "Aucune" || selectedEventId) {
@@ -802,12 +808,7 @@ export default function CalendarView({ children = [] }) {
       const savedEvents = [];
 
       const addOccurrence = async (date) => {
-        const dateKey = toDateKey(
-          date.getFullYear(),
-          date.getMonth(),
-          date.getDate()
-        );
-
+        const dateKey = toDateKey(date.getFullYear(), date.getMonth(), date.getDate());
         const payload = buildEventPayload(dateKey);
         const savedEvent = await saveSingleEvent(payload);
         savedEvents.push(savedEvent);
@@ -815,7 +816,6 @@ export default function CalendarView({ children = [] }) {
 
       if (frequency === "Tous les jours") {
         const date = new Date(startDate);
-
         while (date <= endDate) {
           await addOccurrence(date);
           date.setDate(date.getDate() + 1);
@@ -825,7 +825,6 @@ export default function CalendarView({ children = [] }) {
       if (frequency === "Chaque semaine" || frequency === "Aux deux semaines") {
         const interval = frequency === "Chaque semaine" ? 7 : 14;
         const date = new Date(startDate);
-
         while (date <= endDate) {
           await addOccurrence(date);
           date.setDate(date.getDate() + interval);
@@ -834,7 +833,6 @@ export default function CalendarView({ children = [] }) {
 
       if (frequency === "Chaque mois") {
         const date = new Date(startDate);
-
         while (date <= endDate) {
           await addOccurrence(date);
           date.setMonth(date.getMonth() + 1);
@@ -857,13 +855,10 @@ export default function CalendarView({ children = [] }) {
     try {
       setIsSaving(true);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/events/${selectedEventId}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/api/events/${selectedEventId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
 
       const data = await response.json();
 
@@ -878,10 +873,7 @@ export default function CalendarView({ children = [] }) {
         return;
       }
 
-      setEvents((current) =>
-        current.filter((event) => event.id !== selectedEventId)
-      );
-
+      setEvents((current) => current.filter((event) => event.id !== selectedEventId));
       setSelectedEventId(null);
       setShowEditor(false);
     } catch (error) {
@@ -893,229 +885,208 @@ export default function CalendarView({ children = [] }) {
   }
 
   const selectedAppointmentColor = getCalendarColor(appointmentColor);
-  const appointmentColorOption = getColor(appointmentColor);
-
-  const weekStart = weekDays[0];
-  const weekEnd = weekDays[6];
 
   return (
     <div className="space-y-7">
       <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm md:p-6">
-        <SectionTitle
-          title="Calendrier familial"
-          subtitle="Voir les journées de garde, les rendez-vous et les notes."
-          icon={CalendarDays}
-        />
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <SectionTitle
+            title="Calendrier familial"
+            subtitle="Suivez les gardes, les rendez-vous, les activités et les rappels importants de chaque enfant."
+            icon={CalendarDays}
+          />
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={goToToday}
+              className="rounded-full bg-[#FFFDF8] px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+            >
+              Aujourd’hui
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOpenCalendarColors(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#FFFDF8] px-4 py-2 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]"
+            >
+              <Palette className="h-4 w-4" />
+              Paramètres
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openNewEvent()}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+            >
+              <Plus className="h-4 w-4" />
+              Ajouter
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm">
-        <div className="mb-5 rounded-3xl bg-[#FFFDF8] p-4 ring-1 ring-[#EFE4D6]">
-          <button
-            type="button"
-            onClick={() => setOpenCalendarColors((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 text-left"
-          >
-            <div>
-              <p className="label">Couleurs du calendrier</p>
-              <p className="mt-1 text-sm leading-5 text-[#746F64]">
-                Couleurs des enfants et des rendez-vous.
-              </p>
-            </div>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="label">Aujourd’hui</p>
+            <h3 className="text-2xl font-bold text-[#55534C]">{formatLongDate(today)}</h3>
+            <p className="mt-1 text-sm text-[#746F64]">
+              Un aperçu rapide de la journée familiale.
+            </p>
+          </div>
 
-            <ChevronRight
-              className={`h-5 w-5 shrink-0 text-[#A8B193] transition ${
-                openCalendarColors ? "rotate-90" : ""
-              }`}
-            />
-          </button>
-
-          {openCalendarColors && (
-            <div className="mt-4 space-y-3">
-              <div className="rounded-2xl bg-white p-3 ring-1 ring-[#EFE4D6]">
-                <p className="text-sm font-bold text-[#55534C]">
-                  Rendez-vous
-                </p>
-
-                <p className="mt-1 text-xs text-[#746F64]">
-                  Couleur et icône des rendez-vous.
-                </p>
-
-                <div className="mt-4">
-                  <p className="text-xs font-bold text-[#746F64]">
-                    Couleur du rendez-vous
-                  </p>
-
-                  <div className="mt-3 grid !grid-cols-5 gap-3">
-                    {calendarColorOptions.map((color) => {
-                      const selected = appointmentColor === color.id;
-
-                      return (
-                        <button
-                          key={color.id}
-                          type="button"
-                          onClick={() => setAppointmentColor(color.id)}
-                          className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition hover:scale-105 ${
-                            selected
-                              ? "border-[#4F4A45] bg-[#FFF8EC] shadow-sm"
-                              : "border-[#EFE4D6] bg-white"
-                          }`}
-                          title={color.label}
-                          aria-label={color.label}
-                        >
-                          <span
-                            className="h-8 w-8 rounded-full shadow-inner"
-                            style={{ backgroundColor: color.hex }}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <p className="mt-3 text-xs font-bold text-[#746F64]">
-                    Couleur sélectionnée : {selectedAppointmentColor.label}
-                  </p>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-xs font-bold text-[#746F64]">
-                    Icône du rendez-vous
-                  </p>
-
-                  <select
-                    value={appointmentEmoji}
-                    onChange={(event) =>
-                      setAppointmentEmoji(event.target.value)
-                    }
-                    className={`${selectClass} mt-2`}
-                  >
-                    {EMOJIS.map((emoji) => (
-                      <option key={emoji} value={emoji}>
-                        {emoji}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {children.length === 0 ? (
-                  <div className="rounded-2xl bg-white p-3 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-                    Aucun enfant disponible.
-                  </div>
-                ) : (
-                  children.map((child) => {
-                    const childColor = getColor(child.color);
-                    const photo = getChildPhoto(child);
-                    const initials = getChildInitials(child);
-
-                    return (
-                      <div
-                        key={child.id}
-                        className="flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-[#EFE4D6]"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#EEF0E7] text-sm font-bold text-[#8F9874]">
-                          {photo ? (
-                            <img
-                              src={photo}
-                              alt={displayName(child)}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : initials ? (
-                            initials
-                          ) : (
-                            <UserRound className="h-5 w-5" />
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-[#55534C]">
-                            {displayName(child)}
-                          </p>
-                          <p className="text-xs text-[#746F64]">
-                            Couleur de garde
-                          </p>
-                        </div>
-
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${childColor.soft}`}
-                        >
-                          {childColor.label}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          )}
+          <div className="grid grid-cols-3 rounded-full bg-[#F8F3EA] p-1 ring-1 ring-[#EFE4D6]">
+            {[
+              ["today", "Aujourd’hui"],
+              ["week", "Semaine"],
+              ["month", "Mois"],
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                  viewMode === mode
+                    ? "bg-white text-[#7A8564] shadow-sm"
+                    : "text-[#A99D91]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {children.length === 0 ? (
+            <div className="rounded-3xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
+              Aucun enfant disponible. Ajoute d’abord un profil enfant.
+            </div>
+          ) : (
+            children.map((child) => {
+              const summary = getChildTodaySummary(child);
+              const color = getColor(child.color);
+
+              return (
+                <button
+                  key={child.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedChildId(child.id);
+                    setViewMode("today");
+                  }}
+                  className={`flex items-center gap-4 rounded-3xl p-4 text-left ring-1 transition hover:brightness-[0.98] ${
+                    selectedChildId === child.id ? `${color.soft} ring-2` : "bg-[#FFFDF8] ring-[#EFE4D6]"
+                  }`}
+                >
+                  <ChildAvatar child={child} checked={selectedChildId === child.id} />
+
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-[#55534C]">{displayName(child)}</p>
+                    <p className="mt-1 text-sm font-semibold text-[#746F64]">
+                      {summary.custodyText}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-[#8A8175]">
+                      {summary.appointmentText}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="label">Filtres</p>
+            <h3 className="text-xl font-bold text-[#55534C]">Enfant affiché</h3>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedChildId("all")}
+              className={`rounded-full px-4 py-2 text-sm font-bold ring-1 ${
+                selectedChildId === "all"
+                  ? "bg-[#A8B193] text-white ring-[#A8B193]"
+                  : "bg-[#FFFDF8] text-[#746F64] ring-[#EFE4D6]"
+              }`}
+            >
+              Tous
+            </button>
+
+            {children.map((child) => {
+              const selected = selectedChildId === child.id;
+
+              return (
+                <button
+                  key={child.id}
+                  type="button"
+                  onClick={() => setSelectedChildId(child.id)}
+                  className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ring-1 ${
+                    selected
+                      ? "bg-[#A8B193] text-white ring-[#A8B193]"
+                      : "bg-[#FFFDF8] text-[#746F64] ring-[#EFE4D6]"
+                  }`}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: getHexColor(child.color) }}
+                  />
+                  {displayName(child)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
-              onClick={handlePreviousPeriod}
-              disabled={
-                viewMode === "month" &&
-                year === startYear &&
-                month === today.getMonth()
-              }
-              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-40"
+              onClick={previousPeriod}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#746F64] ring-1 ring-[#EFE4D6]"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
 
-            <div className="min-w-[190px] text-center">
+            <div className="min-w-[210px] text-center">
               <p className="label">
                 {viewMode === "month" ? "Mois affiché" : "Semaine affichée"}
               </p>
-
               <h3 className="text-xl font-bold text-[#55534C]">
                 {viewMode === "month"
                   ? `${MONTHS[month]} ${year}`
-                  : `${weekStart.day} ${MONTHS[
-                      weekStart.month
-                    ].toLowerCase()} au ${weekEnd.day} ${MONTHS[
-                      weekEnd.month
+                  : `${weekStart.getDate()} ${MONTHS[
+                      weekStart.getMonth()
+                    ].toLowerCase()} au ${weekEnd.getDate()} ${MONTHS[
+                      weekEnd.getMonth()
                     ].toLowerCase()}`}
               </h3>
             </div>
 
             <button
               type="button"
-              onClick={handleNextPeriod}
-              disabled={viewMode === "month" && year === maxYear && month === 11}
-              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-40"
+              onClick={nextPeriod}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#746F64] ring-1 ring-[#EFE4D6]"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="grid grid-cols-2 rounded-full bg-[#F8F3EA] p-1 ring-1 ring-[#EFE4D6]">
-            <button
-              type="button"
-              onClick={() => setViewMode("month")}
-              className={`rounded-full px-5 py-2 text-sm font-bold transition ${
-                viewMode === "month"
-                  ? "bg-white text-[#7A8564] shadow-sm"
-                  : "text-[#A99D91]"
-              }`}
-            >
-              Mois
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setViewMode("week")}
-              className={`rounded-full px-5 py-2 text-sm font-bold transition ${
-                viewMode === "week"
-                  ? "bg-white text-[#7A8564] shadow-sm"
-                  : "text-[#A99D91]"
-              }`}
-            >
-              Semaine
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => openNewEvent()}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter une journée
+          </button>
         </div>
 
         {isLoading && (
@@ -1124,86 +1095,11 @@ export default function CalendarView({ children = [] }) {
           </div>
         )}
 
-        {viewMode === "month" ? (
-          <div className="mt-5 grid !grid-cols-7 gap-2 text-center">
-            {WEEK_DAYS.map((dayName, index) => (
-              <div
-                key={`${dayName}-${index}`}
-                className="text-xs font-bold text-[#A8B193]"
-              >
-                {dayName}
-              </div>
-            ))}
-
-            {Array.from({ length: monthStartOffset }).map((_, index) => (
-              <div
-                key={`empty-${year}-${month}-${index}`}
-                className="min-h-[64px] rounded-2xl"
-              />
-            ))}
-
-            {days.map((date) => {
-              const isSelected = selectedDay === date.day;
-              const hasAppointment = date.events.some(isAppointmentEvent);
-              const custodyLines = getCustodyLines(date.events);
-
-              const isToday =
-                year === today.getFullYear() &&
-                month === today.getMonth() &&
-                date.day === today.getDate();
-
-              return (
-                <button
-                  key={date.dateKey}
-                  type="button"
-                  onClick={() => selectDate(year, month, date.day)}
-                  className={`relative min-h-[76px] rounded-2xl p-2 text-center ring-1 transition hover:bg-[#FFFDF8] ${
-                    isSelected
-                      ? "bg-white text-[#55534C] ring-2 ring-[#A8B193] shadow-sm"
-                      : isToday
-                        ? "bg-[#F8F3EA] text-[#55534C] ring-[#EFE4D6]"
-                        : "bg-white text-[#746F64] ring-[#EFE4D6]"
-                  }`}
-                >
-                  <span
-                    className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                      isToday
-                        ? "bg-[#A8B193] text-white"
-                        : isSelected
-                          ? "text-[#55534C]"
-                          : "text-[#746F64]"
-                    }`}
-                  >
-                    {date.day}
-                  </span>
-
-                  <div className="mt-2 flex flex-col items-center gap-[3px]">
-                    {custodyLines.map((line) => (
-                      <span
-                        key={line.childId}
-                        className="h-[3px] w-8 rounded-full"
-                        style={{ backgroundColor: line.color }}
-                        title={line.name}
-                      />
-                    ))}
-                  </div>
-
-                  {hasAppointment && (
-                    <span className="absolute bottom-2 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-red-500" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
+        {(viewMode === "today" || viewMode === "week") && (
           <div className="mt-5 grid gap-3 md:grid-cols-7">
             {weekDays.map((date) => {
-              const isSelected =
-                date.year === year &&
-                date.month === month &&
-                date.day === selectedDay;
-
-              const hasAppointment = date.events.some(isAppointmentEvent);
+              const isSelected = date.dateKey === selectedDateKey;
+              const isToday = date.dateKey === todayKey;
               const custodyLines = getCustodyLines(date.events);
               const appointments = date.events.filter(isAppointmentEvent);
 
@@ -1211,28 +1107,30 @@ export default function CalendarView({ children = [] }) {
                 <button
                   key={date.dateKey}
                   type="button"
-                  onClick={() => selectDate(date.year, date.month, date.day)}
-                  className={`min-h-[185px] rounded-[1.5rem] p-4 text-left ring-1 transition hover:bg-[#FFFDF8] ${
+                  onClick={() => selectDate(date.year, date.month, date.day, "week")}
+                  className={`min-h-[170px] rounded-[1.5rem] p-4 text-left ring-1 transition hover:bg-[#FFFDF8] ${
                     isSelected
                       ? "bg-white ring-2 ring-[#A8B193] shadow-sm"
-                      : "bg-white ring-[#EFE4D6]"
+                      : isToday
+                        ? "bg-[#F0F3EA] ring-[#DDE4D2]"
+                        : "bg-white ring-[#EFE4D6]"
                   }`}
                 >
                   <div className="mb-4 flex items-start justify-between">
                     <div>
                       <p className="text-xs font-bold text-[#A8B193]">
-                        {WEEK_DAYS[date.date.getDay()]}
+                        {WEEK_DAYS_LONG[date.date.getDay()]}
                       </p>
-                      <p className="text-2xl font-bold text-[#55534C]">
-                        {date.day}
-                      </p>
+                      <p className="text-2xl font-bold text-[#55534C]">{date.day}</p>
                       <p className="text-xs font-semibold text-[#A99D91]">
                         {MONTHS[date.month].slice(0, 3)}
                       </p>
                     </div>
 
-                    {hasAppointment && (
-                      <span className="mt-1 h-2.5 w-2.5 rounded-full bg-red-500" />
+                    {appointments.length > 0 && (
+                      <span className="rounded-full bg-[#FFF5F5] px-2 py-1 text-xs font-bold text-red-500 ring-1 ring-[#F6D1D1]">
+                        {appointments.length}
+                      </span>
                     )}
                   </div>
 
@@ -1262,8 +1160,7 @@ export default function CalendarView({ children = [] }) {
                         className="rounded-2xl bg-[#FFF5F5] px-3 py-2 text-xs ring-1 ring-[#F6D1D1]"
                       >
                         <p className="font-bold text-red-500">
-                          {event.appointmentEmoji || appointmentEmoji}{" "}
-                          {event.start || "Rendez-vous"}
+                          {event.appointmentEmoji || appointmentEmoji} {event.start || "RDV"}
                         </p>
                         <p className="mt-1 line-clamp-2 font-semibold text-[#746F64]">
                           {event.title || "Rendez-vous"}
@@ -1271,6 +1168,65 @@ export default function CalendarView({ children = [] }) {
                       </div>
                     ))}
                   </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {viewMode === "month" && (
+          <div className="mt-5 grid !grid-cols-7 gap-2 text-center">
+            {WEEK_DAYS.map((dayName, index) => (
+              <div key={`${dayName}-${index}`} className="text-xs font-bold text-[#A8B193]">
+                {dayName}
+              </div>
+            ))}
+
+            {Array.from({ length: monthStartOffset }).map((_, index) => (
+              <div key={`empty-${year}-${month}-${index}`} className="min-h-[64px] rounded-2xl" />
+            ))}
+
+            {days.map((date) => {
+              const isSelected = selectedDay === date.day;
+              const isToday = date.dateKey === todayKey;
+              const hasAppointment = date.events.some(isAppointmentEvent);
+              const custodyLines = getCustodyLines(date.events);
+
+              return (
+                <button
+                  key={date.dateKey}
+                  type="button"
+                  onClick={() => selectDate(year, month, date.day)}
+                  className={`relative min-h-[84px] rounded-2xl p-2 text-center ring-1 transition hover:bg-[#FFFDF8] ${
+                    isSelected
+                      ? "bg-white text-[#55534C] ring-2 ring-[#A8B193] shadow-sm"
+                      : isToday
+                        ? "bg-[#F0F3EA] text-[#55534C] ring-[#DDE4D2]"
+                        : "bg-white text-[#746F64] ring-[#EFE4D6]"
+                  }`}
+                >
+                  <span
+                    className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                      isToday ? "bg-[#A8B193] text-white" : "text-[#746F64]"
+                    }`}
+                  >
+                    {date.day}
+                  </span>
+
+                  <div className="mt-2 flex flex-col items-center gap-[3px]">
+                    {custodyLines.map((line) => (
+                      <span
+                        key={line.childId}
+                        className="h-[3px] w-8 rounded-full"
+                        style={{ backgroundColor: line.color }}
+                        title={line.name}
+                      />
+                    ))}
+                  </div>
+
+                  {hasAppointment && (
+                    <span className="absolute bottom-2 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-red-500" />
+                  )}
                 </button>
               );
             })}
@@ -1303,18 +1259,16 @@ export default function CalendarView({ children = [] }) {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="label">Journée sélectionnée</p>
-            <h3 className="text-xl font-bold text-[#55534C]">
-              {selectedDay} {MONTHS[month].toLowerCase()} {year}
-            </h3>
+            <h3 className="text-xl font-bold text-[#55534C]">{formatLongDate(selectedDate)}</h3>
           </div>
 
           <button
             type="button"
-            onClick={openNewEvent}
+            onClick={() => openNewEvent(selectedDateKey)}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-[#A8B193] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
           >
             <Plus className="h-4 w-4" />
-            Ajouter
+            Ajouter sur cette date
           </button>
         </div>
 
@@ -1324,85 +1278,138 @@ export default function CalendarView({ children = [] }) {
               Aucun événement pour cette journée.
             </div>
           ) : (
-            selectedDateEvents.map((event) => {
-              const color = getColor(event.color);
-
-              return (
-                <button
-                  key={event.id}
-                  type="button"
-                  onClick={() => editEvent(event)}
-                  className={`w-full rounded-2xl p-4 text-left ring-1 ${color.soft}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base font-bold">
-                        {event.title || event.eventType}
-                      </p>
-
-                      <p className="mt-1 text-xs font-semibold">
-                        {event.eventType === "custody"
-                          ? "Journée de garde"
-                          : event.eventType === "appointment"
-                            ? "Rendez-vous"
-                            : event.eventType === "both"
-                              ? "Garde et rendez-vous"
-                              : event.eventType}
-                      </p>
-                    </div>
-
-                    {(event.start || event.end) && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-xs font-bold">
-                        <Clock className="h-3.5 w-3.5" />
-                        {event.start || "--:--"} - {event.end || "--:--"}
-                      </span>
-                    )}
-                  </div>
-
-                  {event.childNames?.length > 0 && (
-                    <p className="mt-3 text-sm">
-                      {event.childNames.join(", ")}
-                    </p>
-                  )}
-
-                  {event.note && (
-                    <p className="mt-2 text-sm opacity-80">{event.note}</p>
-                  )}
-                </button>
-              );
-            })
+            selectedDateEvents.map((event) => (
+              <EventCard key={event.id} event={event} childrenList={children} onClick={editEvent} />
+            ))
           )}
         </div>
       </div>
 
-      <QuickList
-        title="Prochains rendez-vous"
-        items={upcomingAppointments}
-        childrenList={children}
-        type="appointment"
-        onEdit={editEvent}
-      />
+      <div className="rounded-[2rem] border border-[#EFE4D6] bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="label">À venir</p>
+            <h3 className="text-xl font-bold text-[#55534C]">Prochains événements</h3>
+            <p className="mt-1 text-sm text-[#746F64]">
+              Les prochains rendez-vous, gardes et rappels importants.
+            </p>
+          </div>
+          <ListChecks className="h-5 w-5 text-[#A8B193]" />
+        </div>
 
-      <QuickList
-        title="Prochaines dates avec les enfants"
-        items={upcomingCustody}
-        childrenList={children}
-        type="custody"
-        onEdit={editEvent}
-      />
+        <div className="mt-4 space-y-3">
+          {upcomingEvents.length === 0 ? (
+            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
+              Aucun événement à venir.
+            </div>
+          ) : (
+            upcomingEvents.map((event) => (
+              <div key={event.id} className="grid gap-2 md:grid-cols-[140px_1fr]">
+                <div className="rounded-2xl bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
+                  {event.date}
+                </div>
+                <EventCard event={event} childrenList={children} onClick={editEvent} />
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {openCalendarColors && (
+        <Popup
+          title="Couleurs du calendrier"
+          kicker="Paramètres"
+          close={() => setOpenCalendarColors(false)}
+        >
+          <div className="space-y-5">
+            <div className="rounded-2xl bg-white p-3 ring-1 ring-[#EFE4D6]">
+              <p className="text-sm font-bold text-[#55534C]">Rendez-vous</p>
+              <p className="mt-1 text-xs text-[#746F64]">
+                Couleur et icône utilisées pour les rendez-vous.
+              </p>
+
+              <div className="mt-4">
+                <p className="text-xs font-bold text-[#746F64]">Couleur du rendez-vous</p>
+                <div className="mt-3 grid !grid-cols-5 gap-3">
+                  {calendarColorOptions.map((color) => {
+                    const selected = appointmentColor === color.id;
+
+                    return (
+                      <button
+                        key={color.id}
+                        type="button"
+                        onClick={() => setAppointmentColor(color.id)}
+                        className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition hover:scale-105 ${
+                          selected
+                            ? "border-[#4F4A45] bg-[#FFF8EC] shadow-sm"
+                            : "border-[#EFE4D6] bg-white"
+                        }`}
+                        title={color.label}
+                        aria-label={color.label}
+                      >
+                        <span className="h-8 w-8 rounded-full shadow-inner" style={{ backgroundColor: color.hex }} />
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-3 text-xs font-bold text-[#746F64]">
+                  Couleur sélectionnée : {selectedAppointmentColor.label}
+                </p>
+              </div>
+
+              <div className="mt-4">
+                <p className="text-xs font-bold text-[#746F64]">Icône du rendez-vous</p>
+                <select
+                  value={appointmentEmoji}
+                  onChange={(event) => setAppointmentEmoji(event.target.value)}
+                  className={`${selectClass} mt-2`}
+                >
+                  {EMOJIS.map((emoji) => (
+                    <option key={emoji} value={emoji}>
+                      {emoji}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {children.length === 0 ? (
+                <div className="rounded-2xl bg-white p-3 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
+                  Aucun enfant disponible.
+                </div>
+              ) : (
+                children.map((child) => {
+                  const childColor = getColor(child.color);
+
+                  return (
+                    <div key={child.id} className="flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-[#EFE4D6]">
+                      <ChildAvatar child={child} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-[#55534C]">{displayName(child)}</p>
+                        <p className="text-xs text-[#746F64]">Couleur de garde</p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${childColor.soft}`}>
+                        {childColor.label}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </Popup>
+      )}
 
       {showEditor && (
         <Popup
           title={`${selectedDay} ${MONTHS[month].toLowerCase()} ${year}`}
-          kicker={
-            selectedEventId ? "Modifier un événement" : "Nouvel événement"
-          }
+          kicker={selectedEventId ? "Modifier un événement" : "Nouvel événement"}
           close={() => setShowEditor(false)}
         >
           <div className="space-y-5">
             <div>
               <p className="label">Type</p>
-
               <div className="mt-3 grid !grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -1434,34 +1441,21 @@ export default function CalendarView({ children = [] }) {
               <input
                 className={inputClass}
                 value={draft.title}
-                onChange={(event) =>
-                  updateDraft({ title: event.target.value })
-                }
-                placeholder="Ex. Rendez-vous dentiste"
+                onChange={(event) => updateDraft({ title: event.target.value })}
+                placeholder="Ex. Rendez-vous dentiste, garde chez papa..."
               />
             </Field>
 
             <div className="grid !grid-cols-2 gap-3">
-              <TimeDropdown
-                label="Début"
-                value={draft.start || ""}
-                onChange={(value) => updateDraft({ start: value })}
-              />
-
-              <TimeDropdown
-                label="Fin"
-                value={draft.end || ""}
-                onChange={(value) => updateDraft({ end: value })}
-              />
+              <TimeDropdown label="Début" value={draft.start || ""} onChange={(value) => updateDraft({ start: value })} />
+              <TimeDropdown label="Fin" value={draft.end || ""} onChange={(value) => updateDraft({ end: value })} />
             </div>
 
             <Field label="Fréquence">
               <select
                 className={selectClass}
                 value={draft.recurrence || "Aucune"}
-                onChange={(event) =>
-                  updateDraft({ recurrence: event.target.value })
-                }
+                onChange={(event) => updateDraft({ recurrence: event.target.value })}
                 disabled={Boolean(selectedEventId)}
               >
                 {RECURRENCES.map((frequency) => (
@@ -1473,11 +1467,9 @@ export default function CalendarView({ children = [] }) {
             {hasType("appointment") && (
               <div>
                 <p className="label">Icône du rendez-vous</p>
-
                 <div className="mt-3 grid !grid-cols-4 gap-2">
                   {EMOJIS.map((emoji) => {
-                    const selectedEmoji =
-                      (draft.appointmentEmoji || appointmentEmoji) === emoji;
+                    const selectedEmoji = (draft.appointmentEmoji || appointmentEmoji) === emoji;
 
                     return (
                       <button
@@ -1500,19 +1492,15 @@ export default function CalendarView({ children = [] }) {
 
             <div>
               <p className="label">Enfants concernés</p>
-
               <div className="mt-3 space-y-2">
                 {children.length === 0 ? (
                   <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
-                    Aucun enfant n’est disponible. Ajoute d’abord un profil
-                    enfant.
+                    Aucun enfant n’est disponible. Ajoute d’abord un profil enfant.
                   </div>
                 ) : (
                   children.map((child) => {
                     const checked = draft.childIds.includes(child.id);
                     const color = getColor(child.color);
-                    const photo = getChildPhoto(child);
-                    const initials = getChildInitials(child);
 
                     return (
                       <button
@@ -1520,32 +1508,16 @@ export default function CalendarView({ children = [] }) {
                         type="button"
                         onClick={() => toggleChild(child.id)}
                         className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-1 ${
-                          checked
-                            ? `${color.soft} ring-2`
-                            : "bg-white text-[#746F64] ring-[#EFE4D6]"
+                          checked ? `${color.soft} ring-2` : "bg-white text-[#746F64] ring-[#EFE4D6]"
                         }`}
                       >
                         <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white text-xs font-bold">
                           {checked ? "✓" : ""}
                         </span>
-
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#EEF0E7] text-sm font-bold text-[#8F9874]">
-                          {photo ? (
-                            <img
-                              src={photo}
-                              alt={displayName(child)}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : initials ? (
-                            initials
-                          ) : (
-                            <UserRound className="h-5 w-5" />
-                          )}
-                        </div>
-
+                        <ChildAvatar child={child} checked={checked} />
                         <div>
                           <p className="font-bold">{displayName(child)}</p>
-                          <p className="text-xs">{child.sex || child.gender}</p>
+                          <p className="text-xs">{child.sex || child.gender || "Profil enfant"}</p>
                         </div>
                       </button>
                     );
@@ -1591,7 +1563,7 @@ export default function CalendarView({ children = [] }) {
                 disabled={isSaving}
                 className="w-full rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
               >
-                {isSaving ? "Enregistrement..." : "Enregistrer la journée"}
+                {isSaving ? "Enregistrement..." : "Enregistrer"}
               </button>
             </div>
           </div>
