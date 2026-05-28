@@ -12,7 +12,7 @@ import {
   Image as ImageIcon,
   KeyRound,
   Link,
-  LinkOff,
+  Unlink,
   Loader2,
   Lock,
   MoreHorizontal,
@@ -1092,7 +1092,7 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
             </button>
 
             <button type="button" onClick={() => disableAllDocumentShareLinks(docMenu)} disabled={disablingAllShares} className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFF8ED] px-4 py-3 text-sm font-bold text-[#9A7652] ring-1 ring-[#F0D8B8] disabled:cursor-not-allowed disabled:opacity-60">
-              {disablingAllShares ? <Loader2 className="h-4 w-4 animate-spin" /> : <LinkOff className="h-4 w-4" />}
+              {disablingAllShares ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
               {disablingAllShares ? "Désactivation..." : "Désactiver tous les liens sécurisés"}
             </button>
 
@@ -1229,7 +1229,7 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
 
                 {!shareResult.disabled && (
                   <button type="button" onClick={disableShareLink} disabled={disablingShare} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60">
-                    {disablingShare ? <Loader2 className="h-4 w-4 animate-spin" /> : <LinkOff className="h-4 w-4" />}
+                    {disablingShare ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
                     {disablingShare ? "Désactivation..." : "Désactiver ce lien"}
                   </button>
                 )}
