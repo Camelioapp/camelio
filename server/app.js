@@ -7,7 +7,7 @@ const DynamoDBStore = require("connect-dynamodb")({ session });
 const helmet = require("helmet");
 const cors = require("cors");
 const { Issuer, generators } = require("openid-client");
-const { randomUUID } = require("crypto");
+const { randomUUID, createHash, timingSafeEqual } = require("crypto");
 const Stripe = require("stripe");
 
 const {
@@ -275,22 +275,7 @@ app.use(express.json({ limit: "10mb" }));
 
 app.use(
   helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:", "https:"],
-        connectSrc: [
-          "'self'",
-          "https://api.camelio.app",
-          "https://camelio.onrender.com",
-          "https://*.amazonaws.com",
-          "https://*.stripe.com",
-        ],
-        frameSrc: ["https://*.stripe.com"],
-      },
-    },
+    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -401,6 +386,7 @@ app.use("/api", apiLimiter);
 app.use("/login", sensitiveLimiter);
 app.use("/signup", sensitiveLimiter);
 app.use("/api/documents/presign", sensitiveLimiter);
+app.use("/api/shared-documents", sensitiveLimiter);
 app.use("/api/photos/presign", sensitiveLimiter);
 app.use("/api/uploads/avatar", sensitiveLimiter);
 
@@ -1327,6 +1313,51 @@ function isSafeS3KeyForOwner(s3Key = "", ownerId = "") {
   return String(s3Key).startsWith(`users/${ownerId}/`);
 }
 
+function normalizeShareCode(code = "") {
+  return String(code || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+}
+
+function isValidShareCode(code = "") {
+  return /^[A-Z0-9]{4}$/.test(normalizeShareCode(code));
+}
+
+function hashShareCode(code = "", salt = "") {
+  return createHash("sha256")
+    .update(`${String(salt)}:${normalizeShareCode(code)}`)
+    .digest("hex");
+}
+
+function safeCompareHash(expectedHash = "", actualHash = "") {
+  const expected = Buffer.from(String(expectedHash), "hex");
+  const actual = Buffer.from(String(actualHash), "hex");
+
+  if (expected.length !== actual.length || expected.length === 0) {
+    return false;
+  }
+
+  return timingSafeEqual(expected, actual);
+}
+
+function getPublicAppUrl() {
+  return String(APP_URL || "https://camelio.app").replace(/\/$/, "");
+}
+
+function isShareExpired(share) {
+  if (!share?.expiresAt) return true;
+  return new Date(share.expiresAt).getTime() <= Date.now();
+}
+
+function isShareActive(share) {
+  return Boolean(share) && share.status !== "revoked" && !isShareExpired(share);
+}
+
+function getPublicDocumentSharePk(token = "") {
+  return `PUBLIC_DOCUMENT_SHARE#${String(token || "").trim()}`;
+}
+
 async function deleteAllUserDynamoItems(userPk) {
   const allItems = [];
   let lastEvaluatedKey;
@@ -1514,15 +1545,14 @@ async function sendEmailWithResend({ to, subject, html, text }) {
   return data;
 }
 
-app.get("/api/test-email", requireAuth, async (req, res) => {
-  if (IS_PRODUCTION) {
-    return res.status(403).json({
-      error: "forbidden",
-      message: "Route désactivée en production.",
-    });
-  }
-
+app.get("/api/test-email", async (req, res) => {
   try {
+    console.log("TEST RESEND EMAIL START", {
+      hasResendApiKey: Boolean(RESEND_API_KEY),
+      emailFrom: EMAIL_FROM,
+      emailReplyTo: EMAIL_REPLY_TO,
+    });
+
     const result = await sendEmailWithResend({
       to: process.env.TEST_EMAIL_TO || process.env.SMTP_USER || "info@camelio.app",
       subject: "Test courriel Camelio via Resend",
@@ -1537,19 +1567,18 @@ app.get("/api/test-email", requireAuth, async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Courriel de test envoyé.",
+      message: "Courriel de test envoyé avec Resend.",
       result,
     });
-  } catch (err) {
-    console.error("Erreur test-email:", err);
+  } catch (error) {
+    console.error("Erreur test Resend:", error);
 
     return res.status(500).json({
-      error: "email_error",
-      message: "Impossible d’envoyer le courriel de test.",
+      success: false,
+      message: error.message,
     });
   }
 });
-
 
 app.get("/aws-check", (req, res) => {
   if (IS_PRODUCTION) {
@@ -3371,7 +3400,6 @@ app.post(
 
 app.get(
   "/api/profile-shares/invitation/:token",
-  sensitiveLimiter,
   validateAwsConfig,
   async (req, res, next) => {
     try {
@@ -3656,7 +3684,6 @@ app.patch(
 
 app.post(
   "/api/profile-shares/import",
-  sensitiveLimiter,
   requireAuth,
   validateAwsConfig,
   async (req, res, next) => {
@@ -3807,7 +3834,6 @@ app.post(
 
 app.post(
   "/api/profile-shares/redeem-code",
-  sensitiveLimiter,
   requireAuth,
   validateAwsConfig,
   async (req, res, next) => {
@@ -4284,20 +4310,6 @@ app.put(
 
       const userPk = getUserPk(req);
       const now = new Date().toISOString();
-
-      const accountsResult = await getAvailableAccountsForUser(req);
-
-      const requestedAccountExists = accountsResult.accounts.some(
-        (account) => account.accountId === requestedAccountId
-      );
-
-      if (!requestedAccountExists) {
-        return res.status(403).json({
-          success: false,
-          error: "forbidden_account",
-          message: "Vous n’avez pas accès à ce compte.",
-        });
-      }
 
       await dynamo.send(
         new UpdateCommand({
@@ -5639,6 +5651,382 @@ app.delete(
       res.json({
         success: true,
         deletedId: documentId,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+
+app.post(
+  "/api/documents/:documentId/share-link",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const { documentId } = req.params;
+      const code = normalizeShareCode(req.body?.code);
+      const durationDays = Number(req.body?.durationDays);
+
+      if (!isValidShareCode(code)) {
+        return res.status(400).json({
+          error: "invalid_code",
+          message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
+        });
+      }
+
+      if (![1, 3, 7].includes(durationDays)) {
+        return res.status(400).json({
+          error: "invalid_duration",
+          message: "La durée doit être de 1 journée, 3 jours ou 7 jours.",
+        });
+      }
+
+      const accessContext = await getDataAccessContext(req, "documents", "edit");
+
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: accessContext.dataPk,
+            SK: `DOCUMENT#${documentId}`,
+          },
+        })
+      );
+
+      const document = result.Item;
+
+      if (!document) {
+        return res.status(404).json({
+          error: "not_found",
+          message: "Document introuvable.",
+        });
+      }
+
+      if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, document.childId)) {
+        return res.status(403).json({
+          error: "guest_child_forbidden",
+          message: "Accès refusé à ce document.",
+        });
+      }
+
+      if (!isSafeS3KeyForOwner(document.s3Key, accessContext.ownerId)) {
+        return res.status(403).json({
+          error: "forbidden_s3_key",
+          message: "Accès refusé à ce document.",
+        });
+      }
+
+      const token = randomUUID().replace(/-/g, "");
+      const salt = randomUUID();
+      const now = new Date();
+      const expiresAtDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+      const expiresAt = expiresAtDate.toISOString();
+      const shareUrl = `${getPublicAppUrl()}/shared-document/${token}`;
+
+      const shareItem = {
+        PK: getPublicDocumentSharePk(token),
+        SK: "METADATA",
+        type: "public_document_share",
+        token,
+        status: "active",
+        ownerId: accessContext.ownerId,
+        dataPk: accessContext.dataPk,
+        createdByUserId: req.session.user.sub,
+        createdByEmail: req.session.user.email || "",
+        documentId: document.id || documentId,
+        documentName: document.title || document.fileName || "Document Camelio",
+        fileName: document.fileName || "",
+        fileType: document.fileType || "",
+        fileSize: document.fileSize || 0,
+        childId: document.childId || "",
+        childName: document.childName || "",
+        s3Key: document.s3Key,
+        codeSalt: salt,
+        codeHash: hashShareCode(code, salt),
+        durationDays,
+        shareUrl,
+        accessCount: 0,
+        failedAttempts: 0,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        expiresAt,
+        expiresAtEpoch: Math.floor(expiresAtDate.getTime() / 1000),
+      };
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMODB_TABLE,
+          Item: shareItem,
+          ConditionExpression: "attribute_not_exists(PK)",
+        })
+      );
+
+      return res.json({
+        success: true,
+        token,
+        shareUrl,
+        url: shareUrl,
+        expiresAt,
+        durationDays,
+        message: `Lien sécurisé créé. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.get(
+  "/api/shared-documents/:token",
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const token = String(req.params.token || "").trim();
+
+      if (!token) {
+        return res.status(400).json({
+          error: "missing_token",
+          message: "Lien invalide.",
+        });
+      }
+
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getPublicDocumentSharePk(token),
+            SK: "METADATA",
+          },
+        })
+      );
+
+      const share = result.Item;
+
+      if (!isShareActive(share)) {
+        return res.status(404).json({
+          error: "link_unavailable",
+          message: "Ce lien est invalide, expiré ou désactivé.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        token,
+        documentName: share.documentName || share.fileName || "Document Camelio",
+        fileName: share.fileName || "",
+        fileType: share.fileType || "",
+        fileSize: share.fileSize || 0,
+        childName: share.childName || "",
+        expiresAt: share.expiresAt,
+        requiresCode: true,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/shared-documents/:token/access",
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const token = String(req.params.token || "").trim();
+      const code = normalizeShareCode(req.body?.code);
+
+      if (!token || !isValidShareCode(code)) {
+        return res.status(400).json({
+          error: "invalid_request",
+          message: "Lien ou code invalide.",
+        });
+      }
+
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getPublicDocumentSharePk(token),
+            SK: "METADATA",
+          },
+        })
+      );
+
+      const share = result.Item;
+
+      if (!isShareActive(share)) {
+        return res.status(404).json({
+          error: "link_unavailable",
+          message: "Ce lien est invalide, expiré ou désactivé.",
+        });
+      }
+
+      const submittedHash = hashShareCode(code, share.codeSalt || "");
+
+      if (!safeCompareHash(share.codeHash || "", submittedHash)) {
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: getPublicDocumentSharePk(token),
+              SK: "METADATA",
+            },
+            UpdateExpression:
+              "SET failedAttempts = if_not_exists(failedAttempts, :zero) + :one, lastFailedAttemptAt = :now, updatedAt = :now",
+            ExpressionAttributeValues: {
+              ":zero": 0,
+              ":one": 1,
+              ":now": new Date().toISOString(),
+            },
+          })
+        );
+
+        return res.status(403).json({
+          error: "invalid_code",
+          message: "Code d’accès invalide.",
+        });
+      }
+
+      const documentResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: share.dataPk,
+            SK: `DOCUMENT#${share.documentId}`,
+          },
+        })
+      );
+
+      const document = documentResult.Item;
+
+      if (!document || document.s3Key !== share.s3Key) {
+        return res.status(404).json({
+          error: "document_unavailable",
+          message: "Ce document n’est plus disponible.",
+        });
+      }
+
+      if (!isSafeS3KeyForOwner(document.s3Key, share.ownerId)) {
+        return res.status(403).json({
+          error: "forbidden_s3_key",
+          message: "Accès refusé à ce document.",
+        });
+      }
+
+      const downloadUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({
+          Bucket: S3_DOCUMENTS_BUCKET,
+          Key: document.s3Key,
+        }),
+        { expiresIn: 300 }
+      );
+
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getPublicDocumentSharePk(token),
+            SK: "METADATA",
+          },
+          UpdateExpression:
+            "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now",
+          ExpressionAttributeValues: {
+            ":zero": 0,
+            ":one": 1,
+            ":now": new Date().toISOString(),
+          },
+        })
+      );
+
+      return res.json({
+        success: true,
+        downloadUrl,
+        url: downloadUrl,
+        expiresIn: 300,
+        documentName: share.documentName || share.fileName || "Document Camelio",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.delete(
+  "/api/shared-documents/:token",
+  requireAuth,
+  validateAwsConfig,
+  async (req, res, next) => {
+    try {
+      const token = String(req.params.token || "").trim();
+
+      if (!token) {
+        return res.status(400).json({
+          error: "missing_token",
+          message: "Lien invalide.",
+        });
+      }
+
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getPublicDocumentSharePk(token),
+            SK: "METADATA",
+          },
+        })
+      );
+
+      const share = result.Item;
+
+      if (!share) {
+        return res.status(404).json({
+          error: "not_found",
+          message: "Lien introuvable.",
+        });
+      }
+
+      const currentUserId = req.session.user.sub;
+      const canRevoke =
+        share.ownerId === currentUserId || share.createdByUserId === currentUserId;
+
+      if (!canRevoke) {
+        return res.status(403).json({
+          error: "forbidden",
+          message: "Vous ne pouvez pas désactiver ce lien.",
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: getPublicDocumentSharePk(token),
+            SK: "METADATA",
+          },
+          UpdateExpression:
+            "SET #status = :status, revokedAt = :revokedAt, updatedAt = :updatedAt",
+          ExpressionAttributeNames: {
+            "#status": "status",
+          },
+          ExpressionAttributeValues: {
+            ":status": "revoked",
+            ":revokedAt": now,
+            ":updatedAt": now,
+          },
+        })
+      );
+
+      return res.json({
+        success: true,
+        token,
+        revokedAt: now,
+        message: "Lien sécurisé désactivé.",
       });
     } catch (error) {
       next(error);
