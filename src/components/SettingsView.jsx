@@ -26,7 +26,7 @@ import { sections } from "./sectionsData";
 const inputClass =
   "mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]";
 
-const APP_VERSION = "1.36";
+const APP_VERSION = "1.0.0";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://api.camelio.app";
@@ -72,6 +72,18 @@ const parentAvatarOptions = [
   { id: "pere_04", label: "Père 4", path: "/Profil/Parent/Pere/pere_2_enfants_filles.png" },
   { id: "pere_05", label: "Père 5", path: "/Profil/Parent/Pere/c93d70b1-709a-4d5c-bb6e-2ad5429c865d.png" },
   { id: "pere_06", label: "Père 6", path: "/Profil/Parent/Pere/R3qljX1X.jpg" },
+];
+
+const DEFAULT_STAR_CHILD_SECTION_IDS = ["dashboard", "documents", "photos", "carnet-souvenirs"];
+const STAR_CHILD_SECTION_OPTIONS = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "documents", label: "Zone documents" },
+  { id: "photos", label: "Photos" },
+  { id: "carnet-souvenirs", label: "Carnet souvenir" },
+  { id: "calendar", label: "Calendrier" },
+  { id: "memorable-phrases", label: "Phrases mémorables" },
+  { id: "sante", label: "Santé" },
+  { id: "notes", label: "Notes" },
 ];
 
 const themeChoices = [
@@ -330,6 +342,10 @@ export default function SettingsView({
         const parsed = JSON.parse(saved);
         return {
           sharedCustodyEnabled: parsed.sharedCustodyEnabled !== false,
+          showStarChildrenEverywhere: parsed.showStarChildrenEverywhere === true,
+          starChildrenSectionIds: Array.isArray(parsed.starChildrenSectionIds) && parsed.starChildrenSectionIds.length
+            ? parsed.starChildrenSectionIds
+            : DEFAULT_STAR_CHILD_SECTION_IDS,
         };
       }
     } catch (error) {
@@ -338,23 +354,33 @@ export default function SettingsView({
 
     return {
       sharedCustodyEnabled: true,
+      showStarChildrenEverywhere: false,
+      starChildrenSectionIds: DEFAULT_STAR_CHILD_SECTION_IDS,
     };
   });
 
   const saveFamilyPreferences = (preferences) => {
-    setFamilyPreferences(preferences);
+    const nextPreferences = {
+      sharedCustodyEnabled: preferences.sharedCustodyEnabled !== false,
+      showStarChildrenEverywhere: preferences.showStarChildrenEverywhere === true,
+      starChildrenSectionIds: Array.isArray(preferences.starChildrenSectionIds) && preferences.starChildrenSectionIds.length
+        ? preferences.starChildrenSectionIds
+        : DEFAULT_STAR_CHILD_SECTION_IDS,
+    };
+
+    setFamilyPreferences(nextPreferences);
 
     localStorage.setItem(
       "camelio_family_preferences",
       JSON.stringify({
-        ...preferences,
+        ...nextPreferences,
         savedAt: new Date().toISOString(),
       })
     );
 
     window.dispatchEvent(
       new CustomEvent("camelio-family-preferences-updated", {
-        detail: preferences,
+        detail: nextPreferences,
       })
     );
   };
@@ -948,6 +974,96 @@ const saveUploadPreferences = (preferences) => {
                 ? "Les journées de garde sont affichées dans le calendrier."
                 : "Les journées de garde sont masquées. Seuls les rendez-vous sont affichés."}
             </p>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-bold text-[#3F3D38]">Enfants étoiles</p>
+                <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
+                  Les enfants inscrits comme une étoile sont archivés à partir de la date du décès.
+                  Choisissez s’ils doivent apparaître partout ou seulement dans certaines sections.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  saveFamilyPreferences({
+                    ...familyPreferences,
+                    showStarChildrenEverywhere: !familyPreferences.showStarChildrenEverywhere,
+                  })
+                }
+                className={`relative h-8 w-14 shrink-0 rounded-full transition ${
+                  familyPreferences.showStarChildrenEverywhere ? "bg-[#B5A7C8]" : "bg-[#B9B2A5]"
+                }`}
+                aria-label="Afficher les enfants étoiles partout"
+              >
+                <span
+                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${
+                    familyPreferences.showStarChildrenEverywhere ? "left-7" : "left-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white p-1 ring-1 ring-[#EFE4D6]">
+              {[
+                [true, "Afficher partout"],
+                [false, "Choisir les sections"],
+              ].map(([value, label]) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  onClick={() =>
+                    saveFamilyPreferences({
+                      ...familyPreferences,
+                      showStarChildrenEverywhere: value,
+                    })
+                  }
+                  className={`rounded-xl px-3 py-2 text-xs font-bold transition sm:text-sm ${
+                    familyPreferences.showStarChildrenEverywhere === value
+                      ? "bg-[#F4F0FA] text-[#7D68A0] shadow-sm ring-1 ring-[#DCD0ED]"
+                      : "text-[#746F64] hover:bg-[#FFF8EC]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {!familyPreferences.showStarChildrenEverywhere && (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {STAR_CHILD_SECTION_OPTIONS.map((section) => {
+                  const selected = (familyPreferences.starChildrenSectionIds || DEFAULT_STAR_CHILD_SECTION_IDS).includes(section.id);
+
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => {
+                        const current = familyPreferences.starChildrenSectionIds || DEFAULT_STAR_CHILD_SECTION_IDS;
+                        const nextSections = selected
+                          ? current.filter((id) => id !== section.id)
+                          : [...current, section.id];
+
+                        saveFamilyPreferences({
+                          ...familyPreferences,
+                          starChildrenSectionIds: nextSections.length ? nextSections : DEFAULT_STAR_CHILD_SECTION_IDS,
+                        });
+                      }}
+                      className={`rounded-2xl px-4 py-3 text-left text-xs font-bold ring-1 transition ${
+                        selected
+                          ? "bg-[#F4F0FA] text-[#7D68A0] ring-[#DCD0ED]"
+                          : "bg-white text-[#746F64] ring-[#EFE4D6] hover:bg-[#FFF8EC]"
+                      }`}
+                    >
+                      {selected ? "✓ " : ""}{section.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">

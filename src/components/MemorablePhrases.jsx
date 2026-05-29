@@ -708,7 +708,7 @@ function PhrasePopup({
                       />
                     ) : null}
 
-                    {child.name}
+                    <span className="truncate">{child.name}</span>
                   </button>
                 );
               })}
@@ -1331,7 +1331,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
           Ajouter une phrase
         </button>
 
-        <section className="rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-[#EFE4D6]">
+        <section className="overflow-hidden rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-[#EFE4D6]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#B8B0A3]" />
 
@@ -1343,7 +1343,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
             />
           </div>
 
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-4 flex max-w-full gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
               type="button"
               onClick={() => setSelectedChildFilter("all")}
@@ -1364,7 +1364,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
                   key={child.id}
                   type="button"
                   onClick={() => setSelectedChildFilter(child.id)}
-                  className="flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-black ring-1"
+                  className="flex max-w-[132px] shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-black ring-1"
                   style={{
                     backgroundColor:
                       selectedChildFilter === child.id ? theme.main : "#FFFFFF",
@@ -1383,15 +1383,15 @@ export default function MemorablePhrases({ children = [], onBack }) {
                     />
                   ) : null}
 
-                  {child.name}
+                  <span className="truncate">{child.name}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <select
-              className="rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#746F64] outline-none"
+              className="min-w-0 rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#746F64] outline-none"
               value={selectedMonthFilter}
               onChange={(event) => setSelectedMonthFilter(event.target.value)}
             >
@@ -1405,7 +1405,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
             </select>
 
             <select
-              className="rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#746F64] outline-none"
+              className="min-w-0 rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#746F64] outline-none"
               value={selectedYearFilter}
               onChange={(event) => setSelectedYearFilter(event.target.value)}
             >
@@ -1493,7 +1493,7 @@ export default function MemorablePhrases({ children = [], onBack }) {
                                   />
                                 ) : null}
 
-                                {child.name}
+                                <span className="truncate">{child.name}</span>
                               </span>
                             );
                           })}
