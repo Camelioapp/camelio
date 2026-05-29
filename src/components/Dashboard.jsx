@@ -41,6 +41,8 @@ const API_BASE_URL =
 
 const SECTION_ORDER_STORAGE_KEY = "camelio-section-order";
 const SECTION_THEME_STORAGE_KEY = "camelio-section-themes";
+const FAMILY_PREFERENCES_STORAGE_KEY = "camelio_family_preferences";
+const DEFAULT_STAR_CHILD_SECTION_IDS = ["dashboard", "documents", "photos", "carnet-souvenirs"];
 
 const defaultPhotoPosition = { x: 50, y: 50 };
 
@@ -91,7 +93,32 @@ function getChildColorTheme(colorId) {
 }
 
 function isStarChild(child = {}) {
-  return Boolean(child.isStar || child.starChild || child.isDeceased);
+  return Boolean(child.isStar || child.starChild || child.isDeceased || child.deceasedDate || child.deathDate);
+}
+
+function readFamilyPreferences() {
+  if (typeof window === "undefined") {
+    return { sharedCustodyEnabled: true, showStarChildrenEverywhere: false, starChildrenSectionIds: DEFAULT_STAR_CHILD_SECTION_IDS };
+  }
+
+  try {
+    const saved = window.localStorage.getItem(FAMILY_PREFERENCES_STORAGE_KEY);
+    if (!saved) {
+      return { sharedCustodyEnabled: true, showStarChildrenEverywhere: false, starChildrenSectionIds: DEFAULT_STAR_CHILD_SECTION_IDS };
+    }
+
+    const parsed = JSON.parse(saved);
+    const savedSections = Array.isArray(parsed.starChildrenSectionIds) ? parsed.starChildrenSectionIds : DEFAULT_STAR_CHILD_SECTION_IDS;
+
+    return {
+      sharedCustodyEnabled: parsed.sharedCustodyEnabled !== false,
+      showStarChildrenEverywhere: parsed.showStarChildrenEverywhere === true,
+      starChildrenSectionIds: savedSections.length ? savedSections : DEFAULT_STAR_CHILD_SECTION_IDS,
+    };
+  } catch (error) {
+    console.error("Erreur lecture préférences familiales:", error);
+    return { sharedCustodyEnabled: true, showStarChildrenEverywhere: false, starChildrenSectionIds: DEFAULT_STAR_CHILD_SECTION_IDS };
+  }
 }
 
 const starClipPath =
@@ -979,6 +1006,48 @@ export default function Dashboard({
 
   const [children, setChildren] = useState([]);
   const [isLoadingChildren, setIsLoadingChildren] = useState(true);
+  const [familyPreferences, setFamilyPreferences] = useState(() => readFamilyPreferences());
+
+  useEffect(() => {
+    const syncFamilyPreferences = (event) => {
+      if (event?.detail) {
+        setFamilyPreferences((current) => ({
+          ...current,
+          ...event.detail,
+          sharedCustodyEnabled: event.detail.sharedCustodyEnabled !== false,
+          showStarChildrenEverywhere: event.detail.showStarChildrenEverywhere === true,
+          starChildrenSectionIds: Array.isArray(event.detail.starChildrenSectionIds)
+            ? event.detail.starChildrenSectionIds
+            : current.starChildrenSectionIds || DEFAULT_STAR_CHILD_SECTION_IDS,
+        }));
+        return;
+      }
+
+      setFamilyPreferences(readFamilyPreferences());
+    };
+
+    window.addEventListener("storage", syncFamilyPreferences);
+    window.addEventListener("focus", syncFamilyPreferences);
+    window.addEventListener("camelio-family-preferences-updated", syncFamilyPreferences);
+
+    return () => {
+      window.removeEventListener("storage", syncFamilyPreferences);
+      window.removeEventListener("focus", syncFamilyPreferences);
+      window.removeEventListener("camelio-family-preferences-updated", syncFamilyPreferences);
+    };
+  }, []);
+
+  const getChildrenForSection = useCallback((sectionId = "dashboard") => {
+    if (familyPreferences.showStarChildrenEverywhere) return children;
+
+    const allowedStarSections = new Set(
+      Array.isArray(familyPreferences.starChildrenSectionIds)
+        ? familyPreferences.starChildrenSectionIds
+        : DEFAULT_STAR_CHILD_SECTION_IDS
+    );
+
+    return children.filter((child) => !isStarChild(child) || allowedStarSections.has(sectionId));
+  }, [children, familyPreferences.showStarChildrenEverywhere, familyPreferences.starChildrenSectionIds]);
 
   const [calendarEntries, setCalendarEntries] = useState({});
   const [docs, setDocs] = useState([
@@ -1100,12 +1169,12 @@ export default function Dashboard({
         );
 
       case "parental-plan":
-        return <ParentalPlan children={children} onBack={goHome} />;
+        return <ParentalPlan children={getChildrenForSection("parental-plan")} onBack={goHome} />;
 
       case "calendar":
         return (
           <CalendarView
-            children={children}
+            children={getChildrenForSection("calendar")}
             calendarEntries={calendarEntries}
             setCalendarEntries={setCalendarEntries}
             onBack={goHome}
@@ -1115,7 +1184,7 @@ export default function Dashboard({
       case "calculator":
         return (
           <CustodyCalculator
-            children={children}
+            children={getChildrenForSection("calculator")}
             calendarEntries={calendarEntries}
             onBack={goHome}
           />
@@ -1124,7 +1193,7 @@ export default function Dashboard({
       case "documents":
         return (
           <Documents
-            children={children}
+            children={getChildrenForSection("documents")}
             docs={docs}
             setDocs={setDocs}
             onBack={goHome}
@@ -1132,12 +1201,12 @@ export default function Dashboard({
         );
 
       case "photos":
-        return <Photos children={children} onBack={goHome} />;
+        return <Photos children={getChildrenForSection("photos")} onBack={goHome} />;
 
       case "sante":
         return (
           <Sante
-            children={children}
+            children={getChildrenForSection("sante")}
             docs={docs}
             setDocs={setDocs}
             onBack={goHome}
@@ -1145,20 +1214,20 @@ export default function Dashboard({
         );
 
       case "invoices":
-        return <Invoices children={children} onBack={goHome} />;
+        return <Invoices children={getChildrenForSection("invoices")} onBack={goHome} />;
 
       case "notes":
-        return <Notes children={children} onBack={goHome} />;
+        return <Notes children={getChildrenForSection("notes")} onBack={goHome} />;
 
       case "memorable-phrases":
-        return <MemorablePhrases children={children} onBack={goHome} />;
+        return <MemorablePhrases children={getChildrenForSection("memorable-phrases")} onBack={goHome} />;
 
       case "carnet-souvenirs":
-        return <CarnetSouvenirs children={children} onBack={goHome} />;
+        return <CarnetSouvenirs children={getChildrenForSection("carnet-souvenirs")} onBack={goHome} />;
 
       case "profile-sharing":
         if (sharedAccess.hasSharedAccess) return null;
-        return <ProfileSharing children={children} onBack={goHome} />;
+        return <ProfileSharing children={getChildrenForSection("profile-sharing")} onBack={goHome} />;
 
       case "guest-settings":
         if (!sharedAccess.hasSharedAccess) return null;
@@ -1497,12 +1566,6 @@ export default function Dashboard({
             </div>
           </div>
         </div>
-        <MobileFooter
-          activeSection={activeSection}
-          sharedAccess={sharedAccess}
-          openSection={openSection}
-          goHome={goHome}
-        />
       </>
     );
   }
@@ -1584,7 +1647,7 @@ export default function Dashboard({
                         Chargement de votre famille...
                       </p>
                     </div>
-                  ) : children.length === 0 ? (
+                  ) : getChildrenForSection("dashboard").length === 0 ? (
                     <button
                       type="button"
                       onClick={() => openSection("children")}
@@ -1621,10 +1684,10 @@ export default function Dashboard({
                     </button>
                   ) : (
                     <div className="relative -mx-2 overflow-hidden">
-                      <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="pb-3 pt-2">
                         <div className="flex min-h-[165px] items-end justify-center px-2 sm:min-h-[205px] md:min-h-[220px] md:px-8">
-                          <div className="flex items-end justify-center pl-7 sm:pl-8 md:pl-9">
-                            {children.map((child, index) => {
+                          <div className="flex flex-wrap items-end justify-center gap-3 sm:gap-4 md:gap-5">
+                            {getChildrenForSection("dashboard").map((child, index) => {
                               const photo = child.image || child.photo || "";
                               const initials = getInitials(child);
                               const childTheme = getChildColorTheme(child.color);
@@ -1647,10 +1710,8 @@ export default function Dashboard({
                                   }
                                   className={`group relative isolate flex w-[118px] shrink-0 items-center justify-center pb-4 sm:w-[138px] md:w-[156px] ${
                                     isGuestAccount ? "cursor-not-allowed" : ""
-                                  } ${
-                                    index === 0 ? "" : "-ml-7 sm:-ml-9 md:-ml-11"
                                   }`}
-                                  style={{ zIndex: children.length + index }}
+                                  style={{ zIndex: getChildrenForSection("dashboard").length + index }}
                                   animate={{
                                     y: [0, floatAmplitude, 0, -floatAmplitude * 0.45, 0],
                                     rotate: [0, index % 2 === 0 ? -1.2 : 1.2, 0, index % 2 === 0 ? 0.8 : -0.8, 0],
@@ -1665,22 +1726,13 @@ export default function Dashboard({
                                   whileTap={{ scale: 0.98 }}
                                 >
                                   <div
-                                    className={`relative flex h-[112px] w-[112px] items-center justify-center overflow-visible border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px] ${
-                                      starProfile ? "rounded-none" : "rounded-full"
-                                    }`}
+                                    className="relative flex h-[112px] w-[112px] items-center justify-center overflow-visible rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
                                     style={{
                                       backgroundColor: childTheme.soft,
                                       color: childTheme.text,
                                     }}
                                   >
-                                    <div
-                                      className={`absolute inset-0 overflow-hidden ${
-                                        starProfile ? "rounded-none" : "rounded-full"
-                                      }`}
-                                      style={{
-                                        clipPath: starProfile ? starClipPath : undefined,
-                                      }}
-                                    >
+                                    <div className="absolute inset-0 overflow-hidden rounded-full">
                                       {photo ? (
                                         <PhotoImage
                                           src={photo}
@@ -1723,12 +1775,6 @@ export default function Dashboard({
                           </div>
                         </div>
                       </div>
-
-                      {children.length > 2 && (
-                        <p className="mt-1 text-center text-xs font-semibold text-[#9A8D7C] md:hidden">
-                          Glisse pour voir tous les profils.
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>

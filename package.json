@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "20.19.3",
+    "npm": "10.8.2"
+  },
   "scripts": {
     "dev": "node scripts/devWithProfilWatch.cjs",
     "generate:profil": "node scripts/generateProfilManifest.cjs",
@@ -11,15 +15,15 @@
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.0.0",
-    "@tailwindcss/vite": "latest",
-    "@vitejs/plugin-react": "latest",
+    "@tailwindcss/vite": "4.1.8",
+    "@vitejs/plugin-react": "4.6.0",
     "aws-amplify": "^6.17.0",
-    "framer-motion": "latest",
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "tailwindcss": "latest",
-    "vite": "latest"
+    "framer-motion": "12.15.0",
+    "lucide-react": "0.511.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "tailwindcss": "4.1.8",
+    "vite": "6.4.2"
   },
   "devDependencies": {
     "autoprefixer": "^10.5.0",

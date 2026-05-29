@@ -53,6 +53,13 @@ const APP_URL =
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
 
+const PUBLIC_API_URL =
+  process.env.PUBLIC_API_URL ||
+  process.env.API_BASE_URL ||
+  process.env.API_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  APP_URL;
+
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM =
   process.env.RESEND_FROM_EMAIL ||
@@ -275,7 +282,34 @@ app.use(express.json({ limit: "10mb" }));
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "base-uri": ["'self'"],
+        "object-src": ["'none'"],
+        "frame-ancestors": ["'none'"],
+
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+
+        "connect-src": [
+          "'self'",
+          "https://camelio.app",
+          "https://www.camelio.app",
+          "https://api.camelio.app",
+          "https://*.amazonaws.com",
+          "https://*.amazoncognito.com",
+          "https://api.stripe.com",
+          "https://checkout.stripe.com",
+          "https://api.resend.com"
+        ],
+
+        "script-src": ["'self'", "https://js.stripe.com"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "font-src": ["'self'", "data:", "https:"],
+        "frame-src": ["'self'", "https://js.stripe.com", "https://checkout.stripe.com"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -1170,6 +1204,11 @@ function cleanChildPayload(body = {}) {
     },
     photoZoom: Number(body.photoZoom) || 1,
     notes: body.notes || body.profileNote || "",
+    isStar: Boolean(body.isStar || body.starChild || body.isDeceased || body.deceasedDate || body.deathDate),
+    starChild: Boolean(body.isStar || body.starChild || body.isDeceased || body.deceasedDate || body.deathDate),
+    isDeceased: Boolean(body.isStar || body.starChild || body.isDeceased || body.deceasedDate || body.deathDate),
+    deceasedDate: body.deceasedDate || body.deathDate || "",
+    deathDate: body.deathDate || body.deceasedDate || "",
   };
 }
 
@@ -1218,8 +1257,8 @@ function cleanEventPayload(body = {}) {
     end: body.end || "",
     note: body.note || "",
     color: body.color || "sage",
-    appointmentEmoji: body.appointmentEmoji || body.icon || "♡",
-    icon: body.icon || body.appointmentEmoji || "♡",
+    appointmentEmoji: body.appointmentEmoji || body.icon || "heart",
+    icon: body.icon || body.appointmentEmoji || "heart",
     recurrence: body.recurrence || "Aucune",
     recurrenceGroupId: body.recurrenceGroupId || "",
   };
@@ -1336,7 +1375,7 @@ function normalizeShareCode(code = "") {
 }
 
 function isValidShareCode(code = "") {
-  return /^[A-Z0-9]{4}$/.test(normalizeShareCode(code));
+  return /^[A-Z0-9]{6,8}$/.test(normalizeShareCode(code));
 }
 
 function hashShareCode(code = "", salt = "") {
@@ -1378,8 +1417,12 @@ function getPublicCalendarFeedPk(token = "") {
   return `PUBLIC_CALENDAR_FEED#${String(token || "").trim()}`;
 }
 
+function getPublicApiUrl() {
+  return String(PUBLIC_API_URL || APP_URL || "https://api.camelio.app").replace(/\/$/, "");
+}
+
 function getCalendarFeedUrl(token = "") {
-  return `${getPublicAppUrl()}/api/calendar/feed/${encodeURIComponent(token)}.ics`;
+  return `${getPublicApiUrl()}/api/calendar/feed/${encodeURIComponent(token)}.ics`;
 }
 
 function escapeIcsText(value = "") {
@@ -1671,7 +1714,13 @@ async function sendEmailWithResend({ to, subject, html, text }) {
   return data;
 }
 
-app.get("/api/test-email", async (req, res) => {
+app.get("/api/test-email", requireAuth, async (req, res) => {
+  if (IS_PRODUCTION) {
+    return res.status(404).json({
+      error: "not_found",
+      message: "Route non disponible en production.",
+    });
+  }
   try {
     console.log("TEST RESEND EMAIL START", {
       hasResendApiKey: Boolean(RESEND_API_KEY),
@@ -4797,7 +4846,7 @@ app.put(
             SK: `CHILD#${childId}`,
           },
           UpdateExpression:
-            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, avatarS3Key = :avatarS3Key, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, updatedAt = :updatedAt",
+            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, avatarS3Key = :avatarS3Key, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, isStar = :isStar, starChild = :starChild, isDeceased = :isDeceased, deceasedDate = :deceasedDate, deathDate = :deathDate, updatedAt = :updatedAt",
           ExpressionAttributeNames: {
             "#image": "image",
           },
@@ -4815,6 +4864,11 @@ app.put(
             ":photoPosition": payload.photoPosition,
             ":photoZoom": payload.photoZoom,
             ":notes": payload.notes,
+            ":isStar": payload.isStar,
+            ":starChild": payload.starChild,
+            ":isDeceased": payload.isDeceased,
+            ":deceasedDate": payload.deceasedDate,
+            ":deathDate": payload.deathDate,
             ":updatedAt": now,
           },
           ReturnValues: "ALL_NEW",
@@ -5021,7 +5075,7 @@ app.get("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, n
         childId: feed.childId || "all",
         childName: feed.childName || "Tous les enfants",
         status: feed.status || "active",
-        feedUrl: feed.feedUrl || getCalendarFeedUrl(feed.token),
+        feedUrl: getCalendarFeedUrl(feed.token),
         createdAt: feed.createdAt,
         updatedAt: feed.updatedAt,
       }));
@@ -6127,7 +6181,7 @@ app.post(
       if (requiresCode && !isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
-          message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
+          message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
         });
       }
 
@@ -6257,7 +6311,7 @@ app.post(
       if (requiresCode && !isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
-          message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
+          message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
         });
       }
 

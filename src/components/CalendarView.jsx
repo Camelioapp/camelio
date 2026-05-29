@@ -1,11 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Bell,
+  Cake,
   CalendarDays,
+  Car,
   ChevronLeft,
   ChevronRight,
   Clock,
+  FileText,
   Heart,
+  Hospital,
+  Music,
+  School,
+  ShieldPlus,
+  Stethoscope,
   Trash2,
+  Trophy,
   UserRound,
   X,
 } from "lucide-react";
@@ -41,7 +51,19 @@ const WEEK_DAYS_LONG = [
   "Samedi",
 ];
 
-const EMOJIS = ["♡", "🏥", "🦷", "⚽", "🎒", "🎵", "🎂", "🚗"];
+const APPOINTMENT_ICONS = [
+  { id: "heart", label: "Rendez-vous", Icon: Heart },
+  { id: "medical", label: "Santé", Icon: Stethoscope },
+  { id: "hospital", label: "Clinique", Icon: Hospital },
+  { id: "dental", label: "Dentiste", Icon: ShieldPlus },
+  { id: "sport", label: "Sport", Icon: Trophy },
+  { id: "school", label: "École", Icon: School },
+  { id: "music", label: "Musique", Icon: Music },
+  { id: "birthday", label: "Anniversaire", Icon: Cake },
+  { id: "transport", label: "Transport", Icon: Car },
+  { id: "document", label: "Document", Icon: FileText },
+  { id: "reminder", label: "Rappel", Icon: Bell },
+];
 const RECURRENCES = ["Aucune", "Chaque semaine", "Aux deux semaines", "Chaque mois", "Tous les jours"];
 
 const CAMELIO_COLORS = ["#A8B193", "#B5A7C8", "#EAA5AF", "#EEC988", "#A2BADF"];
@@ -79,6 +101,34 @@ const childColorHex = {
   gold: "#EEC988",
   yellow: "#EEC988",
 };
+
+function normalizeAppointmentIconId(value = "") {
+  const clean = String(value || "").trim();
+  const emojiMap = {
+    "♡": "heart",
+    "🏥": "medical",
+    "🦷": "dental",
+    "⚽": "sport",
+    "🎒": "school",
+    "🎵": "music",
+    "🎂": "birthday",
+    "🚗": "transport",
+  };
+
+  if (emojiMap[clean]) return emojiMap[clean];
+  if (APPOINTMENT_ICONS.some((icon) => icon.id === clean)) return clean;
+  return "heart";
+}
+
+function getAppointmentIconOption(value = "") {
+  const iconId = normalizeAppointmentIconId(value);
+  return APPOINTMENT_ICONS.find((icon) => icon.id === iconId) || APPOINTMENT_ICONS[0];
+}
+
+function AppointmentIcon({ value = "heart", className = "h-4 w-4" }) {
+  const { Icon } = getAppointmentIconOption(value);
+  return <Icon className={className} strokeWidth={1.9} />;
+}
 
 const inputClass =
   "w-full rounded-2xl border border-[#D8C8B6] bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#4F4A45] shadow-sm outline-none transition placeholder:text-[#A99D91] focus:border-[#A8B193] focus:bg-white focus:ring-2 focus:ring-[#A8B193]/20";
@@ -227,13 +277,12 @@ function getAppointmentIcon(event) {
     event?.emoji,
   ].filter(Boolean);
 
-  return possibleIcons.find((icon) => icon !== "♡") || possibleIcons[0] || "♡";
+  return normalizeAppointmentIconId(possibleIcons[0] || "heart");
 }
 
 function getDayAppointmentIcon(dayEvents = []) {
   const appointmentEvents = dayEvents.filter(isAppointmentEvent);
-  const customIconEvent = appointmentEvents.find((event) => getAppointmentIcon(event) && getAppointmentIcon(event) !== "♡");
-  return getAppointmentIcon(customIconEvent || appointmentEvents[0]);
+  return getAppointmentIcon(appointmentEvents[0] || {});
 }
 
 function recurrenceText(event) {
@@ -417,7 +466,7 @@ function WeekDayCard({ date, dayEvents, childrenList, selected, today, onClick, 
 
             {appointmentEvents.length > 0 && (
               <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFFAEF] px-2.5 py-1 text-xs font-bold text-[#B68E3D] ring-1 ring-[#F1DDAE]">
-                {getDayAppointmentIcon(appointmentEvents)}
+                <AppointmentIcon value={getDayAppointmentIcon(appointmentEvents)} className="h-3.5 w-3.5" />
                 {appointmentEvents.length}
               </span>
             )}
@@ -450,7 +499,7 @@ function WeekDayCard({ date, dayEvents, childrenList, selected, today, onClick, 
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-[#4F4A45]">
-                        <span className="mr-1 text-[#B68E3D]">{getAppointmentIcon(event)}</span>
+                        <span className="mr-1 inline-flex align-[-2px] text-[#B68E3D]"><AppointmentIcon value={getAppointmentIcon(event)} className="h-4 w-4" /></span>
                         {event.title || "Rendez-vous"}
                       </p>
                       <p className="mt-1 text-xs font-semibold text-[#746F64]">{eventTypeLabel(event)}</p>
@@ -493,7 +542,7 @@ function EventCard({ event, childrenList, onClick, onDelete }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold text-[#4F4A45]">
-            {isAppointmentEvent(event) ? `${getAppointmentIcon(event)} ` : ""}
+            {isAppointmentEvent(event) ? <span className="mr-2 inline-flex align-[-2px] text-[#B68E3D]"><AppointmentIcon value={getAppointmentIcon(event)} className="h-4 w-4" /></span> : null}
             {event.title || eventTypeLabel(event)}
           </p>
           <p className="mt-1 text-xs font-bold text-[#746F64]">{eventTypeLabel(event)}</p>
@@ -557,7 +606,7 @@ export default function CalendarView({ children = [] }) {
   const [showDayDetails, setShowDayDetails] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
-  const [appointmentEmoji, setAppointmentEmoji] = useState("♡");
+  const [appointmentEmoji, setAppointmentEmoji] = useState("heart");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteOptions, setShowDeleteOptions] = useState(false);
@@ -580,7 +629,7 @@ export default function CalendarView({ children = [] }) {
     end: "",
     note: "",
     color: "sage",
-    appointmentEmoji: "♡",
+    appointmentEmoji: "heart",
     recurrence: "Aucune",
     recurrenceGroupId: "",
   });
@@ -1174,7 +1223,7 @@ export default function CalendarView({ children = [] }) {
             <CamelioLogo />
           </div>
 
-          <div className="mt-7 flex gap-4 overflow-x-auto px-1 pb-2 md:justify-center">
+          <div className="mt-7 flex gap-4 overflow-x-auto px-1 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-center">
             {children.length === 0 ? (
               <div className="rounded-3xl bg-[#FFF8EC] px-5 py-4 text-sm font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">
                 Ajoutez un profil enfant pour utiliser les filtres du calendrier.
@@ -1241,13 +1290,6 @@ export default function CalendarView({ children = [] }) {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowExportPopup(true)}
-            className="mt-3 w-full rounded-2xl bg-[#F0F3EA] px-4 py-2.5 text-sm font-bold text-[#52713E] ring-1 ring-[#DDE4D2] transition hover:bg-[#E8EEDF] md:mt-4 md:py-3"
-          >
-            Exporter vers Google ou Outlook
-          </button>
 
           {!sharedCustodyEnabled && (
             <div className="mt-4 rounded-2xl bg-[#FFF8EC] px-4 py-3 text-center text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
@@ -1314,7 +1356,7 @@ export default function CalendarView({ children = [] }) {
                     <span className="font-['Comfortaa'] text-sm font-bold leading-none text-[#1F2B33] sm:text-base md:text-2xl">{date.day}</span>
 
                     <span className="flex h-5 items-center justify-center text-base leading-none md:h-7 md:text-xl">
-                      {hasAppointment ? <span style={{ color: APPOINTMENT_COLOR }}>{appointmentIcon}</span> : <span aria-hidden="true">&nbsp;</span>}
+                      {hasAppointment ? <AppointmentIcon value={appointmentIcon} className="h-4 w-4 md:h-5 md:w-5" /> : <span aria-hidden="true">&nbsp;</span>}
                     </span>
 
                     <span className="flex h-2 w-full max-w-[42px] overflow-hidden rounded-full bg-transparent sm:max-w-[48px] md:max-w-[72px]">
@@ -1337,6 +1379,14 @@ export default function CalendarView({ children = [] }) {
               })}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => setShowExportPopup(true)}
+            className="mt-5 w-full rounded-2xl bg-[#F0F3EA] px-4 py-3 text-sm font-bold text-[#52713E] ring-1 ring-[#DDE4D2] transition hover:bg-[#E8EEDF]"
+          >
+            Exporter vers Google ou Outlook
+          </button>
 
         </div>
 
@@ -1421,19 +1471,22 @@ export default function CalendarView({ children = [] }) {
               <div>
                 <p className="label">Icône du rendez-vous</p>
                 <div className="mt-3 grid !grid-cols-4 gap-2">
-                  {EMOJIS.map((emoji) => {
-                    const selectedEmoji = (draft.appointmentEmoji || appointmentEmoji) === emoji;
+                  {APPOINTMENT_ICONS.map((item) => {
+                    const selectedEmoji = normalizeAppointmentIconId(draft.appointmentEmoji || appointmentEmoji) === item.id;
+                    const Icon = item.Icon;
                     return (
                       <button
-                        key={emoji}
+                        key={item.id}
                         type="button"
                         onClick={() => {
-                          setAppointmentEmoji(emoji);
-                          updateDraft({ appointmentEmoji: emoji, icon: emoji });
+                          setAppointmentEmoji(item.id);
+                          updateDraft({ appointmentEmoji: item.id, icon: item.id });
                         }}
-                        className={`rounded-2xl px-3 py-3 text-lg font-bold ring-1 transition ${selectedEmoji ? "bg-[#FFFAEF] text-[#B68E3D] ring-2 ring-[#F1DDAE]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}
+                        className={`flex items-center justify-center rounded-2xl px-3 py-3 ring-1 transition ${selectedEmoji ? "bg-[#FFFAEF] text-[#B68E3D] ring-2 ring-[#F1DDAE]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}
+                        title={item.label}
+                        aria-label={item.label}
                       >
-                        {emoji}
+                        <Icon className="h-5 w-5" strokeWidth={1.8} />
                       </button>
                     );
                   })}
