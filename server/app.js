@@ -5186,12 +5186,12 @@ app.delete("/api/calendar-feed/:token", requireAuth, validateAwsConfig, async (r
       })
     );
 
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: getPublicCalendarFeedPk(token),
-          SK: "METADATA",
+    const result = await dynamo.send(
+  new GetCommand({
+    TableName: DYNAMODB_TABLE,
+    Key: {
+      PK: getPublicDocumentSharePk(token),
+      SK: "METADATA",
         },
         UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
         ExpressionAttributeNames: {
