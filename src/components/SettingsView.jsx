@@ -31,6 +31,17 @@ const APP_VERSION = "1.0.0";
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://api.camelio.app";
 
+const maritalStatusOptions = [
+  { value: "", label: "Non indiqué" },
+  { value: "single", label: "Célibataire" },
+  { value: "relationship", label: "En couple" },
+  { value: "married", label: "Marié(e)" },
+  { value: "separated", label: "Séparé(e)" },
+  { value: "divorced", label: "Divorcé(e)" },
+  { value: "widowed", label: "Veuf / veuve" },
+  { value: "other", label: "Autre" },
+];
+
 const themeChoices = [
   {
     id: "rose",
@@ -180,7 +191,7 @@ function DropdownSection({
 }
 
 export default function SettingsView({
-  parentProfile = { name: "", email: "", phone: "", userId: "" },
+  parentProfile = { name: "", email: "", phone: "", userId: "", photoUrl: "", maritalStatus: "" },
   setParentProfile = () => {},
   sectionOrderIds,
   setSectionOrderIds,
@@ -647,6 +658,43 @@ const saveUploadPreferences = (preferences) => {
     });
   };
 
+  const updateParentProfileDetails = (changes) => {
+    const nextProfile = {
+      ...parentProfile,
+      ...changes,
+    };
+
+    setParentProfile(nextProfile);
+
+    try {
+      localStorage.setItem(
+        "camelio_parent_profile_details",
+        JSON.stringify({
+          ...nextProfile,
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch (error) {
+      console.error("Erreur sauvegarde profil parent local:", error);
+    }
+  };
+
+  const handleParentPhotoChange = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateParentProfileDetails({
+        photoUrl: String(reader.result || ""),
+      });
+    };
+    reader.readAsDataURL(file);
+
+    event.target.value = "";
+  };
+
   const refuseOptionalCookies = () => {
     saveCookiePreferences({
       essential: true,
@@ -670,69 +718,202 @@ const saveUploadPreferences = (preferences) => {
       <DropdownSection
         id="profile"
         title="Profil principal parent"
-        description="Informations du compte principal."
+        description="Nom, téléphone, photo, situation conjugale et garde partagée."
         icon={UserRound}
         iconColor="#55534C"
         openSection={openMainSection}
         setOpenSection={setOpenMainSection}
       >
         <div className="space-y-5">
-          <Field label="User ID">
-            <input
-              className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
-              value={displayedUserId}
-              readOnly
-              placeholder="Non disponible"
-            />
+          <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[2rem] bg-[#F0F3EA] text-[#7F9166] ring-1 ring-[#DDE4D2]">
+                {parentProfile.photoUrl ? (
+                  <img
+                    src={parentProfile.photoUrl}
+                    alt="Profil du parent principal"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <UserRound className="h-9 w-9" />
+                )}
+              </div>
 
-            <p className="mt-2 text-xs leading-relaxed text-[#8A8378]">
-              Ce numéro provient du profil enregistré dans DynamoDB.
-            </p>
-          </Field>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#A8AA91]">
+                  Photo du parent
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                  Ajoutez une photo pour personnaliser le profil principal.
+                </p>
 
-          <Field label="Nom complet">
-            <input
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <label className="cursor-pointer rounded-2xl bg-[#A8AA91] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95">
+                    Choisir une photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleParentPhotoChange}
+                    />
+                  </label>
+
+                  {parentProfile.photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => updateParentProfileDetails({ photoUrl: "" })}
+                      className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#B86C6C] ring-1 ring-[#EFE4D6] transition hover:bg-[#FFF7F7]"
+                    >
+                      Retirer la photo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Nom complet">
+              <input
+                className={inputClass}
+                value={parentProfile.name || ""}
+                onChange={(event) =>
+                  updateParentProfileDetails({ name: event.target.value })
+                }
+                placeholder="Ex. Emmanuel Sfiligoi"
+              />
+            </Field>
+
+            <Field label="Téléphone">
+              <input
+                type="tel"
+                className={inputClass}
+                value={parentProfile.phone || ""}
+                onChange={(event) =>
+                  updateParentProfileDetails({ phone: event.target.value })
+                }
+                placeholder="Ex. 514 555-1234"
+              />
+            </Field>
+          </div>
+
+          <Field label="Situation conjugale">
+            <select
               className={inputClass}
-              value={parentProfile.name}
+              value={parentProfile.maritalStatus || ""}
               onChange={(event) =>
-                setParentProfile({
-                  ...parentProfile,
-                  name: event.target.value,
-                })
+                updateParentProfileDetails({ maritalStatus: event.target.value })
               }
-              placeholder="Ex. John Doe"
-            />
+            >
+              {maritalStatusOptions.map((option) => (
+                <option key={option.value || "empty"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </Field>
 
-          <Field label="Courriel">
-            <input
-              type="email"
-              className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
-              value={parentProfile.email || "Non disponible"}
-              readOnly
-              placeholder="Non disponible"
-            />
+          <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-bold text-[#3F3D38]">Garde partagée</p>
 
-            <p className="mt-2 text-xs leading-relaxed text-[#8A8378]">
-              Ce courriel est lié au compte de connexion et ne peut pas être
-              modifié ici.
+                <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
+                  Indiquez si votre calendrier doit afficher les journées de garde.
+                  Si l’option est désactivée, seuls les rendez-vous et activités seront visibles.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  saveFamilyPreferences({
+                    ...familyPreferences,
+                    sharedCustodyEnabled: !familyPreferences.sharedCustodyEnabled,
+                  })
+                }
+                className={`relative h-8 w-14 shrink-0 rounded-full transition ${
+                  familyPreferences.sharedCustodyEnabled
+                    ? "bg-[#7F9166]"
+                    : "bg-[#B9B2A5]"
+                }`}
+                aria-label="Activer ou désactiver la garde partagée"
+              >
+                <span
+                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${
+                    familyPreferences.sharedCustodyEnabled ? "left-7" : "left-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white p-1 ring-1 ring-[#EFE4D6]">
+              {[
+                [true, "Oui"],
+                [false, "Non"],
+              ].map(([value, label]) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  onClick={() =>
+                    saveFamilyPreferences({
+                      ...familyPreferences,
+                      sharedCustodyEnabled: value,
+                    })
+                  }
+                  className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                    familyPreferences.sharedCustodyEnabled === value
+                      ? "bg-[#F0F3EA] text-[#5F7F52] shadow-sm ring-1 ring-[#DDE4D2]"
+                      : "text-[#746F64] hover:bg-[#FFF8EC]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <p
+              className={`mt-3 text-xs font-bold ${
+                familyPreferences.sharedCustodyEnabled
+                  ? "text-[#5F7F52]"
+                  : "text-[#8A6F5A]"
+              }`}
+            >
+              {familyPreferences.sharedCustodyEnabled
+                ? "Les journées de garde sont affichées dans le calendrier."
+                : "Les journées de garde sont masquées. Seuls les rendez-vous sont affichés."}
             </p>
-          </Field>
+          </div>
 
-          <Field label="Téléphone">
-            <input
-              type="tel"
-              className={inputClass}
-              value={parentProfile.phone}
-              onChange={(event) =>
-                setParentProfile({
-                  ...parentProfile,
-                  phone: event.target.value,
-                })
-              }
-              placeholder="Ex. 514 555-1234"
-            />
-          </Field>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Courriel">
+              <input
+                type="email"
+                className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
+                value={parentProfile.email || "Non disponible"}
+                readOnly
+                placeholder="Non disponible"
+              />
+
+              <p className="mt-2 text-xs leading-relaxed text-[#8A8378]">
+                Ce courriel est lié au compte de connexion et ne peut pas être
+                modifié ici.
+              </p>
+            </Field>
+
+            <Field label="User ID">
+              <input
+                className={`${inputClass} cursor-not-allowed bg-[#F7F2EA] font-bold text-[#55534C]`}
+                value={displayedUserId}
+                readOnly
+                placeholder="Non disponible"
+              />
+
+              <p className="mt-2 text-xs leading-relaxed text-[#8A8378]">
+                Ce numéro provient du profil enregistré dans DynamoDB.
+              </p>
+            </Field>
+          </div>
         </div>
       </DropdownSection>
 
@@ -945,91 +1126,6 @@ const saveUploadPreferences = (preferences) => {
           })}
         </div>
       </DropdownSection>
-
-<DropdownSection
-  id="family-organization"
-  title="Organisation familiale"
-  description="Indiquer si le calendrier doit afficher les journées de garde partagée."
-  icon={CalendarDays}
-  iconColor="#B5A7C8"
-  openSection={openMainSection}
-  setOpenSection={setOpenMainSection}
->
-  <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 shadow-sm">
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <p className="font-bold text-[#3F3D38]">
-          Garde partagée
-        </p>
-
-        <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
-          Activez cette option pour afficher les journées de garde dans le
-          calendrier. Si elle est désactivée, le calendrier affiche seulement
-          les rendez-vous et activités.
-        </p>
-      </div>
-
-      <button
-        type="button"
-        onClick={() =>
-          saveFamilyPreferences({
-            ...familyPreferences,
-            sharedCustodyEnabled: !familyPreferences.sharedCustodyEnabled,
-          })
-        }
-        className={`relative h-8 w-14 shrink-0 rounded-full transition ${
-          familyPreferences.sharedCustodyEnabled
-            ? "bg-[#7F9166]"
-            : "bg-[#B9B2A5]"
-        }`}
-        aria-label="Activer ou désactiver la garde partagée"
-      >
-        <span
-          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${
-            familyPreferences.sharedCustodyEnabled ? "left-7" : "left-1"
-          }`}
-        />
-      </button>
-    </div>
-
-    <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white p-1 ring-1 ring-[#EFE4D6]">
-      {[
-        [true, "Oui"],
-        [false, "Non"],
-      ].map(([value, label]) => (
-        <button
-          key={String(value)}
-          type="button"
-          onClick={() =>
-            saveFamilyPreferences({
-              ...familyPreferences,
-              sharedCustodyEnabled: value,
-            })
-          }
-          className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
-            familyPreferences.sharedCustodyEnabled === value
-              ? "bg-[#F0F3EA] text-[#5F7F52] shadow-sm ring-1 ring-[#DDE4D2]"
-              : "text-[#746F64] hover:bg-[#FFF8EC]"
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-
-    <p
-      className={`mt-3 text-xs font-bold ${
-        familyPreferences.sharedCustodyEnabled
-          ? "text-[#5F7F52]"
-          : "text-[#8A6F5A]"
-      }`}
-    >
-      {familyPreferences.sharedCustodyEnabled
-        ? "Les journées de garde sont affichées dans le calendrier."
-        : "Les journées de garde sont masquées. Seuls les rendez-vous sont affichés."}
-    </p>
-  </div>
-</DropdownSection>
 
 <DropdownSection
   id="uploads"

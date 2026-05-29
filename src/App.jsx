@@ -41,11 +41,25 @@ export default function App() {
     referralCode: null,
   });
 
-  const [parentProfile, setParentProfile] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    userId: "",
+  const [parentProfile, setParentProfile] = useState(() => {
+    let savedProfile = {};
+
+    try {
+      savedProfile = JSON.parse(
+        localStorage.getItem("camelio_parent_profile_details") || "{}"
+      );
+    } catch (error) {
+      console.error("Erreur lecture profil parent local:", error);
+    }
+
+    return {
+      name: savedProfile.name || "",
+      email: savedProfile.email || "",
+      phone: savedProfile.phone || "",
+      userId: savedProfile.userId || "",
+      photoUrl: savedProfile.photoUrl || "",
+      maritalStatus: savedProfile.maritalStatus || "",
+    };
   });
 
   const path = getPath();
@@ -83,11 +97,14 @@ export default function App() {
         setParentProfile((current) => ({
           ...current,
           name:
+            current.name ||
             nextAuth.user.name ||
             nextAuth.user.given_name ||
-            current.name ||
             "",
           email: nextAuth.user.email || current.email || "",
+          phone: current.phone || "",
+          photoUrl: current.photoUrl || "",
+          maritalStatus: current.maritalStatus || "",
         }));
       }
     } catch (error) {
