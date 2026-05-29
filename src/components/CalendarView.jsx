@@ -170,7 +170,7 @@ function formatEventFromServer(event) {
     end: event.end || "",
     note: event.note || "",
     color: event.color || "sage",
-    appointmentEmoji: event.appointmentEmoji || event.icon || "♡",
+    appointmentEmoji: getAppointmentIcon(event),
     recurrence: event.recurrence || "Aucune",
     recurrenceGroupId: event.recurrenceGroupId || "",
     createdAt: event.createdAt || "",
@@ -196,6 +196,20 @@ function eventTypeLabel(event) {
   if (event.eventType === "appointment" || event.eventType === "Rendez-vous") return "Rendez-vous";
   if (event.eventType === "both") return "Garde et rendez-vous";
   return event.eventType || "Événement";
+}
+
+function getAppointmentIcon(event) {
+  return event?.appointmentEmoji || event?.appointmentIcon || event?.eventIcon || event?.icon || event?.emoji || "♡";
+}
+
+function getDayAppointmentIcon(dayEvents = []) {
+  const appointmentEvents = dayEvents.filter(isAppointmentEvent);
+  const customIconEvent = appointmentEvents.find((event) => getAppointmentIcon(event) && getAppointmentIcon(event) !== "♡");
+  return getAppointmentIcon(customIconEvent || appointmentEvents[0]);
+}
+
+function recurrenceText(event) {
+  return event?.recurrence && event.recurrence !== "Aucune" ? event.recurrence : "Aucune";
 }
 
 function TimeDropdown({ label, value, onChange }) {
@@ -330,7 +344,7 @@ function ChildFilterPill({ child, active, index, onClick }) {
   );
 }
 
-function EventCard({ event, childrenList, onClick }) {
+function EventCard({ event, childrenList, onClick, onDelete }) {
   const childNames =
     event.childNames?.length > 0
       ? event.childNames
@@ -346,7 +360,7 @@ function EventCard({ event, childrenList, onClick }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold text-[#4F4A45]">
-            {isAppointmentEvent(event) ? `${event.appointmentEmoji || "♡"} ` : ""}
+            {isAppointmentEvent(event) ? `${getAppointmentIcon(event)} ` : ""}
             {event.title || eventTypeLabel(event)}
           </p>
           <p className="mt-1 text-xs font-bold text-[#746F64]">{eventTypeLabel(event)}</p>
@@ -368,6 +382,28 @@ function EventCard({ event, childrenList, onClick }) {
 
       {childNames.length > 0 && <p className="mt-3 text-sm font-semibold text-[#5F5A52]">{childNames.join(", ")}</p>}
       {event.note && <p className="mt-2 text-sm leading-5 text-[#746F64]">{event.note}</p>}
+
+      <div className="mt-4 flex justify-end">
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(clickEvent) => {
+            clickEvent.stopPropagation();
+            onDelete(event);
+          }}
+          onKeyDown={(keyEvent) => {
+            if (keyEvent.key === "Enter" || keyEvent.key === " ") {
+              keyEvent.preventDefault();
+              keyEvent.stopPropagation();
+              onDelete(event);
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-full bg-[#FBECEF] px-3 py-2 text-xs font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Supprimer
+        </span>
+      </div>
     </button>
   );
 }
@@ -818,16 +854,21 @@ export default function CalendarView({ children = [] }) {
     }
   }
 
-  function deleteEvent() {
-    const selectedEvent = getSelectedEvent();
-    if (!selectedEvent) return;
+  function requestDeleteEvent(event) {
+    if (!event) return;
 
-    if (selectedEvent.recurrence && selectedEvent.recurrence !== "Aucune") {
+    setSelectedEventId(event.id);
+
+    if (event.recurrence && event.recurrence !== "Aucune") {
       setShowDeleteOptions(true);
       return;
     }
 
-    deleteEventsByIds([selectedEvent.id]);
+    deleteEventsByIds([event.id]);
+  }
+
+  function deleteEvent() {
+    requestDeleteEvent(getSelectedEvent());
   }
 
   function deleteOnlyThisDay() {
@@ -938,7 +979,7 @@ export default function CalendarView({ children = [] }) {
             {visibleCalendarDays.map((date) => {
               const dayEvents = getEventsForDate(date.dateKey);
               const hasAppointment = dayEvents.some(isAppointmentEvent);
-              const appointmentIcon = dayEvents.find(isAppointmentEvent)?.appointmentEmoji || "♡";
+              const appointmentIcon = getDayAppointmentIcon(dayEvents);
               const segments = getChildSegments(dayEvents);
               const isSelected = date.dateKey === selectedDateKey;
               const isToday = date.dateKey === todayKey;
@@ -948,8 +989,12 @@ export default function CalendarView({ children = [] }) {
                   key={date.dateKey}
                   type="button"
                   onClick={() => selectDate(date.date)}
-                  className={`relative flex min-h-[76px] flex-col items-center justify-between rounded-[1.35rem] bg-white px-1.5 py-3 text-center shadow-[0_8px_22px_rgba(74,68,58,0.05)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[112px] md:rounded-[1.6rem] md:px-2 md:py-4 ${
-                    isSelected ? "ring-2 ring-[#A8B193]" : "ring-[#F1E4D7]"
+                  className={`relative flex min-h-[76px] flex-col items-center justify-between rounded-[1.35rem] px-1.5 py-3 text-center shadow-[0_8px_22px_rgba(74,68,58,0.05)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[112px] md:rounded-[1.6rem] md:px-2 md:py-4 ${
+                    isToday
+                      ? "bg-[#F0F3EA] ring-2 ring-[#A8B193]"
+                      : isSelected
+                        ? "bg-white ring-2 ring-[#A8B193]"
+                        : "bg-white ring-[#F1E4D7]"
                   } ${!date.isCurrentMonth ? "opacity-40" : ""}`}
                   aria-label={formatLongDate(date.date)}
                 >
@@ -974,8 +1019,6 @@ export default function CalendarView({ children = [] }) {
                       ))
                     )}
                   </span>
-
-                  {isToday && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#A8B193]" />}
                 </button>
               );
             })}
@@ -993,7 +1036,15 @@ export default function CalendarView({ children = [] }) {
                 Aucun événement pour cette journée.
               </div>
             ) : (
-              selectedDateEvents.map((event) => <EventCard key={event.id} event={event} childrenList={children} onClick={editEvent} />)
+              selectedDateEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  childrenList={children}
+                  onClick={editEvent}
+                  onDelete={requestDeleteEvent}
+                />
+              ))
             )}
 
             <button
@@ -1044,7 +1095,15 @@ export default function CalendarView({ children = [] }) {
                   {EMOJIS.map((emoji) => {
                     const selectedEmoji = (draft.appointmentEmoji || appointmentEmoji) === emoji;
                     return (
-                      <button key={emoji} type="button" onClick={() => updateDraft({ appointmentEmoji: emoji })} className={`rounded-2xl px-3 py-3 text-lg font-bold ring-1 transition ${selectedEmoji ? "bg-[#FFFAEF] text-[#B68E3D] ring-2 ring-[#F1DDAE]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          setAppointmentEmoji(emoji);
+                          updateDraft({ appointmentEmoji: emoji, icon: emoji });
+                        }}
+                        className={`rounded-2xl px-3 py-3 text-lg font-bold ring-1 transition ${selectedEmoji ? "bg-[#FFFAEF] text-[#B68E3D] ring-2 ring-[#F1DDAE]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}
+                      >
                         {emoji}
                       </button>
                     );
