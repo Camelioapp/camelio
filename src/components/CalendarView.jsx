@@ -711,10 +711,12 @@ export default function CalendarView({ children = [] }) {
 
   function openNewEvent(dateKey = selectedDateKey) {
     setSelectedEventId(null);
+    const canCreateCustody = children.length > 0;
+
     setDraft({
       title: "",
-      eventType: "custody",
-      childIds: activeChildIds.length === 1 ? [activeChildIds[0]] : [],
+      eventType: canCreateCustody ? "custody" : "appointment",
+      childIds: canCreateCustody && activeChildIds.length === 1 ? [activeChildIds[0]] : [],
       date: dateKey,
       start: "",
       end: "",
@@ -775,7 +777,16 @@ export default function CalendarView({ children = [] }) {
     return draft.eventType === type;
   }
 
+  function isCustodyDraftInvalid() {
+    return draft.eventType === "custody" && (children.length === 0 || draft.childIds.length === 0);
+  }
+
   function selectType(type) {
+    if (type === "custody" && children.length === 0) {
+      alert("Ajoute d’abord un profil enfant avant de créer une journée de garde.");
+      return;
+    }
+
     updateDraft({ eventType: type });
   }
 
@@ -852,6 +863,12 @@ export default function CalendarView({ children = [] }) {
   async function saveDayAndApplyFrequency() {
     try {
       setIsSaving(true);
+
+      if (isCustodyDraftInvalid()) {
+        alert("Sélectionne au moins un enfant avant d’ajouter une journée de garde.");
+        return;
+      }
+
       const frequency = draft.recurrence || "Aucune";
 
       if (frequency === "Aucune" || selectedEventId) {
@@ -1192,13 +1209,24 @@ export default function CalendarView({ children = [] }) {
             <div>
               <p className="label">Type</p>
               <div className="mt-3 grid !grid-cols-2 gap-2">
-                <button type="button" onClick={() => selectType("custody")} className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 ${hasType("custody") ? "bg-[#F0F3EA] text-[#7A8564] ring-2 ring-[#DDE4D2]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
+                <button
+                  type="button"
+                  onClick={() => selectType("custody")}
+                  disabled={children.length === 0}
+                  className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 transition ${hasType("custody") ? "bg-[#F0F3EA] text-[#7A8564] ring-2 ring-[#DDE4D2]" : "bg-white text-[#746F64] ring-[#EFE4D6]"} ${children.length === 0 ? "cursor-not-allowed opacity-45" : ""}`}
+                  title={children.length === 0 ? "Ajoute d’abord un profil enfant pour créer une journée de garde." : undefined}
+                >
                   Journée de garde
                 </button>
                 <button type="button" onClick={() => selectType("appointment")} className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 ${hasType("appointment") ? "bg-[#FFFAEF] text-[#B68E3D] ring-2 ring-[#F1DDAE]" : "bg-white text-[#746F64] ring-[#EFE4D6]"}`}>
                   Rendez-vous
                 </button>
               </div>
+              {children.length === 0 && (
+                <p className="mt-3 rounded-2xl bg-[#FFF8EC] px-4 py-3 text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
+                  Pour créer une journée de garde, ajoute d’abord un profil enfant. Les rendez-vous restent disponibles.
+                </p>
+              )}
             </div>
 
             <Field label="Titre">
@@ -1244,7 +1272,7 @@ export default function CalendarView({ children = [] }) {
               <p className="label">Enfants concernés</p>
               <div className="mt-3 space-y-2">
                 {children.length === 0 ? (
-                  <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun enfant n’est disponible. Ajoute d’abord un profil enfant.</div>
+                  <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">Aucun enfant n’est disponible. Ajoute d’abord un profil enfant pour utiliser les journées de garde.</div>
                 ) : (
                   children.map((child, index) => {
                     const checked = draft.childIds.includes(child.id);
@@ -1266,6 +1294,12 @@ export default function CalendarView({ children = [] }) {
               </div>
             </div>
 
+            {isCustodyDraftInvalid() && children.length > 0 && (
+              <p className="rounded-2xl bg-[#FFF8EC] px-4 py-3 text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
+                Sélectionne au moins un enfant pour enregistrer une journée de garde.
+              </p>
+            )}
+
             <Field label="Notes">
               <textarea value={draft.note} onChange={(event) => updateDraft({ note: event.target.value })} rows={5} className={textareaClass} placeholder="Ex. Échange à l'école, rendez-vous, activité spéciale..." />
             </Field>
@@ -1282,7 +1316,7 @@ export default function CalendarView({ children = [] }) {
                 </button>
               )}
 
-              <button type="button" onClick={saveDayAndApplyFrequency} disabled={isSaving} className="w-full rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+              <button type="button" onClick={saveDayAndApplyFrequency} disabled={isSaving || isCustodyDraftInvalid()} className="w-full rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
                 {isSaving ? "Enregistrement..." : "Enregistrer"}
               </button>
             </div>
