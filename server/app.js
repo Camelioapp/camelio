@@ -6311,7 +6311,7 @@ app.post(
       if (requiresCode && !isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
-          message: message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
+          message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
         });
       }
 
