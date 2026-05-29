@@ -199,7 +199,15 @@ function eventTypeLabel(event) {
 }
 
 function getAppointmentIcon(event) {
-  return event?.appointmentEmoji || event?.appointmentIcon || event?.eventIcon || event?.icon || event?.emoji || "♡";
+  const possibleIcons = [
+    event?.appointmentEmoji,
+    event?.appointmentIcon,
+    event?.eventIcon,
+    event?.icon,
+    event?.emoji,
+  ].filter(Boolean);
+
+  return possibleIcons.find((icon) => icon !== "♡") || possibleIcons[0] || "♡";
 }
 
 function getDayAppointmentIcon(dayEvents = []) {
@@ -365,8 +373,8 @@ function EventCard({ event, childrenList, onClick, onDelete }) {
           </p>
           <p className="mt-1 text-xs font-bold text-[#746F64]">{eventTypeLabel(event)}</p>
           {event.recurrence && event.recurrence !== "Aucune" && (
-            <p className="mt-1 inline-flex rounded-full bg-[#F8F3EA] px-2.5 py-1 text-[11px] font-bold text-[#7A8564] ring-1 ring-[#EFE4D6]">
-              Fréquence : {event.recurrence}
+            <p className="mt-2 inline-flex rounded-full bg-[#F0F3EA] px-2.5 py-1 text-[11px] font-bold text-[#6A754F] ring-1 ring-[#DDE4D2]">
+              Récurrence active : {event.recurrence}
             </p>
           )}
         </div>
@@ -858,13 +866,7 @@ export default function CalendarView({ children = [] }) {
     if (!event) return;
 
     setSelectedEventId(event.id);
-
-    if (event.recurrence && event.recurrence !== "Aucune") {
-      setShowDeleteOptions(true);
-      return;
-    }
-
-    deleteEventsByIds([event.id]);
+    setShowDeleteOptions(true);
   }
 
   function deleteEvent() {
@@ -1164,29 +1166,58 @@ export default function CalendarView({ children = [] }) {
 
       {showDeleteOptions && (
         <Popup title="Supprimer cet élément" kicker="Calendrier" close={() => setShowDeleteOptions(false)}>
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm leading-6 text-[#746F64] ring-1 ring-[#EFE4D6]">
-              Cet élément fait partie d’une fréquence. Veux-tu supprimer seulement cette journée ou toute la fréquence?
-            </div>
+          {(() => {
+            const eventToDelete = getSelectedEvent();
+            const hasRecurrence = Boolean(eventToDelete?.recurrence && eventToDelete.recurrence !== "Aucune");
 
-            <button
-              type="button"
-              onClick={deleteOnlyThisDay}
-              disabled={isSaving}
-              className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-60"
-            >
-              Supprimer seulement cette journée
-            </button>
+            return (
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm leading-6 text-[#746F64] ring-1 ring-[#EFE4D6]">
+                  <p className="font-bold text-[#4F4A45]">
+                    {eventToDelete?.title || eventTypeLabel(eventToDelete || {})}
+                  </p>
+                  {hasRecurrence ? (
+                    <p className="mt-2">
+                      Cet élément est récurrent : <strong>{eventToDelete.recurrence}</strong>. Veux-tu supprimer seulement cette journée ou toute la récurrence?
+                    </p>
+                  ) : (
+                    <p className="mt-2">
+                      Cet élément n’a pas de récurrence. Tu peux supprimer seulement cette journée.
+                    </p>
+                  )}
+                </div>
 
-            <button
-              type="button"
-              onClick={deleteWholeFrequency}
-              disabled={isSaving}
-              className="w-full rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60"
-            >
-              Supprimer toute la fréquence
-            </button>
-          </div>
+                <button
+                  type="button"
+                  onClick={deleteOnlyThisDay}
+                  disabled={isSaving}
+                  className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-60"
+                >
+                  Supprimer seulement cette journée
+                </button>
+
+                {hasRecurrence && (
+                  <button
+                    type="button"
+                    onClick={deleteWholeFrequency}
+                    disabled={isSaving}
+                    className="w-full rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60"
+                  >
+                    Supprimer toute la récurrence
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteOptions(false)}
+                  disabled={isSaving}
+                  className="w-full rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6] disabled:opacity-60"
+                >
+                  Annuler
+                </button>
+              </div>
+            );
+          })()}
         </Popup>
       )}
 
