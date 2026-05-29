@@ -47,6 +47,26 @@ const RECURRENCES = ["Aucune", "Chaque semaine", "Aux deux semaines", "Chaque mo
 const CAMELIO_COLORS = ["#A8B193", "#B5A7C8", "#EAA5AF", "#EEC988", "#A2BADF"];
 const APPOINTMENT_COLOR = "#EEC988";
 const RECURRENCE_MONTH_LIMIT = 12;
+const FAMILY_PREFERENCES_STORAGE_KEY = "camelio_family_preferences";
+
+function readFamilyPreferences() {
+  if (typeof window === "undefined") {
+    return { sharedCustodyEnabled: true };
+  }
+
+  try {
+    const saved = window.localStorage.getItem(FAMILY_PREFERENCES_STORAGE_KEY);
+    if (!saved) return { sharedCustodyEnabled: true };
+    const parsed = JSON.parse(saved);
+    return {
+      sharedCustodyEnabled: parsed.sharedCustodyEnabled !== false,
+    };
+  } catch (error) {
+    console.error("Erreur lecture préférences familiales:", error);
+    return { sharedCustodyEnabled: true };
+  }
+}
+
 
 const childColorHex = {
   sage: "#A8B193",
@@ -353,8 +373,8 @@ function ChildFilterPill({ child, active, index, onClick }) {
 }
 
 
-function WeekDayCard({ date, dayEvents, childrenList, selected, today, onClick }) {
-  const custodyEvents = dayEvents.filter(isCustodyEvent);
+function WeekDayCard({ date, dayEvents, childrenList, selected, today, onClick, showCustody = true }) {
+  const custodyEvents = showCustody ? dayEvents.filter(isCustodyEvent) : [];
   const appointmentEvents = dayEvents.filter(isAppointmentEvent);
 
   const childSegments = childrenList
@@ -531,6 +551,7 @@ export default function CalendarView({ children = [] }) {
   const [selectedDay, setSelectedDay] = useState(today.getDate());
   const [activeChildIds, setActiveChildIds] = useState([]);
   const [viewMode, setViewMode] = useState("month");
+  const [familyPreferences, setFamilyPreferences] = useState(() => readFamilyPreferences());
 
   const [events, setEvents] = useState([]);
   const [showDayDetails, setShowDayDetails] = useState(false);
@@ -548,6 +569,7 @@ export default function CalendarView({ children = [] }) {
   const selectedDate = useMemo(() => new Date(year, month, selectedDay), [year, month, selectedDay]);
   const selectedDateKey = dateToKey(selectedDate);
   const todayKey = dateToKey(today);
+  const sharedCustodyEnabled = familyPreferences.sharedCustodyEnabled !== false;
 
   const [draft, setDraft] = useState({
     title: "",
@@ -569,6 +591,29 @@ export default function CalendarView({ children = [] }) {
   }, []);
 
   useEffect(() => {
+    const syncFamilyPreferences = (event) => {
+      if (event?.detail) {
+        setFamilyPreferences({
+          sharedCustodyEnabled: event.detail.sharedCustodyEnabled !== false,
+        });
+        return;
+      }
+
+      setFamilyPreferences(readFamilyPreferences());
+    };
+
+    window.addEventListener("storage", syncFamilyPreferences);
+    window.addEventListener("focus", syncFamilyPreferences);
+    window.addEventListener("camelio-family-preferences-updated", syncFamilyPreferences);
+
+    return () => {
+      window.removeEventListener("storage", syncFamilyPreferences);
+      window.removeEventListener("focus", syncFamilyPreferences);
+      window.removeEventListener("camelio-family-preferences-updated", syncFamilyPreferences);
+    };
+  }, []);
+
+  useEffect(() => {
     setActiveChildIds((current) => {
       const availableIds = children.map((child) => child.id);
       if (availableIds.length === 0) return [];
@@ -583,9 +628,16 @@ export default function CalendarView({ children = [] }) {
   const activeSet = useMemo(() => new Set(activeChildIds), [activeChildIds]);
 
   const filteredEvents = useMemo(() => {
-    if (activeChildIds.length === 0) return events;
-    return events.filter((event) => event.childIds.length === 0 || event.childIds.some((childId) => activeSet.has(childId)));
-  }, [events, activeChildIds, activeSet]);
+    const eventsAllowedByCustodySetting = sharedCustodyEnabled
+      ? events
+      : events.filter((event) => !isCustodyEvent(event) || isAppointmentEvent(event));
+
+    if (activeChildIds.length === 0) return eventsAllowedByCustodySetting;
+
+    return eventsAllowedByCustodySetting.filter(
+      (event) => event.childIds.length === 0 || event.childIds.some((childId) => activeSet.has(childId))
+    );
+  }, [events, activeChildIds, activeSet, sharedCustodyEnabled]);
 
   const selectedDateEvents = useMemo(() => {
     return filteredEvents
@@ -773,6 +825,8 @@ export default function CalendarView({ children = [] }) {
   }
 
   function getChildSegments(dayEvents) {
+    if (!sharedCustodyEnabled) return [];
+
     return children
       .map((child, index) => {
         if (!activeSet.has(child.id)) return null;
@@ -796,7 +850,7 @@ export default function CalendarView({ children = [] }) {
 
   function openNewEvent(dateKey = selectedDateKey) {
     setSelectedEventId(null);
-    const canCreateCustody = children.length > 0;
+    const canCreateCustody = sharedCustodyEnabled && children.length > 0;
 
     setDraft({
       title: "",
@@ -863,10 +917,15 @@ export default function CalendarView({ children = [] }) {
   }
 
   function isCustodyDraftInvalid() {
-    return draft.eventType === "custody" && (children.length === 0 || draft.childIds.length === 0);
+    return draft.eventType === "custody" && (!sharedCustodyEnabled || children.length === 0 || draft.childIds.length === 0);
   }
 
   function selectType(type) {
+    if (type === "custody" && !sharedCustodyEnabled) {
+      alert("Active la garde partagée dans les paramètres pour créer une journée de garde.");
+      return;
+    }
+
     if (type === "custody" && children.length === 0) {
       alert("Ajoute d’abord un profil enfant avant de créer une journée de garde.");
       return;
@@ -950,7 +1009,11 @@ export default function CalendarView({ children = [] }) {
       setIsSaving(true);
 
       if (isCustodyDraftInvalid()) {
-        alert("Sélectionne au moins un enfant avant d’ajouter une journée de garde.");
+        alert(
+          !sharedCustodyEnabled
+            ? "Active la garde partagée dans les paramètres pour créer une journée de garde."
+            : "Sélectionne au moins un enfant avant d’ajouter une journée de garde."
+        );
         return;
       }
 
@@ -1186,6 +1249,12 @@ export default function CalendarView({ children = [] }) {
             Exporter vers Google ou Outlook
           </button>
 
+          {!sharedCustodyEnabled && (
+            <div className="mt-4 rounded-2xl bg-[#FFF8EC] px-4 py-3 text-center text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
+              Garde partagée désactivée : le calendrier affiche seulement les rendez-vous et activités.
+            </div>
+          )}
+
           {viewMode === "month" && (
             <div className="mt-5 grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#6F7466] md:gap-3 md:text-sm">
               {WEEK_DAYS.map((day) => (
@@ -1212,6 +1281,7 @@ export default function CalendarView({ children = [] }) {
                     childrenList={children}
                     selected={date.dateKey === selectedDateKey}
                     today={date.dateKey === todayKey}
+                    showCustody={sharedCustodyEnabled}
                     onClick={() => selectDate(date.date)}
                   />
                 );
@@ -1311,9 +1381,9 @@ export default function CalendarView({ children = [] }) {
                 <button
                   type="button"
                   onClick={() => selectType("custody")}
-                  disabled={children.length === 0}
-                  className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 transition ${hasType("custody") ? "bg-[#F0F3EA] text-[#7A8564] ring-2 ring-[#DDE4D2]" : "bg-white text-[#746F64] ring-[#EFE4D6]"} ${children.length === 0 ? "cursor-not-allowed opacity-45" : ""}`}
-                  title={children.length === 0 ? "Ajoute d’abord un profil enfant pour créer une journée de garde." : undefined}
+                  disabled={!sharedCustodyEnabled || children.length === 0}
+                  className={`rounded-2xl px-3 py-3 text-xs font-bold ring-1 transition ${hasType("custody") ? "bg-[#F0F3EA] text-[#7A8564] ring-2 ring-[#DDE4D2]" : "bg-white text-[#746F64] ring-[#EFE4D6]"} ${!sharedCustodyEnabled || children.length === 0 ? "cursor-not-allowed opacity-45" : ""}`}
+                  title={!sharedCustodyEnabled ? "Active la garde partagée dans les paramètres pour créer une journée de garde." : children.length === 0 ? "Ajoute d’abord un profil enfant pour créer une journée de garde." : undefined}
                 >
                   Journée de garde
                 </button>
@@ -1321,11 +1391,15 @@ export default function CalendarView({ children = [] }) {
                   Rendez-vous
                 </button>
               </div>
-              {children.length === 0 && (
+              {!sharedCustodyEnabled ? (
+                <p className="mt-3 rounded-2xl bg-[#FFF8EC] px-4 py-3 text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
+                  La garde partagée est désactivée dans les paramètres. Les journées de garde sont masquées et seuls les rendez-vous peuvent être ajoutés.
+                </p>
+              ) : children.length === 0 ? (
                 <p className="mt-3 rounded-2xl bg-[#FFF8EC] px-4 py-3 text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
                   Pour créer une journée de garde, ajoute d’abord un profil enfant. Les rendez-vous restent disponibles.
                 </p>
-              )}
+              ) : null}
             </div>
 
             <Field label="Titre">
@@ -1393,9 +1467,11 @@ export default function CalendarView({ children = [] }) {
               </div>
             </div>
 
-            {isCustodyDraftInvalid() && children.length > 0 && (
+            {isCustodyDraftInvalid() && (
               <p className="rounded-2xl bg-[#FFF8EC] px-4 py-3 text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
-                Sélectionne au moins un enfant pour enregistrer une journée de garde.
+                {!sharedCustodyEnabled
+                  ? "La garde partagée est désactivée dans les paramètres."
+                  : "Sélectionne au moins un enfant pour enregistrer une journée de garde."}
               </p>
             )}
 

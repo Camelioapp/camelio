@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronDown,
+  CalendarDays,
   Cookie,
   CreditCard,
   Eye,
@@ -277,6 +278,42 @@ export default function SettingsView({
       preferences: false,
     };
   });
+
+  const [familyPreferences, setFamilyPreferences] = useState(() => {
+    try {
+      const saved = localStorage.getItem("camelio_family_preferences");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          sharedCustodyEnabled: parsed.sharedCustodyEnabled !== false,
+        };
+      }
+    } catch (error) {
+      console.error("Erreur lecture préférences familiales:", error);
+    }
+
+    return {
+      sharedCustodyEnabled: true,
+    };
+  });
+
+  const saveFamilyPreferences = (preferences) => {
+    setFamilyPreferences(preferences);
+
+    localStorage.setItem(
+      "camelio_family_preferences",
+      JSON.stringify({
+        ...preferences,
+        savedAt: new Date().toISOString(),
+      })
+    );
+
+    window.dispatchEvent(
+      new CustomEvent("camelio-family-preferences-updated", {
+        detail: preferences,
+      })
+    );
+  };
 
   const [uploadPreferences, setUploadPreferences] = useState(() => {
   try {
@@ -908,6 +945,91 @@ const saveUploadPreferences = (preferences) => {
           })}
         </div>
       </DropdownSection>
+
+<DropdownSection
+  id="family-organization"
+  title="Organisation familiale"
+  description="Indiquer si le calendrier doit afficher les journées de garde partagée."
+  icon={CalendarDays}
+  iconColor="#B5A7C8"
+  openSection={openMainSection}
+  setOpenSection={setOpenMainSection}
+>
+  <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 shadow-sm">
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="font-bold text-[#3F3D38]">
+          Garde partagée
+        </p>
+
+        <p className="mt-1 text-sm leading-relaxed text-[#5F5A50]">
+          Activez cette option pour afficher les journées de garde dans le
+          calendrier. Si elle est désactivée, le calendrier affiche seulement
+          les rendez-vous et activités.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          saveFamilyPreferences({
+            ...familyPreferences,
+            sharedCustodyEnabled: !familyPreferences.sharedCustodyEnabled,
+          })
+        }
+        className={`relative h-8 w-14 shrink-0 rounded-full transition ${
+          familyPreferences.sharedCustodyEnabled
+            ? "bg-[#7F9166]"
+            : "bg-[#B9B2A5]"
+        }`}
+        aria-label="Activer ou désactiver la garde partagée"
+      >
+        <span
+          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${
+            familyPreferences.sharedCustodyEnabled ? "left-7" : "left-1"
+          }`}
+        />
+      </button>
+    </div>
+
+    <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white p-1 ring-1 ring-[#EFE4D6]">
+      {[
+        [true, "Oui"],
+        [false, "Non"],
+      ].map(([value, label]) => (
+        <button
+          key={String(value)}
+          type="button"
+          onClick={() =>
+            saveFamilyPreferences({
+              ...familyPreferences,
+              sharedCustodyEnabled: value,
+            })
+          }
+          className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+            familyPreferences.sharedCustodyEnabled === value
+              ? "bg-[#F0F3EA] text-[#5F7F52] shadow-sm ring-1 ring-[#DDE4D2]"
+              : "text-[#746F64] hover:bg-[#FFF8EC]"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+
+    <p
+      className={`mt-3 text-xs font-bold ${
+        familyPreferences.sharedCustodyEnabled
+          ? "text-[#5F7F52]"
+          : "text-[#8A6F5A]"
+      }`}
+    >
+      {familyPreferences.sharedCustodyEnabled
+        ? "Les journées de garde sont affichées dans le calendrier."
+        : "Les journées de garde sont masquées. Seuls les rendez-vous sont affichés."}
+    </p>
+  </div>
+</DropdownSection>
 
 <DropdownSection
   id="uploads"
