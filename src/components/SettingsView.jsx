@@ -235,6 +235,7 @@ export default function SettingsView({
   const [openMainSection, setOpenMainSection] = useState("profile");
   const [pdfModal, setPdfModal] = useState(null);
   const [showCookieModal, setShowCookieModal] = useState(false);
+  const [showParentPhotoPicker, setShowParentPhotoPicker] = useState(false);
 
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deleteAccountConfirmation, setDeleteAccountConfirmation] =
@@ -721,6 +722,7 @@ const saveUploadPreferences = (preferences) => {
       updateParentProfileDetails({
         photoUrl: String(reader.result || ""),
       });
+      setShowParentPhotoPicker(false);
     };
     reader.readAsDataURL(file);
 
@@ -780,15 +782,13 @@ const saveUploadPreferences = (preferences) => {
                 </p>
 
                 <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
-                  <label className="cursor-pointer rounded-2xl bg-[#A8AA91] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95">
+                  <button
+                    type="button"
+                    onClick={() => setShowParentPhotoPicker(true)}
+                    className="rounded-2xl bg-[#A8AA91] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                  >
                     Choisir une photo
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleParentPhotoChange}
-                    />
-                  </label>
+                  </button>
 
                   {parentProfile.photoUrl && (
                     <button
@@ -802,39 +802,7 @@ const saveUploadPreferences = (preferences) => {
                 </div>
               </div>
             </div>
-
-            <div className="mt-5">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#A8AA91]">
-                Profils parent
-              </p>
-              <div className="mt-3 grid grid-cols-4 gap-3 sm:grid-cols-6 md:grid-cols-8">
-                {parentAvatarOptions.map((avatar) => {
-                  const selected = parentProfile.photoUrl === avatar.path;
-
-                  return (
-                    <button
-                      key={avatar.id}
-                      type="button"
-                      onClick={() => updateParentProfileDetails({ photoUrl: avatar.path })}
-                      className={`aspect-square overflow-hidden rounded-2xl bg-white p-1 transition ring-1 ${
-                        selected
-                          ? "ring-2 ring-[#A8AA91] shadow-md"
-                          : "ring-[#EFE4D6] hover:ring-[#D8C8B4]"
-                      }`}
-                      aria-label={`Choisir ${avatar.label}`}
-                    >
-                      <img
-                        src={avatar.path}
-                        alt={avatar.label}
-                        className="h-full w-full rounded-xl object-cover"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
-
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Nom complet">
               <input
@@ -1665,6 +1633,94 @@ const saveUploadPreferences = (preferences) => {
               title={pdfModal.title}
               className="h-full w-full bg-[#F8F3EA]"
             />
+          </div>
+        </div>
+      )}
+
+      {showParentPhotoPicker && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#3F3D38]/45 p-0 sm:items-center sm:p-4">
+          <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-[2rem] bg-[#FFFDF8] p-5 shadow-2xl sm:max-w-2xl sm:rounded-[2rem]">
+            <div className="flex items-start justify-between gap-4 border-b border-[#EFE4D6] pb-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#A8AA91]">
+                  Photo du parent
+                </p>
+                <h3 className="mt-1 text-xl font-bold text-[#3F3D38]">
+                  Choisir une photo
+                </h3>
+                <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
+                  Importez votre photo ou choisissez une illustration de profil parent.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowParentPhotoPicker(false)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#F5EFE6] text-[#746F64] transition hover:bg-[#EFE4D6]"
+                aria-label="Fermer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <label className="cursor-pointer rounded-2xl bg-[#A8AA91] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95">
+                Importer une photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleParentPhotoChange}
+                />
+              </label>
+
+              {parentProfile.photoUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateParentProfileDetails({ photoUrl: "" });
+                    setShowParentPhotoPicker(false);
+                  }}
+                  className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#B86C6C] ring-1 ring-[#EFE4D6] transition hover:bg-[#FFF7F7]"
+                >
+                  Retirer la photo
+                </button>
+              )}
+            </div>
+
+            <div className="mt-5">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#A8AA91]">
+                Profils parent
+              </p>
+              <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+                {parentAvatarOptions.map((avatar) => {
+                  const selected = parentProfile.photoUrl === avatar.path;
+
+                  return (
+                    <button
+                      key={avatar.id}
+                      type="button"
+                      onClick={() => {
+                        updateParentProfileDetails({ photoUrl: avatar.path });
+                        setShowParentPhotoPicker(false);
+                      }}
+                      className={`aspect-square overflow-hidden rounded-2xl bg-white p-1 transition ring-1 ${
+                        selected
+                          ? "ring-2 ring-[#A8AA91] shadow-md"
+                          : "ring-[#EFE4D6] hover:ring-[#D8C8B4]"
+                      }`}
+                      aria-label={`Choisir ${avatar.label}`}
+                    >
+                      <img
+                        src={avatar.path}
+                        alt={avatar.label}
+                        className="h-full w-full rounded-xl object-cover"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}

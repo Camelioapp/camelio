@@ -1531,12 +1531,14 @@ export default function Dashboard({
               >
                 {sharedAccess.hasSharedAccess ? (
                   <Settings className="h-6 w-6 text-[#8f9874]" />
-                ) : (
+                ) : parentProfile.photoUrl ? (
                   <img
-                    src="https://studiocameleon.ca/wp-content/uploads/2026/05/pere_2_enfants_filles.png"
+                    src={parentProfile.photoUrl}
                     alt="Profil"
                     className="h-full w-full object-cover"
                   />
+                ) : (
+                  <UserRound className="h-6 w-6 text-[#8f9874]" />
                 )}
               </button>
             </header>
