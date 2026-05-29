@@ -31,6 +31,7 @@ import SettingsView from "./SettingsView.jsx";
 import GuestSettingsView from "./GuestSettingsView.jsx";
 import MemorablePhrases from "./MemorablePhrases.jsx";
 import CarnetSouvenirs from "./CarnetSouvenirs.jsx";
+import MobileFooter from "./MobileFooter.jsx";
 import { sections, getSectionTheme } from "./sectionsData.js";
 import { motion } from "framer-motion";
 import ProfileSharing from "./ProfileSharing.jsx";
@@ -439,6 +440,8 @@ function AccountSwitcher({ accounts, activeAccountId, onSelect }) {
     </div>
   );
 }
+
+
 
 export default function Dashboard({
   parentProfile: parentProfileFromApp = {
@@ -1466,7 +1469,7 @@ export default function Dashboard({
         {parentWelcomePopup}
         {subscriptionPopup}
         {firstStepPopup}
-        <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
+        <div className="min-h-screen bg-[#fbf7ef] pb-28 text-[#4f4a45] md:pb-0">
           <div className="mx-auto max-w-6xl p-3 md:p-6">
             <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
               <header className="flex items-center justify-between border-b border-[#eadfcf] px-5 py-5 md:px-8">
@@ -1490,10 +1493,16 @@ export default function Dashboard({
                 </button>
               </header>
 
-              <main className="p-4 md:p-8">{renderActiveSection()}</main>
+              <main className="p-4 pb-28 md:p-8">{renderActiveSection()}</main>
             </div>
           </div>
         </div>
+        <MobileFooter
+          activeSection={activeSection}
+          sharedAccess={sharedAccess}
+          openSection={openSection}
+          goHome={goHome}
+        />
       </>
     );
   }
@@ -1503,7 +1512,7 @@ export default function Dashboard({
       {parentWelcomePopup}
       {subscriptionPopup}
       {firstStepPopup}
-      <div className="min-h-screen bg-[#fbf7ef] text-[#4f4a45]">
+      <div className="min-h-screen bg-[#fbf7ef] pb-28 text-[#4f4a45] md:pb-0">
         <div className="mx-auto max-w-6xl p-3 md:p-6">
           <div className="overflow-hidden rounded-[28px] border border-[#eadfcf] bg-[#fffdf8] shadow-sm md:rounded-[36px]">
             <div className="flex justify-center pt-4">
@@ -1543,7 +1552,7 @@ export default function Dashboard({
               </button>
             </header>
 
-            <main className="p-4 md:p-8">
+            <main className="p-4 pb-28 md:p-8">
               <section className="relative overflow-hidden rounded-[30px] border border-[#eadfcf] bg-white shadow-sm">
                 <FamilyFloatingBubbles />
 
@@ -1832,6 +1841,12 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+        <MobileFooter
+          activeSection={activeSection}
+          sharedAccess={sharedAccess}
+          openSection={openSection}
+          goHome={goHome}
+        />
     </>
   );
 }
