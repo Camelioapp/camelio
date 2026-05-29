@@ -282,7 +282,34 @@ app.use(express.json({ limit: "10mb" }));
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "base-uri": ["'self'"],
+        "object-src": ["'none'"],
+        "frame-ancestors": ["'none'"],
+
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+
+        "connect-src": [
+          "'self'",
+          "https://camelio.app",
+          "https://www.camelio.app",
+          "https://api.camelio.app",
+          "https://*.amazonaws.com",
+          "https://*.amazoncognito.com",
+          "https://api.stripe.com",
+          "https://checkout.stripe.com",
+          "https://api.resend.com"
+        ],
+
+        "script-src": ["'self'", "https://js.stripe.com"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "font-src": ["'self'", "data:", "https:"],
+        "frame-src": ["'self'", "https://js.stripe.com", "https://checkout.stripe.com"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -1348,7 +1375,7 @@ function normalizeShareCode(code = "") {
 }
 
 function isValidShareCode(code = "") {
-  return /^[A-Z0-9]{4}$/.test(normalizeShareCode(code));
+  return /^[A-Z0-9]{6,8}$/.test(normalizeShareCode(code));
 }
 
 function hashShareCode(code = "", salt = "") {
@@ -1687,7 +1714,13 @@ async function sendEmailWithResend({ to, subject, html, text }) {
   return data;
 }
 
-app.get("/api/test-email", async (req, res) => {
+app.get("/api/test-email", requireAuth, async (req, res) => {
+  if (IS_PRODUCTION) {
+    return res.status(404).json({
+      error: "not_found",
+      message: "Route non disponible en production.",
+    });
+  }
   try {
     console.log("TEST RESEND EMAIL START", {
       hasResendApiKey: Boolean(RESEND_API_KEY),
@@ -6148,7 +6181,7 @@ app.post(
       if (requiresCode && !isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
-          message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
+          message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
         });
       }
 
@@ -6278,7 +6311,7 @@ app.post(
       if (requiresCode && !isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
-          message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
+          message: message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
         });
       }
 
