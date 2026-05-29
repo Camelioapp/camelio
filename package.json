@@ -19,7 +19,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "tailwindcss": "4.1.8",
-    "vite": "6.3.5"
+    "vite": "6.4.2"
   },
   "devDependencies": {
     "autoprefixer": "^10.5.0",
