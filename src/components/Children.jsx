@@ -404,6 +404,10 @@ function PhotoPicker({
                 <Camera className="h-4 w-4" />
                 Importer
                 <input
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   type="file"
                   accept="image/*"
                   className="hidden"
@@ -467,6 +471,10 @@ function PhotoPicker({
               <label className="block text-xs font-bold text-[#746F64]">
                 Zoom
                 <input
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   type="range"
                   min="0.7"
                   max="2.5"
@@ -1161,6 +1169,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
               <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
                 <FormField label="Prénom">
                   <input
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     className={inputClass}
                     value={newChild.firstName}
                     onChange={(event) =>
@@ -1176,6 +1188,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
                 <FormField label="Nom">
                   <input
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     className={inputClass}
                     value={newChild.lastName}
                     onChange={(event) =>
@@ -1190,6 +1206,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
                 <FormField label="Surnom">
                   <input
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     className={inputClass}
                     value={newChild.nickname}
                     onChange={(event) =>
@@ -1221,6 +1241,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
                 <FormField label="Date de fête">
                   <input
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     type="date"
                     className={inputClass}
                     value={newChild.birthDate}
@@ -1266,6 +1290,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   <label className="mt-4 block">
                     <span className="text-sm font-bold text-[#4F4A45]">Date du décès</span>
                     <input
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
                       type="date"
                       className={`${inputClass} mt-2`}
                       value={newChild.deceasedDate || ""}
@@ -1504,6 +1532,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
               <FormField label="Prénom">
                 <input
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   className={inputClass}
                   value={selectedChild.firstName || ""}
                   onChange={(event) =>
@@ -1517,6 +1549,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
               <FormField label="Nom">
                 <input
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   className={inputClass}
                   value={selectedChild.lastName || ""}
                   onChange={(event) =>
@@ -1530,6 +1566,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
               <FormField label="Surnom">
                 <input
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   className={inputClass}
                   value={selectedChild.nickname || ""}
                   onChange={(event) =>
@@ -1562,6 +1602,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
               <FormField label="Date de fête">
                 <input
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   type="date"
                   className={inputClass}
                   value={
@@ -1613,6 +1657,10 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                 <label className="mt-4 block">
                   <span className="text-sm font-bold text-[#4F4A45]">Date du décès</span>
                   <input
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     type="date"
                     className={`${inputClass} mt-2`}
                     value={selectedChild.deceasedDate || ""}

@@ -1073,36 +1073,28 @@ export default function Photos({ children = [] }) {
         </div>
       )}
 
-      <div className="rounded-[2rem] bg-[#FFF8F9] p-5 shadow-sm ring-1 ring-[#F3CDD3]">
-        <div className="rounded-[1.75rem] bg-white p-5 ring-1 ring-[#EFE4D6]">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EAA5AF] text-white shadow-sm">
+      <div className="rounded-[2rem] bg-[#FFF8F9] p-4 shadow-sm ring-1 ring-[#F3CDD3] md:p-5">
+        <div className="flex items-center gap-3 rounded-[1.75rem] bg-white p-4 ring-1 ring-[#EFE4D6] md:p-5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EAA5AF] text-white shadow-sm">
             <Camera className="h-6 w-6" />
           </div>
 
-          <h3 className="mt-3 text-xl font-bold text-[#55534C]">
-            Ajouter des photos
-          </h3>
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-[#55534C] md:text-xl">
+              Ajouter des photos
+            </h3>
 
-          <p className="mt-2 text-sm leading-6 text-[#746F64]">
-            Importe une ou plusieurs photos, choisis les enfants présents et
-            classe-les dans un album.
-          </p>
-
-          <div className="mt-5">
-            <PhotoCompressionToggle
-              enabled={compressPhotosBeforeUpload}
-              onToggle={() =>
-                setCompressPhotosBeforeUpload((current) => !current)
-              }
-            />
+            <p className="mt-1 text-xs leading-5 text-[#746F64] md:text-sm">
+              Importe, identifie et classe les photos par album.
+            </p>
           </div>
         </div>
 
-        <div className="mt-5 grid !grid-cols-2 gap-3">
+        <div className="mt-4 flex gap-3">
           <button
             type="button"
             onClick={() => setShowPhotoPopup(true)}
-            className="rounded-2xl bg-[#EAA5AF] px-4 py-4 text-sm font-bold text-white shadow-sm"
+            className="flex-1 rounded-2xl bg-[#EAA5AF] px-4 py-4 text-sm font-bold text-white shadow-sm"
           >
             Ajouter des photos
           </button>
@@ -1110,7 +1102,7 @@ export default function Photos({ children = [] }) {
           <button
             type="button"
             onClick={() => setShowAlbumPopup(true)}
-            className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
+            className="flex-1 rounded-2xl bg-white px-4 py-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
           >
             Créer un album
           </button>

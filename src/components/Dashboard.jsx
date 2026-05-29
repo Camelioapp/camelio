@@ -1497,12 +1497,6 @@ export default function Dashboard({
             </div>
           </div>
         </div>
-        <MobileFooter
-          activeSection={activeSection}
-          sharedAccess={sharedAccess}
-          openSection={openSection}
-          goHome={goHome}
-        />
       </>
     );
   }
@@ -1621,9 +1615,9 @@ export default function Dashboard({
                     </button>
                   ) : (
                     <div className="relative -mx-2 overflow-hidden">
-                      <div className="overflow-x-auto pb-3 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="pb-3 pt-2">
                         <div className="flex min-h-[165px] items-end justify-center px-2 sm:min-h-[205px] md:min-h-[220px] md:px-8">
-                          <div className="flex items-end justify-center pl-7 sm:pl-8 md:pl-9">
+                          <div className="flex flex-wrap items-end justify-center gap-3 sm:gap-4 md:gap-5">
                             {children.map((child, index) => {
                               const photo = child.image || child.photo || "";
                               const initials = getInitials(child);
@@ -1647,8 +1641,6 @@ export default function Dashboard({
                                   }
                                   className={`group relative isolate flex w-[118px] shrink-0 items-center justify-center pb-4 sm:w-[138px] md:w-[156px] ${
                                     isGuestAccount ? "cursor-not-allowed" : ""
-                                  } ${
-                                    index === 0 ? "" : "-ml-7 sm:-ml-9 md:-ml-11"
                                   }`}
                                   style={{ zIndex: children.length + index }}
                                   animate={{
@@ -1665,22 +1657,13 @@ export default function Dashboard({
                                   whileTap={{ scale: 0.98 }}
                                 >
                                   <div
-                                    className={`relative flex h-[112px] w-[112px] items-center justify-center overflow-visible border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px] ${
-                                      starProfile ? "rounded-none" : "rounded-full"
-                                    }`}
+                                    className="relative flex h-[112px] w-[112px] items-center justify-center overflow-visible rounded-full border-[7px] border-white text-2xl font-bold shadow-[0_14px_28px_rgba(79,74,69,0.14)] transition duration-300 sm:h-[132px] sm:w-[132px] sm:border-[9px] md:h-[150px] md:w-[150px] md:border-[10px]"
                                     style={{
                                       backgroundColor: childTheme.soft,
                                       color: childTheme.text,
                                     }}
                                   >
-                                    <div
-                                      className={`absolute inset-0 overflow-hidden ${
-                                        starProfile ? "rounded-none" : "rounded-full"
-                                      }`}
-                                      style={{
-                                        clipPath: starProfile ? starClipPath : undefined,
-                                      }}
-                                    >
+                                    <div className="absolute inset-0 overflow-hidden rounded-full">
                                       {photo ? (
                                         <PhotoImage
                                           src={photo}
@@ -1723,12 +1706,6 @@ export default function Dashboard({
                           </div>
                         </div>
                       </div>
-
-                      {children.length > 2 && (
-                        <p className="mt-1 text-center text-xs font-semibold text-[#9A8D7C] md:hidden">
-                          Glisse pour voir tous les profils.
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>

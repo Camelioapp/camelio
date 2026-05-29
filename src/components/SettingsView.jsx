@@ -26,7 +26,7 @@ import { sections } from "./sectionsData";
 const inputClass =
   "mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#B5A7C8] focus:ring-2 focus:ring-[#DED6EF]";
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.36";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://api.camelio.app";

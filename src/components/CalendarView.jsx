@@ -1174,7 +1174,7 @@ export default function CalendarView({ children = [] }) {
             <CamelioLogo />
           </div>
 
-          <div className="mt-7 flex gap-4 overflow-x-auto px-1 pb-2 md:justify-center">
+          <div className="mt-7 flex flex-wrap justify-center gap-4 px-1 pb-2">
             {children.length === 0 ? (
               <div className="rounded-3xl bg-[#FFF8EC] px-5 py-4 text-sm font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">
                 Ajoutez un profil enfant pour utiliser les filtres du calendrier.
