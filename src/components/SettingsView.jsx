@@ -42,6 +42,38 @@ const maritalStatusOptions = [
   { value: "other", label: "Autre" },
 ];
 
+
+const genderOptions = [
+  { value: "", label: "Non indiqué" },
+  { value: "female", label: "Femme" },
+  { value: "male", label: "Homme" },
+  { value: "non_binary", label: "Non binaire" },
+  { value: "prefer_not_to_say", label: "Préfère ne pas répondre" },
+  { value: "other", label: "Autre" },
+];
+
+const parentRoleOptions = [
+  { value: "", label: "Non indiqué" },
+  { value: "father", label: "Père" },
+  { value: "mother", label: "Mère" },
+  { value: "other", label: "Autre" },
+];
+
+const parentAvatarOptions = [
+  { id: "mere_01", label: "Mère 1", path: "/Profil/Parent/Mere/mere_01.png" },
+  { id: "mere_02", label: "Mère 2", path: "/Profil/Parent/Mere/mere_02.png" },
+  { id: "mere_03", label: "Mère 3", path: "/Profil/Parent/Mere/mere_03.png" },
+  { id: "mere_04", label: "Mère 4", path: "/Profil/Parent/Mere/mere_04.png" },
+  { id: "mere_05", label: "Mère 5", path: "/Profil/Parent/Mere/mere_05.png" },
+  { id: "mere_06", label: "Mère 6", path: "/Profil/Parent/Mere/mere_06.png" },
+  { id: "pere_01", label: "Père 1", path: "/Profil/Parent/Pere/pere_4.png" },
+  { id: "pere_02", label: "Père 2", path: "/Profil/Parent/Pere/pere3.png" },
+  { id: "pere_03", label: "Père 3", path: "/Profil/Parent/Pere/pere_1_enfant_fils.png" },
+  { id: "pere_04", label: "Père 4", path: "/Profil/Parent/Pere/pere_2_enfants_filles.png" },
+  { id: "pere_05", label: "Père 5", path: "/Profil/Parent/Pere/c93d70b1-709a-4d5c-bb6e-2ad5429c865d.png" },
+  { id: "pere_06", label: "Père 6", path: "/Profil/Parent/Pere/R3qljX1X.jpg" },
+];
+
 const themeChoices = [
   {
     id: "rose",
@@ -191,7 +223,7 @@ function DropdownSection({
 }
 
 export default function SettingsView({
-  parentProfile = { name: "", email: "", phone: "", userId: "", photoUrl: "", maritalStatus: "" },
+  parentProfile = { name: "", email: "", phone: "", userId: "", photoUrl: "", maritalStatus: "", gender: "", parentRole: "" },
   setParentProfile = () => {},
   sectionOrderIds,
   setSectionOrderIds,
@@ -718,7 +750,7 @@ const saveUploadPreferences = (preferences) => {
       <DropdownSection
         id="profile"
         title="Profil principal parent"
-        description="Nom, téléphone, photo, situation conjugale et garde partagée."
+        description="Nom, téléphone, photo, sexe, rôle parental, situation conjugale et garde partagée."
         icon={UserRound}
         iconColor="#55534C"
         openSection={openMainSection}
@@ -726,7 +758,7 @@ const saveUploadPreferences = (preferences) => {
       >
         <div className="space-y-5">
           <div className="rounded-[1.5rem] border border-[#EFE4D6] bg-[#FFFDF8] p-4 shadow-sm">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
               <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[2rem] bg-[#F0F3EA] text-[#7F9166] ring-1 ring-[#DDE4D2]">
                 {parentProfile.photoUrl ? (
                   <img
@@ -744,10 +776,10 @@ const saveUploadPreferences = (preferences) => {
                   Photo du parent
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[#746F64]">
-                  Ajoutez une photo pour personnaliser le profil principal.
+                  Ajoutez une photo ou choisissez une illustration de profil parent.
                 </p>
 
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
                   <label className="cursor-pointer rounded-2xl bg-[#A8AA91] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95">
                     Choisir une photo
                     <input
@@ -768,6 +800,37 @@ const saveUploadPreferences = (preferences) => {
                     </button>
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#A8AA91]">
+                Profils parent
+              </p>
+              <div className="mt-3 grid grid-cols-4 gap-3 sm:grid-cols-6 md:grid-cols-8">
+                {parentAvatarOptions.map((avatar) => {
+                  const selected = parentProfile.photoUrl === avatar.path;
+
+                  return (
+                    <button
+                      key={avatar.id}
+                      type="button"
+                      onClick={() => updateParentProfileDetails({ photoUrl: avatar.path })}
+                      className={`aspect-square overflow-hidden rounded-2xl bg-white p-1 transition ring-1 ${
+                        selected
+                          ? "ring-2 ring-[#A8AA91] shadow-md"
+                          : "ring-[#EFE4D6] hover:ring-[#D8C8B4]"
+                      }`}
+                      aria-label={`Choisir ${avatar.label}`}
+                    >
+                      <img
+                        src={avatar.path}
+                        alt={avatar.label}
+                        className="h-full w-full rounded-xl object-cover"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -794,6 +857,40 @@ const saveUploadPreferences = (preferences) => {
                 }
                 placeholder="Ex. 514 555-1234"
               />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Sexe">
+              <select
+                className={inputClass}
+                value={parentProfile.gender || ""}
+                onChange={(event) =>
+                  updateParentProfileDetails({ gender: event.target.value })
+                }
+              >
+                {genderOptions.map((option) => (
+                  <option key={option.value || "empty"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Rôle auprès de l’enfant">
+              <select
+                className={inputClass}
+                value={parentProfile.parentRole || ""}
+                onChange={(event) =>
+                  updateParentProfileDetails({ parentRole: event.target.value })
+                }
+              >
+                {parentRoleOptions.map((option) => (
+                  <option key={option.value || "empty"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
 

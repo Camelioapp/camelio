@@ -59,6 +59,8 @@ export default function App() {
       userId: savedProfile.userId || "",
       photoUrl: savedProfile.photoUrl || "",
       maritalStatus: savedProfile.maritalStatus || "",
+      gender: savedProfile.gender || "",
+      parentRole: savedProfile.parentRole || "",
     };
   });
 
@@ -105,6 +107,8 @@ export default function App() {
           phone: current.phone || "",
           photoUrl: current.photoUrl || "",
           maritalStatus: current.maritalStatus || "",
+          gender: current.gender || "",
+          parentRole: current.parentRole || "",
         }));
       }
     } catch (error) {
