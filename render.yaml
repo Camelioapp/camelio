@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: camelio-frontend
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.3
+      - key: VITE_API_URL
+        value: https://api.camelio.app
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
