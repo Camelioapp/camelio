@@ -1192,18 +1192,18 @@ export default function CalendarView({ children = [] }) {
             )}
           </div>
 
-          <div className="mt-7 flex items-center justify-between border-y border-[#EFE4D6] py-4">
+          <div className="mt-5 flex items-center justify-between border-y border-[#EFE4D6] py-3 md:mt-7 md:py-4">
             <button
               type="button"
               onClick={previousPeriod}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA] md:h-11 md:w-11"
               aria-label="Mois précédent"
             >
               <ChevronLeft className="h-6 w-6" />
             </button>
 
             <div className="text-center">
-              <h3 className="text-2xl font-extrabold text-[#52713E] md:text-3xl">
+              <h3 className="text-xl font-extrabold text-[#52713E] md:text-3xl">
                 {viewMode === "week" ? "Vue semaine" : `${MONTHS[month]} ${year}`}
               </h3>
               {viewMode === "week" && (
@@ -1216,14 +1216,14 @@ export default function CalendarView({ children = [] }) {
             <button
               type="button"
               onClick={nextPeriod}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA]"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#6A754F] shadow-sm ring-1 ring-[#EFE4D6] transition hover:bg-[#F8F3EA] md:h-11 md:w-11"
               aria-label="Mois suivant"
             >
               <ChevronRight className="h-6 w-6" />
             </button>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 rounded-full bg-[#F8F3EA] p-1 ring-1 ring-[#EFE4D6]">
+          <div className="mt-4 grid grid-cols-2 rounded-full bg-[#F8F3EA] p-1 ring-1 ring-[#EFE4D6] md:mt-5">
             {[
               ["month", "Mois"],
               ["week", "Semaine"],
@@ -1244,7 +1244,7 @@ export default function CalendarView({ children = [] }) {
           <button
             type="button"
             onClick={() => setShowExportPopup(true)}
-            className="mt-4 w-full rounded-2xl bg-[#F0F3EA] px-4 py-3 text-sm font-bold text-[#52713E] ring-1 ring-[#DDE4D2] transition hover:bg-[#E8EEDF]"
+            className="mt-3 w-full rounded-2xl bg-[#F0F3EA] px-4 py-2.5 text-sm font-bold text-[#52713E] ring-1 ring-[#DDE4D2] transition hover:bg-[#E8EEDF] md:mt-4 md:py-3"
           >
             Exporter vers Google ou Outlook
           </button>
@@ -1256,7 +1256,7 @@ export default function CalendarView({ children = [] }) {
           )}
 
           {viewMode === "month" && (
-            <div className="mt-5 grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#6F7466] md:gap-3 md:text-sm">
+            <div className="mt-4 grid !grid-cols-7 gap-1.5 px-0.5 text-center text-[11px] font-bold text-[#6F7466] md:gap-3 md:px-1 md:text-sm">
               {WEEK_DAYS.map((day) => (
                 <span key={day}>{day}</span>
               ))}
@@ -1288,7 +1288,7 @@ export default function CalendarView({ children = [] }) {
               })}
             </div>
           ) : (
-            <div className="mt-3 grid !grid-cols-7 gap-2 md:gap-3">
+            <div className="mt-2 grid !grid-cols-7 gap-1.5 md:gap-3">
               {visibleCalendarDays.map((date) => {
                 const dayEvents = getEventsForDate(date.dateKey);
                 const hasAppointment = dayEvents.some(isAppointmentEvent);
@@ -1302,7 +1302,7 @@ export default function CalendarView({ children = [] }) {
                     key={date.dateKey}
                     type="button"
                     onClick={() => selectDate(date.date)}
-                    className={`relative flex min-h-[76px] flex-col items-center justify-between rounded-[1.35rem] px-1.5 py-3 text-center shadow-[0_8px_22px_rgba(74,68,58,0.05)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[112px] md:rounded-[1.6rem] md:px-2 md:py-4 ${
+                    className={`relative flex min-h-[58px] flex-col items-center justify-between rounded-[1.05rem] px-1 py-2 text-center shadow-[0_6px_18px_rgba(74,68,58,0.04)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md sm:min-h-[64px] md:min-h-[112px] md:rounded-[1.6rem] md:px-2 md:py-4 ${
                       isToday
                         ? "bg-[#F0F3EA] ring-2 ring-[#A8B193]"
                         : isSelected
@@ -1311,22 +1311,22 @@ export default function CalendarView({ children = [] }) {
                     } ${!date.isCurrentMonth ? "opacity-40" : ""}`}
                     aria-label={formatLongDate(date.date)}
                   >
-                    <span className="font-['Comfortaa'] text-base font-bold leading-none text-[#1F2B33] md:text-2xl">{date.day}</span>
+                    <span className="font-['Comfortaa'] text-sm font-bold leading-none text-[#1F2B33] sm:text-base md:text-2xl">{date.day}</span>
 
-                    <span className="flex h-6 items-center justify-center text-lg leading-none md:h-7 md:text-xl">
+                    <span className="flex h-5 items-center justify-center text-base leading-none md:h-7 md:text-xl">
                       {hasAppointment ? <span style={{ color: APPOINTMENT_COLOR }}>{appointmentIcon}</span> : <span aria-hidden="true">&nbsp;</span>}
                     </span>
 
-                    <span className="flex h-2.5 w-full max-w-[54px] overflow-hidden rounded-full bg-transparent md:max-w-[72px]">
+                    <span className="flex h-2 w-full max-w-[42px] overflow-hidden rounded-full bg-transparent sm:max-w-[48px] md:max-w-[72px]">
                       {segments.length === 0 ? (
-                        <span className="h-1.5 w-full" />
+                        <span className="h-1 w-full" />
                       ) : segments.length === 1 ? (
-                        <span className="h-1.5 w-full rounded-full" style={{ backgroundColor: segments[0].color }} />
+                        <span className="h-1 w-full rounded-full" style={{ backgroundColor: segments[0].color }} />
                       ) : (
                         segments.map((segment, index) => (
                           <span
                             key={segment.id}
-                            className={`h-1.5 flex-1 ${index === 0 ? "rounded-l-full" : ""} ${index === segments.length - 1 ? "rounded-r-full" : ""}`}
+                            className={`h-1 flex-1 ${index === 0 ? "rounded-l-full" : ""} ${index === segments.length - 1 ? "rounded-r-full" : ""}`}
                             style={{ backgroundColor: segment.color, marginLeft: index === 0 ? 0 : 2 }}
                           />
                         ))
