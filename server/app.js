@@ -1373,6 +1373,117 @@ function getPublicDocumentSharePk(token = "") {
   return `PUBLIC_DOCUMENT_SHARE#${String(token || "").trim()}`;
 }
 
+
+function getPublicCalendarFeedPk(token = "") {
+  return `PUBLIC_CALENDAR_FEED#${String(token || "").trim()}`;
+}
+
+function getCalendarFeedUrl(token = "") {
+  return `${getPublicAppUrl()}/api/calendar/feed/${encodeURIComponent(token)}.ics`;
+}
+
+function escapeIcsText(value = "") {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
+}
+
+function foldIcsLine(line = "") {
+  const value = String(line || "");
+  if (value.length <= 74) return value;
+
+  const parts = [];
+  let cursor = value;
+  parts.push(cursor.slice(0, 74));
+  cursor = cursor.slice(74);
+
+  while (cursor.length > 0) {
+    parts.push(` ${cursor.slice(0, 73)}`);
+    cursor = cursor.slice(73);
+  }
+
+  return parts.join("\r\n");
+}
+
+function toIcsDateTime(dateKey = "", time = "") {
+  const [year = "", month = "", day = ""] = String(dateKey || "").split("-");
+  const [hour = "00", minute = "00"] = String(time || "00:00").split(":");
+  return `${year}${month}${day}T${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}00`;
+}
+
+function toIcsDate(dateKey = "") {
+  return String(dateKey || "").replace(/-/g, "");
+}
+
+function addDaysToDateKey(dateKey = "", days = 1) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  date.setDate(date.getDate() + days);
+  const nextYear = date.getFullYear();
+  const nextMonth = String(date.getMonth() + 1).padStart(2, "0");
+  const nextDay = String(date.getDate()).padStart(2, "0");
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
+function buildCalendarIcs(events = [], feed = {}) {
+  const nowStamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const calendarName = feed.feedName || feed.name || "Calendrier Camelio";
+  const timezone = process.env.CALENDAR_TIMEZONE || "America/Toronto";
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Camelio//Calendrier familial//FR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `X-WR-CALNAME:${escapeIcsText(calendarName)}`,
+    `X-WR-TIMEZONE:${escapeIcsText(timezone)}`,
+  ];
+
+  for (const event of events) {
+    if (!event?.date) continue;
+
+    const isAppointment = event.eventType === "appointment" || event.eventType === "Rendez-vous";
+    const icon = isAppointment ? event.appointmentEmoji || event.icon || "" : "";
+    const title = event.title || (isAppointment ? "Rendez-vous" : "Journée de garde");
+    const childNames = Array.isArray(event.childNames) && event.childNames.length
+      ? event.childNames.join(", ")
+      : "";
+    const descriptionParts = [
+      event.note || "",
+      childNames ? `Enfant(s) : ${childNames}` : "",
+      event.recurrence && event.recurrence !== "Aucune" ? `Récurrence : ${event.recurrence}` : "",
+      "Créé dans Camelio.",
+    ].filter(Boolean);
+
+    lines.push("BEGIN:VEVENT");
+    lines.push(`UID:${escapeIcsText(event.id || randomUUID())}@camelio.app`);
+    lines.push(`DTSTAMP:${nowStamp}`);
+    lines.push(`SUMMARY:${escapeIcsText(`${icon ? `${icon} ` : ""}${title}`)}`);
+
+    if (event.start) {
+      lines.push(`DTSTART;TZID=${timezone}:${toIcsDateTime(event.date, event.start)}`);
+      lines.push(`DTEND;TZID=${timezone}:${toIcsDateTime(event.date, event.end || event.start)}`);
+    } else {
+      lines.push(`DTSTART;VALUE=DATE:${toIcsDate(event.date)}`);
+      lines.push(`DTEND;VALUE=DATE:${toIcsDate(addDaysToDateKey(event.date, 1))}`);
+    }
+
+    if (descriptionParts.length) {
+      lines.push(`DESCRIPTION:${escapeIcsText(descriptionParts.join("\n"))}`);
+    }
+
+    lines.push(`CATEGORIES:${escapeIcsText(isAppointment ? "Rendez-vous" : "Garde")}`);
+    lines.push("END:VEVENT");
+  }
+
+  lines.push("END:VCALENDAR");
+
+  return `${lines.map(foldIcsLine).join("\r\n")}\r\n`;
+}
+
 async function deleteAllUserDynamoItems(userPk) {
   const allItems = [];
   let lastEvaluatedKey;
@@ -4886,6 +4997,211 @@ app.delete(
     }
   }
 );
+
+
+app.get("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: DYNAMODB_TABLE,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": getUserPk(req),
+          ":sk": "CALENDAR_FEED#",
+        },
+      })
+    );
+
+    const feeds = (result.Items || [])
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+      .map((feed) => ({
+        id: feed.id,
+        token: feed.token,
+        feedName: feed.feedName,
+        childId: feed.childId || "all",
+        childName: feed.childName || "Tous les enfants",
+        status: feed.status || "active",
+        feedUrl: feed.feedUrl || getCalendarFeedUrl(feed.token),
+        createdAt: feed.createdAt,
+        updatedAt: feed.updatedAt,
+      }));
+
+    res.json({ feeds });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const token = randomUUID().replace(/-/g, "");
+    const now = new Date().toISOString();
+    const childId = String(req.body?.childId || "all").trim() || "all";
+    const childName = String(req.body?.childName || "Tous les enfants").trim() || "Tous les enfants";
+    const feedName = String(req.body?.feedName || (childId === "all" ? "Camelio - Tous les enfants" : `Camelio - ${childName}`)).trim();
+    const feedUrl = getCalendarFeedUrl(token);
+
+    const feed = {
+      PK: getUserPk(req),
+      SK: `CALENDAR_FEED#${token}`,
+      id: token,
+      token,
+      typeItem: "calendar_feed",
+      status: "active",
+      ownerId: req.session.user.sub,
+      dataPk: getUserPk(req),
+      feedName,
+      childId,
+      childName,
+      feedUrl,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const publicFeed = {
+      PK: getPublicCalendarFeedPk(token),
+      SK: "METADATA",
+      type: "public_calendar_feed",
+      token,
+      status: "active",
+      ownerId: req.session.user.sub,
+      dataPk: getUserPk(req),
+      feedName,
+      childId,
+      childName,
+      feedUrl,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: feed,
+        ConditionExpression: "attribute_not_exists(PK)",
+      })
+    );
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: publicFeed,
+        ConditionExpression: "attribute_not_exists(PK)",
+      })
+    );
+
+    res.status(201).json({
+      success: true,
+      feed: {
+        id: feed.id,
+        token,
+        feedName,
+        childId,
+        childName,
+        status: "active",
+        feedUrl,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/calendar-feed/:token", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const token = String(req.params.token || "").trim();
+    const now = new Date().toISOString();
+
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: getUserPk(req),
+          SK: `CALENDAR_FEED#${token}`,
+        },
+        UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "revoked",
+          ":updatedAt": now,
+        },
+      })
+    );
+
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: getPublicCalendarFeedPk(token),
+          SK: "METADATA",
+        },
+        UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "revoked",
+          ":updatedAt": now,
+        },
+      })
+    );
+
+    res.json({ success: true, token, status: "revoked" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/calendar/feed/:token.ics", validateAwsConfig, async (req, res, next) => {
+  try {
+    const token = String(req.params.token || "").trim();
+
+    const feedResult = await dynamo.send(
+      new GetCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: getPublicCalendarFeedPk(token),
+          SK: "METADATA",
+        },
+      })
+    );
+
+    const feed = feedResult.Item;
+
+    if (!feed || feed.status !== "active") {
+      return res.status(404).type("text/plain").send("Calendrier introuvable ou désactivé.");
+    }
+
+    const eventsResult = await dynamo.send(
+      new QueryCommand({
+        TableName: DYNAMODB_TABLE,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": feed.dataPk,
+          ":sk": "EVENT#",
+        },
+      })
+    );
+
+    const childId = feed.childId || "all";
+    const events = (eventsResult.Items || [])
+      .filter((event) => childId === "all" || (Array.isArray(event.childIds) && event.childIds.includes(childId)))
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+    const ics = buildCalendarIcs(events, feed);
+
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename=\"camelio-${token}.ics\"`);
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.status(200).send(ics);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/my-data", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {

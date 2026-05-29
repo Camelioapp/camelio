@@ -540,6 +540,10 @@ export default function CalendarView({ children = [] }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteOptions, setShowDeleteOptions] = useState(false);
+  const [showExportPopup, setShowExportPopup] = useState(false);
+  const [calendarFeeds, setCalendarFeeds] = useState([]);
+  const [exportChildId, setExportChildId] = useState("all");
+  const [exportMessage, setExportMessage] = useState("");
 
   const selectedDate = useMemo(() => new Date(year, month, selectedDay), [year, month, selectedDay]);
   const selectedDateKey = dateToKey(selectedDate);
@@ -561,6 +565,7 @@ export default function CalendarView({ children = [] }) {
 
   useEffect(() => {
     loadEvents();
+    loadCalendarFeeds();
   }, []);
 
   useEffect(() => {
@@ -617,6 +622,86 @@ export default function CalendarView({ children = [] }) {
       setEvents([]);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadCalendarFeeds() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/calendar-feed`, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      const data = await response.json();
+      if (!response.ok) return;
+      setCalendarFeeds(data.feeds || []);
+    } catch (error) {
+      console.error("Erreur chargement export calendrier:", error);
+    }
+  }
+
+  function getExportChildName(childId) {
+    if (!childId || childId === "all") return "Tous les enfants";
+    const child = children.find((item) => item.id === childId);
+    return child ? displayName(child) : "Enfant";
+  }
+
+  async function createCalendarFeed() {
+    try {
+      setIsSaving(true);
+      setExportMessage("");
+
+      const childName = getExportChildName(exportChildId);
+      const response = await fetch(`${API_BASE_URL}/api/calendar-feed`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          childId: exportChildId,
+          childName,
+          feedName: exportChildId === "all" ? "Camelio - Tous les enfants" : `Camelio - ${childName}`,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Impossible de créer le lien d’abonnement.");
+
+      setCalendarFeeds((current) => [data.feed, ...current]);
+      setExportMessage("Lien d’abonnement créé. Vous pouvez le copier dans Google Agenda ou Outlook.");
+    } catch (error) {
+      console.error("Erreur export calendrier:", error);
+      setExportMessage(error.message || "Impossible de créer le lien d’abonnement.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function disableCalendarFeed(token) {
+    try {
+      setIsSaving(true);
+      const response = await fetch(`${API_BASE_URL}/api/calendar-feed/${token}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Impossible de désactiver le lien.");
+
+      setCalendarFeeds((current) => current.map((feed) => feed.token === token ? { ...feed, status: "revoked" } : feed));
+    } catch (error) {
+      console.error("Erreur désactivation export calendrier:", error);
+      setExportMessage(error.message || "Impossible de désactiver le lien.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function copyCalendarFeed(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setExportMessage("Lien copié.");
+    } catch (error) {
+      setExportMessage("Copie impossible. Sélectionnez le lien manuellement.");
     }
   }
 
@@ -1001,10 +1086,16 @@ export default function CalendarView({ children = [] }) {
     deleteEventsByIds([selectedEvent.id]);
   }
 
-  function deleteWholeFrequency() {
+  function deleteFutureFrequency() {
     const selectedEvent = getSelectedEvent();
     if (!selectedEvent) return;
-    deleteEventsByIds(getSeriesEvents(selectedEvent).map((event) => event.id));
+
+    const selectedDateKey = selectedEvent.date || "";
+    const idsToDelete = getSeriesEvents(selectedEvent)
+      .filter((event) => !event.date || !selectedDateKey || event.date >= selectedDateKey)
+      .map((event) => event.id);
+
+    deleteEventsByIds(idsToDelete);
   }
 
 
@@ -1086,6 +1177,14 @@ export default function CalendarView({ children = [] }) {
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowExportPopup(true)}
+            className="mt-4 w-full rounded-2xl bg-[#F0F3EA] px-4 py-3 text-sm font-bold text-[#52713E] ring-1 ring-[#DDE4D2] transition hover:bg-[#E8EEDF]"
+          >
+            Exporter vers Google ou Outlook
+          </button>
 
           {viewMode === "month" && (
             <div className="mt-5 grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#6F7466] md:gap-3 md:text-sm">
@@ -1324,6 +1423,87 @@ export default function CalendarView({ children = [] }) {
         </Popup>
       )}
 
+      {showExportPopup && (
+        <Popup title="Exporter le calendrier" kicker="Calendrier" close={() => setShowExportPopup(false)}>
+          <div className="space-y-5">
+            <div className="rounded-2xl bg-[#FFFDF8] p-4 text-sm leading-6 text-[#746F64] ring-1 ring-[#EFE4D6]">
+              Créez un lien d’abonnement calendrier. Ce lien peut être ajouté dans Google Agenda, Outlook ou Apple Calendrier et se mettra à jour automatiquement.
+            </div>
+
+            <Field label="Calendrier à exporter">
+              <select className={selectClass} value={exportChildId} onChange={(event) => setExportChildId(event.target.value)}>
+                <option value="all">Tous les enfants</option>
+                {children.map((child) => (
+                  <option key={child.id} value={child.id}>{displayName(child)}</option>
+                ))}
+              </select>
+            </Field>
+
+            <button
+              type="button"
+              onClick={createCalendarFeed}
+              disabled={isSaving}
+              className="w-full rounded-2xl bg-[#A8B193] px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-60"
+            >
+              {isSaving ? "Création..." : "Créer un lien d’abonnement"}
+            </button>
+
+            {exportMessage && (
+              <div className="rounded-2xl bg-[#F0F3EA] px-4 py-3 text-sm font-semibold text-[#52713E] ring-1 ring-[#DDE4D2]">
+                {exportMessage}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <p className="label">Liens actifs</p>
+              {calendarFeeds.length === 0 ? (
+                <div className="rounded-2xl bg-white p-4 text-sm text-[#746F64] ring-1 ring-[#EFE4D6]">
+                  Aucun lien d’abonnement créé pour le moment.
+                </div>
+              ) : (
+                calendarFeeds.map((feed) => {
+                  const isActive = feed.status !== "revoked";
+                  return (
+                    <div key={feed.token || feed.id} className="rounded-2xl bg-white p-4 ring-1 ring-[#EFE4D6]">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-[#4F4A45]">{feed.feedName || "Calendrier Camelio"}</p>
+                          <p className="text-xs font-semibold text-[#746F64]">{isActive ? "Actif" : "Désactivé"}</p>
+                        </div>
+                        {isActive && (
+                          <button type="button" onClick={() => disableCalendarFeed(feed.token)} disabled={isSaving} className="rounded-full bg-[#FBECEF] px-3 py-2 text-xs font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60">
+                            Désactiver
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="mt-3 rounded-xl bg-[#FFF8EC] px-3 py-2 text-[11px] font-semibold text-[#746F64] ring-1 ring-[#EFE4D6] break-all">
+                        {feed.feedUrl}
+                      </div>
+
+                      {isActive && (
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <button type="button" onClick={() => copyCalendarFeed(feed.feedUrl)} className="rounded-2xl bg-[#F8F3EA] px-4 py-3 text-sm font-bold text-[#746F64] ring-1 ring-[#EFE4D6]">
+                            Copier le lien
+                          </button>
+                          <a href={feed.feedUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-white px-4 py-3 text-center text-sm font-bold text-[#52713E] ring-1 ring-[#DDE4D2]">
+                            Ouvrir le .ics
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-[#FFF8EC] p-4 text-xs font-semibold leading-5 text-[#746F64] ring-1 ring-[#EFE4D6]">
+              Dans Google Agenda ou Outlook, utilisez l’option “Ajouter un calendrier par URL” ou “S’abonner à partir du Web”, puis collez ce lien.
+            </div>
+          </div>
+        </Popup>
+      )}
+
       {showDeleteOptions && (
         <Popup title="Supprimer cet élément" kicker="Calendrier" close={() => setShowDeleteOptions(false)}>
           {(() => {
@@ -1338,7 +1518,7 @@ export default function CalendarView({ children = [] }) {
                   </p>
                   {hasRecurrence ? (
                     <p className="mt-2">
-                      Cet élément est récurrent : <strong>{eventToDelete.recurrence}</strong>. Veux-tu supprimer seulement cette journée ou toute la récurrence?
+                      Cet élément est récurrent : <strong>{eventToDelete.recurrence}</strong>. Veux-tu supprimer seulement cette journée ou cette journée et les prochaines occurrences?
                     </p>
                   ) : (
                     <p className="mt-2">
@@ -1359,11 +1539,11 @@ export default function CalendarView({ children = [] }) {
                 {hasRecurrence && (
                   <button
                     type="button"
-                    onClick={deleteWholeFrequency}
+                    onClick={deleteFutureFrequency}
                     disabled={isSaving}
                     className="w-full rounded-2xl bg-[#FBECEF] px-4 py-3 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3] disabled:opacity-60"
                   >
-                    Supprimer toute la récurrence
+                    Supprimer cette journée et les prochaines
                   </button>
                 )}
 
