@@ -352,6 +352,111 @@ function ChildFilterPill({ child, active, index, onClick }) {
   );
 }
 
+
+function WeekDayCard({ date, dayEvents, childrenList, selected, today, onClick }) {
+  const custodyEvents = dayEvents.filter(isCustodyEvent);
+  const appointmentEvents = dayEvents.filter(isAppointmentEvent);
+
+  const childSegments = childrenList
+    .map((child, index) => {
+      const hasCustody = custodyEvents.some((event) => event.childIds.includes(child.id));
+      if (!hasCustody) return null;
+      return {
+        id: child.id,
+        name: displayName(child),
+        color: getChildAccent(child, index),
+      };
+    })
+    .filter(Boolean);
+
+  const custodyNames = childSegments.map((child) => child.name).join(', ');
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-[1.75rem] bg-white p-4 text-left shadow-[0_8px_22px_rgba(74,68,58,0.05)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${
+        today ? "bg-[#F0F3EA] ring-2 ring-[#A8B193]" : selected ? "ring-2 ring-[#A8B193]" : "ring-[#F1E4D7]"
+      }`}
+      aria-label={formatLongDate(date.date)}
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#FFF8EC] ring-1 ring-[#EFE4D6]">
+          <span className="text-xs font-bold text-[#8F9874]">{WEEK_DAYS[date.date.getDay() === 0 ? 6 : date.date.getDay() - 1]}</span>
+          <span className="font-['Comfortaa'] text-xl font-bold text-[#1F2B33]">{date.day}</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-extrabold text-[#4F4A45]">{formatLongDate(date.date)}</p>
+              <p className="mt-1 text-xs font-semibold text-[#8B8176]">
+                {dayEvents.length === 0 ? "Aucune information" : `${dayEvents.length} information${dayEvents.length > 1 ? "s" : ""}`}
+              </p>
+            </div>
+
+            {appointmentEvents.length > 0 && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFFAEF] px-2.5 py-1 text-xs font-bold text-[#B68E3D] ring-1 ring-[#F1DDAE]">
+                {getDayAppointmentIcon(appointmentEvents)}
+                {appointmentEvents.length}
+              </span>
+            )}
+          </div>
+
+          {childSegments.length > 0 && (
+            <div className="mt-4 rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-[#A8B193]">Garde</p>
+                  <p className="mt-1 text-sm font-bold text-[#4F4A45]">{custodyNames}</p>
+                </div>
+                <div className="flex h-2 w-24 overflow-hidden rounded-full bg-[#F8F3EA]">
+                  {childSegments.map((child, index) => (
+                    <span
+                      key={child.id}
+                      className={`h-2 flex-1 ${index === 0 ? "rounded-l-full" : ""} ${index === childSegments.length - 1 ? "rounded-r-full" : ""}`}
+                      style={{ backgroundColor: child.color, marginLeft: index === 0 ? 0 : 2 }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {appointmentEvents.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {appointmentEvents.map((event) => (
+                <div key={event.id} className="rounded-2xl bg-[#FFFDF8] p-3 ring-1 ring-[#EFE4D6]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-[#4F4A45]">
+                        <span className="mr-1 text-[#B68E3D]">{getAppointmentIcon(event)}</span>
+                        {event.title || "Rendez-vous"}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-[#746F64]">{eventTypeLabel(event)}</p>
+                    </div>
+                    {(event.start || event.end) && (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#55534C] ring-1 ring-[#EFE4D6]">
+                        <Clock className="h-3.5 w-3.5" />
+                        {event.start || "--:--"}{event.end ? ` - ${event.end}` : ""}
+                      </span>
+                    )}
+                  </div>
+                  {event.recurrence && event.recurrence !== "Aucune" && (
+                    <p className="mt-2 inline-flex rounded-full bg-[#F0F3EA] px-2.5 py-1 text-[11px] font-bold text-[#6A754F] ring-1 ring-[#DDE4D2]">
+                      Récurrence : {event.recurrence}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function EventCard({ event, childrenList, onClick, onDelete }) {
   const childNames =
     event.childNames?.length > 0
@@ -965,11 +1070,13 @@ export default function CalendarView({ children = [] }) {
             ))}
           </div>
 
-          <div className="mt-5 grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#6F7466] md:gap-3 md:text-sm">
-            {WEEK_DAYS.map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
+          {viewMode === "month" && (
+            <div className="mt-5 grid !grid-cols-7 gap-2 px-1 text-center text-xs font-bold text-[#6F7466] md:gap-3 md:text-sm">
+              {WEEK_DAYS.map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+          )}
 
           {isLoading && (
             <div className="mt-5 rounded-2xl bg-[#FFFDF8] p-4 text-center text-sm font-semibold text-[#746F64] ring-1 ring-[#EFE4D6]">
@@ -977,54 +1084,73 @@ export default function CalendarView({ children = [] }) {
             </div>
           )}
 
-          <div className={`mt-3 grid !grid-cols-7 gap-2 md:gap-3 ${viewMode === "week" ? "min-h-[160px]" : ""}`}>
-            {visibleCalendarDays.map((date) => {
-              const dayEvents = getEventsForDate(date.dateKey);
-              const hasAppointment = dayEvents.some(isAppointmentEvent);
-              const appointmentIcon = getDayAppointmentIcon(dayEvents);
-              const segments = getChildSegments(dayEvents);
-              const isSelected = date.dateKey === selectedDateKey;
-              const isToday = date.dateKey === todayKey;
+          {viewMode === "week" ? (
+            <div className="mt-5 space-y-3">
+              {selectedWeekDays.map((date) => {
+                const dayEvents = getEventsForDate(date.dateKey);
+                return (
+                  <WeekDayCard
+                    key={date.dateKey}
+                    date={date}
+                    dayEvents={dayEvents}
+                    childrenList={children}
+                    selected={date.dateKey === selectedDateKey}
+                    today={date.dateKey === todayKey}
+                    onClick={() => selectDate(date.date)}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 grid !grid-cols-7 gap-2 md:gap-3">
+              {visibleCalendarDays.map((date) => {
+                const dayEvents = getEventsForDate(date.dateKey);
+                const hasAppointment = dayEvents.some(isAppointmentEvent);
+                const appointmentIcon = getDayAppointmentIcon(dayEvents);
+                const segments = getChildSegments(dayEvents);
+                const isSelected = date.dateKey === selectedDateKey;
+                const isToday = date.dateKey === todayKey;
 
-              return (
-                <button
-                  key={date.dateKey}
-                  type="button"
-                  onClick={() => selectDate(date.date)}
-                  className={`relative flex min-h-[76px] flex-col items-center justify-between rounded-[1.35rem] px-1.5 py-3 text-center shadow-[0_8px_22px_rgba(74,68,58,0.05)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[112px] md:rounded-[1.6rem] md:px-2 md:py-4 ${
-                    isToday
-                      ? "bg-[#F0F3EA] ring-2 ring-[#A8B193]"
-                      : isSelected
-                        ? "bg-white ring-2 ring-[#A8B193]"
-                        : "bg-white ring-[#F1E4D7]"
-                  } ${!date.isCurrentMonth ? "opacity-40" : ""}`}
-                  aria-label={formatLongDate(date.date)}
-                >
-                  <span className="font-['Comfortaa'] text-base font-bold leading-none text-[#1F2B33] md:text-2xl">{date.day}</span>
+                return (
+                  <button
+                    key={date.dateKey}
+                    type="button"
+                    onClick={() => selectDate(date.date)}
+                    className={`relative flex min-h-[76px] flex-col items-center justify-between rounded-[1.35rem] px-1.5 py-3 text-center shadow-[0_8px_22px_rgba(74,68,58,0.05)] ring-1 transition hover:-translate-y-0.5 hover:shadow-md md:min-h-[112px] md:rounded-[1.6rem] md:px-2 md:py-4 ${
+                      isToday
+                        ? "bg-[#F0F3EA] ring-2 ring-[#A8B193]"
+                        : isSelected
+                          ? "bg-white ring-2 ring-[#A8B193]"
+                          : "bg-white ring-[#F1E4D7]"
+                    } ${!date.isCurrentMonth ? "opacity-40" : ""}`}
+                    aria-label={formatLongDate(date.date)}
+                  >
+                    <span className="font-['Comfortaa'] text-base font-bold leading-none text-[#1F2B33] md:text-2xl">{date.day}</span>
 
-                  <span className="flex h-6 items-center justify-center text-lg leading-none md:h-7 md:text-xl">
-                    {hasAppointment ? <span style={{ color: APPOINTMENT_COLOR }}>{appointmentIcon}</span> : <span aria-hidden="true">&nbsp;</span>}
-                  </span>
+                    <span className="flex h-6 items-center justify-center text-lg leading-none md:h-7 md:text-xl">
+                      {hasAppointment ? <span style={{ color: APPOINTMENT_COLOR }}>{appointmentIcon}</span> : <span aria-hidden="true">&nbsp;</span>}
+                    </span>
 
-                  <span className="flex h-2.5 w-full max-w-[54px] overflow-hidden rounded-full bg-transparent md:max-w-[72px]">
-                    {segments.length === 0 ? (
-                      <span className="h-1.5 w-full" />
-                    ) : segments.length === 1 ? (
-                      <span className="h-1.5 w-full rounded-full" style={{ backgroundColor: segments[0].color }} />
-                    ) : (
-                      segments.map((segment, index) => (
-                        <span
-                          key={segment.id}
-                          className={`h-1.5 flex-1 ${index === 0 ? "rounded-l-full" : ""} ${index === segments.length - 1 ? "rounded-r-full" : ""}`}
-                          style={{ backgroundColor: segment.color, marginLeft: index === 0 ? 0 : 2 }}
-                        />
-                      ))
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    <span className="flex h-2.5 w-full max-w-[54px] overflow-hidden rounded-full bg-transparent md:max-w-[72px]">
+                      {segments.length === 0 ? (
+                        <span className="h-1.5 w-full" />
+                      ) : segments.length === 1 ? (
+                        <span className="h-1.5 w-full rounded-full" style={{ backgroundColor: segments[0].color }} />
+                      ) : (
+                        segments.map((segment, index) => (
+                          <span
+                            key={segment.id}
+                            className={`h-1.5 flex-1 ${index === 0 ? "rounded-l-full" : ""} ${index === segments.length - 1 ? "rounded-r-full" : ""}`}
+                            style={{ backgroundColor: segment.color, marginLeft: index === 0 ? 0 : 2 }}
+                          />
+                        ))
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
         </div>
 
