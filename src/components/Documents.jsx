@@ -7,7 +7,7 @@ import {
   Eye,
   FileText,
   Link,
-  LinkOff,
+  Unlink,
   Loader2,
   MoreHorizontal,
   RefreshCw,
@@ -990,7 +990,7 @@ export default function Documents({
               {disablingAllShares ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <LinkOff className="h-4 w-4" />
+                <Unlink className="h-4 w-4" />
               )}
               {disablingAllShares
                 ? "Désactivation..."
