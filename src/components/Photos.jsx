@@ -942,6 +942,7 @@ export default function Photos({ children = [] }) {
       body: JSON.stringify({
         fileName: file.name,
         fileType: file.type || "image/jpeg",
+        fileSize: file.size,
       }),
     });
 
@@ -963,6 +964,26 @@ export default function Photos({ children = [] }) {
       throw new Error("Impossible d’envoyer l’image vers S3.");
     }
 
+    const verifyResponse = await fetch(`${API_URL}/api/uploads/verify`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uploadKind: "photo",
+        s3Key: presignData.s3Key,
+        fileType: file.type || "image/jpeg",
+        fileSize: file.size,
+      }),
+    });
+
+    const verifyData = await verifyResponse.json().catch(() => ({}));
+
+    if (!verifyResponse.ok) {
+      throw new Error(verifyData.message || "La photo envoyée n’a pas pu être validée.");
+    }
+
     const saveResponse = await fetch(`${API_URL}/api/photos`, {
       method: "POST",
       credentials: "include",
@@ -976,6 +997,8 @@ export default function Photos({ children = [] }) {
         children: selectedChildren,
         s3Key: presignData.s3Key,
         fileName: file.name,
+        fileType: file.type || "image/jpeg",
+        fileSize: file.size,
       }),
     });
 

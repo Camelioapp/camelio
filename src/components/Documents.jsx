@@ -741,6 +741,22 @@ export default function Documents({ children = [], docs: externalDocs, setDocs: 
       if (!presignResponse.ok) throw new Error(presignData.message || "Impossible de préparer l’envoi du document.");
       const uploadResponse = await fetch(presignData.uploadUrl, { method: "PUT", headers: { "Content-Type": getFileType(selectedFile) }, body: selectedFile });
       if (!uploadResponse.ok) throw new Error("Impossible d’envoyer le fichier vers S3.");
+
+      const verifyResponse = await fetch(`${API_BASE}/api/uploads/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          uploadKind: "document",
+          documentId: presignData.document?.id,
+          s3Key: presignData.document?.s3Key,
+          fileType: getFileType(selectedFile),
+          fileSize: selectedFile.size,
+        }),
+      });
+      const verifyData = await verifyResponse.json().catch(() => ({}));
+      if (!verifyResponse.ok) throw new Error(verifyData.message || "Le document envoyé n’a pas pu être validé.");
+
       await loadDocuments();
       setSuccess("Document ajouté avec succès.");
       resetForm();

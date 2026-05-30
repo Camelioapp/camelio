@@ -678,6 +678,26 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
       throw new Error("Erreur upload fichier vers S3");
     }
 
+    const verifyResponse = await fetch(`${API_BASE_URL}/api/uploads/verify`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uploadKind: "avatar",
+        s3Key: presignData.s3Key,
+        fileType: file.type,
+        fileSize: file.size,
+      }),
+    });
+
+    const verifyData = await verifyResponse.json().catch(() => ({}));
+
+    if (!verifyResponse.ok) {
+      throw new Error(verifyData.message || "La photo de profil n’a pas pu être validée.");
+    }
+
     return {
       s3Key: presignData.s3Key,
       avatarUrl: presignData.downloadUrl || presignData.url || "",

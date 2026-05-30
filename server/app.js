@@ -24,6 +24,7 @@ const {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
@@ -164,6 +165,12 @@ const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CHILDREN_PER_ACCOUNT = 10;
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const DEFAULT_STORAGE_LIMIT_GB = 5;
+const BYTES_PER_GB = 1024 * 1024 * 1024;
+const SECURITY_EVENT_PREFIX = "SECURITY_EVENT#";
+
+const MAX_PUBLIC_SHARE_FAILED_ATTEMPTS = 10;
+const PUBLIC_SHARE_LOCK_MINUTES = 30;
 
 const ALLOWED_DOCUMENT_TYPES = [
   "application/pdf",
@@ -994,7 +1001,7 @@ async function getDataAccessContext(req, sectionId, requiredPermission = "read")
 
     return {
       isGuest: false,
-      dataPk: accessContext.dataPk,
+      dataPk: getUserPk(req),
       ownerId: getOwnerId(req),
       share: null,
       permission: "delete",
@@ -1395,6 +1402,216 @@ function isValidFileSize(fileSize, maxSizeBytes) {
   return Number.isFinite(size) && size > 0 && size <= maxSizeBytes;
 }
 
+
+function getUploadConfig(uploadKind = "") {
+  const kind = String(uploadKind || "").trim().toLowerCase();
+
+  if (kind === "document") {
+    return {
+      kind: "document",
+      maxSizeBytes: MAX_DOCUMENT_SIZE_BYTES,
+      allowedTypes: ALLOWED_DOCUMENT_TYPES,
+      sectionId: "documents",
+    };
+  }
+
+  if (kind === "avatar") {
+    return {
+      kind: "avatar",
+      maxSizeBytes: MAX_AVATAR_SIZE_BYTES,
+      allowedTypes: ALLOWED_IMAGE_TYPES,
+      sectionId: "profil-enfant",
+    };
+  }
+
+  return {
+    kind: "photo",
+    maxSizeBytes: MAX_IMAGE_SIZE_BYTES,
+    allowedTypes: ALLOWED_IMAGE_TYPES,
+    sectionId: "photos",
+  };
+}
+
+function isAllowedUploadType(fileType, allowedTypes = []) {
+  return allowedTypes.includes(String(fileType || ""));
+}
+
+function getStorageLimitBytesFromSubscription(subscription = {}) {
+  const storageGb = Number(subscription?.storageGb || DEFAULT_STORAGE_LIMIT_GB);
+  const safeStorageGb = Number.isFinite(storageGb) && storageGb > 0 ? storageGb : DEFAULT_STORAGE_LIMIT_GB;
+  return Math.floor(safeStorageGb * BYTES_PER_GB);
+}
+
+async function getStorageLimitBytesForDataPk(dataPk) {
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: dataPk,
+        SK: "SUBSCRIPTION",
+      },
+    })
+  );
+
+  return getStorageLimitBytesFromSubscription(result.Item || {});
+}
+
+async function getStoredFileBytesForDataPk(dataPk) {
+  let usedBytes = 0;
+
+  for (const prefix of ["DOCUMENT#", "PHOTO#"]) {
+    let lastEvaluatedKey;
+
+    do {
+      const result = await dynamo.send(
+        new QueryCommand({
+          TableName: DYNAMODB_TABLE,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": dataPk,
+            ":sk": prefix,
+          },
+          ExclusiveStartKey: lastEvaluatedKey,
+        })
+      );
+
+      for (const item of result.Items || []) {
+        const itemSize = Number(item.actualFileSize || item.fileSize || 0);
+        if (Number.isFinite(itemSize) && itemSize > 0) {
+          usedBytes += itemSize;
+        }
+      }
+
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+  }
+
+  return usedBytes;
+}
+
+async function assertStorageLimitForUpload(dataPk, incomingBytes = 0) {
+  const cleanIncomingBytes = Number(incomingBytes);
+
+  if (!Number.isFinite(cleanIncomingBytes) || cleanIncomingBytes <= 0) {
+    const error = new Error("Taille de fichier invalide.");
+    error.statusCode = 400;
+    error.errorCode = "invalid_file_size";
+    throw error;
+  }
+
+  const [usedBytes, limitBytes] = await Promise.all([
+    getStoredFileBytesForDataPk(dataPk),
+    getStorageLimitBytesForDataPk(dataPk),
+  ]);
+
+  if (usedBytes + cleanIncomingBytes > limitBytes) {
+    const error = new Error("La limite de stockage de votre forfait serait dépassée avec ce fichier.");
+    error.statusCode = 413;
+    error.errorCode = "storage_limit_exceeded";
+    error.details = { usedBytes, incomingBytes: cleanIncomingBytes, limitBytes };
+    throw error;
+  }
+
+  return { usedBytes, incomingBytes: cleanIncomingBytes, limitBytes };
+}
+
+async function deleteS3ObjectQuietly(s3Key) {
+  if (!S3_DOCUMENTS_BUCKET || !s3Key) return;
+
+  try {
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: S3_DOCUMENTS_BUCKET,
+        Key: s3Key,
+      })
+    );
+  } catch (error) {
+    console.warn("Impossible de supprimer l’objet S3 invalide:", error?.message || error);
+  }
+}
+
+async function verifyUploadedS3Object({ s3Key, ownerId, fileType, fileSize, uploadKind }) {
+  const config = getUploadConfig(uploadKind);
+
+  if (!isSafeS3KeyForOwner(s3Key, ownerId)) {
+    const error = new Error("Clé S3 non autorisée.");
+    error.statusCode = 403;
+    error.errorCode = "forbidden_s3_key";
+    throw error;
+  }
+
+  const headResult = await s3.send(
+    new HeadObjectCommand({
+      Bucket: S3_DOCUMENTS_BUCKET,
+      Key: s3Key,
+    })
+  );
+
+  const actualSize = Number(headResult.ContentLength || 0);
+  const actualType = String(headResult.ContentType || fileType || "").split(";")[0].trim();
+  const expectedSize = Number(fileSize || 0);
+
+  const invalidSize =
+    !Number.isFinite(actualSize) ||
+    actualSize <= 0 ||
+    actualSize > config.maxSizeBytes ||
+    (Number.isFinite(expectedSize) && expectedSize > 0 && actualSize > expectedSize);
+
+  const invalidType = !isAllowedUploadType(actualType, config.allowedTypes);
+
+  if (invalidSize || invalidType) {
+    await deleteS3ObjectQuietly(s3Key);
+
+    const error = new Error("Le fichier envoyé ne respecte pas les règles de sécurité et a été supprimé.");
+    error.statusCode = 400;
+    error.errorCode = invalidType ? "invalid_uploaded_file_type" : "invalid_uploaded_file_size";
+    throw error;
+  }
+
+  return {
+    actualFileSize: actualSize,
+    actualFileType: actualType,
+  };
+}
+
+async function writeSecurityEvent(req, eventType, details = {}) {
+  try {
+    const userPk = req.session?.user?.sub ? getUserPk(req) : "USER#anonymous";
+    const now = new Date().toISOString();
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: {
+          PK: userPk,
+          SK: `${SECURITY_EVENT_PREFIX}${now}#${randomUUID()}`,
+          typeItem: "security_event",
+          eventType,
+          userId: req.session?.user?.sub || null,
+          ip: req.ip || "",
+          path: req.originalUrl || req.url || "",
+          method: req.method || "",
+          details,
+          createdAt: now,
+        },
+      })
+    );
+  } catch (error) {
+    console.warn("Journalisation sécurité impossible:", error?.message || error);
+  }
+}
+
+function logServerError(error) {
+  const safeError = {
+    name: error?.name || "Error",
+    message: error?.message || "Erreur inconnue",
+    code: error?.code || error?.errorCode || undefined,
+    statusCode: error?.statusCode || undefined,
+  };
+
+  console.error("ERREUR SERVEUR:", safeError);
+}
+
 function isSafeS3KeyForOwner(s3Key = "", ownerId = "") {
   return String(s3Key).startsWith(`users/${ownerId}/`);
 }
@@ -1447,6 +1664,18 @@ function isShareExpired(share) {
 
 function isShareActive(share) {
   return Boolean(share) && share.status !== "revoked" && !isShareExpired(share);
+}
+
+function isPublicShareLocked(share) {
+  if (!share) return false;
+
+  const lockedUntil = share.lockedUntil ? new Date(share.lockedUntil).getTime() : 0;
+
+  if (lockedUntil && lockedUntil > Date.now()) {
+    return true;
+  }
+
+  return Number(share.failedAttempts || 0) >= MAX_PUBLIC_SHARE_FAILED_ATTEMPTS;
 }
 
 function getPublicDocumentSharePk(token = "") {
@@ -6182,6 +6411,7 @@ app.post(
       }
 
       const accessContext = await getDataAccessContext(req, "documents", "edit");
+      await assertStorageLimitForUpload(accessContext.dataPk, payload.fileSize);
 
       if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, payload.childId)) {
         return res.status(403).json({
@@ -6230,6 +6460,7 @@ app.post(
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
         ContentType: payload.fileType,
+        ContentLength: payload.fileSize,
       });
 
       const uploadUrl = await getSignedUrl(s3, command, {
@@ -6254,6 +6485,8 @@ app.post(
   fileName: payload.fileName,
   fileType: payload.fileType,
   fileSize: payload.fileSize,
+  actualFileSize: 0,
+  uploadVerified: false,
   s3Key,
   createdAt: now,
   updatedAt: now,
@@ -6935,6 +7168,13 @@ app.post(
 
       const requiresCode = share.requiresCode !== false;
 
+      if (requiresCode && isPublicShareLocked(share)) {
+        return res.status(423).json({
+          error: "link_locked",
+          message: "Ce lien est temporairement verrouillé à cause d’un trop grand nombre d’essais invalides.",
+        });
+      }
+
       if (requiresCode) {
         if (!isValidShareCode(code)) {
           return res.status(400).json({
@@ -6954,11 +7194,15 @@ app.post(
                 SK: "METADATA",
               },
               UpdateExpression:
-                "SET failedAttempts = if_not_exists(failedAttempts, :zero) + :one, lastFailedAttemptAt = :now, updatedAt = :now",
+                "SET failedAttempts = if_not_exists(failedAttempts, :zero) + :one, lastFailedAttemptAt = :now, lockedUntil = :lockedUntil, updatedAt = :now",
               ExpressionAttributeValues: {
                 ":zero": 0,
                 ":one": 1,
                 ":now": new Date().toISOString(),
+                ":lockedUntil":
+                  Number(share.failedAttempts || 0) + 1 >= MAX_PUBLIC_SHARE_FAILED_ATTEMPTS
+                    ? new Date(Date.now() + PUBLIC_SHARE_LOCK_MINUTES * 60 * 1000).toISOString()
+                    : share.lockedUntil || "",
               },
             })
           );
@@ -7026,7 +7270,7 @@ app.post(
               SK: "METADATA",
             },
             UpdateExpression:
-              "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now",
+              "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now REMOVE failedAttempts, lastFailedAttemptAt, lockedUntil",
             ExpressionAttributeValues: {
               ":zero": 0,
               ":one": 1,
@@ -7091,7 +7335,7 @@ app.post(
             SK: "METADATA",
           },
           UpdateExpression:
-            "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now",
+            "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now REMOVE failedAttempts, lastFailedAttemptAt, lockedUntil",
           ExpressionAttributeValues: {
             ":zero": 0,
             ":one": 1,
@@ -7236,14 +7480,17 @@ app.post(
         });
       }
 
-      if (fileSize && !isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
+      if (!isValidFileSize(fileSize, MAX_AVATAR_SIZE_BYTES)) {
         return res.status(400).json({
           error: "invalid_file_size",
-          message: "L’image doit ne pas dépasser 5 MB.",
+          message: "L’image doit être supérieure à 0 octet et ne pas dépasser 5 MB.",
         });
       }
 
-      const ownerId = getOwnerId(req);
+      const accessContext = await getPrincipalDataAccessContext(req);
+      await assertStorageLimitForUpload(accessContext.dataPk, fileSize);
+
+      const ownerId = accessContext.ownerId;
       const avatarId = randomUUID();
       const cleanFileName = sanitizeFileName(fileName);
       const safeChildId = childId || "general";
@@ -7261,6 +7508,7 @@ app.post(
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
         ContentType: fileType,
+        ContentLength: Number(fileSize),
       });
 
       const uploadUrl = await getSignedUrl(s3, uploadCommand, {
@@ -7316,14 +7564,16 @@ app.post(
         });
       }
 
-      if (fileSize && !isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
+      if (!isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
         return res.status(400).json({
           error: "invalid_file_size",
-          message: "La photo doit ne pas dépasser 5 MB.",
+          message: "La photo doit être supérieure à 0 octet et ne pas dépasser 5 MB.",
         });
       }
 
       const accessContext = await getDataAccessContext(req, "photos", "edit");
+      await assertStorageLimitForUpload(accessContext.dataPk, fileSize);
+
       const ownerId = accessContext.ownerId;
       const photoId = randomUUID();
       const cleanFileName = sanitizeFileName(fileName);
@@ -7340,6 +7590,7 @@ app.post(
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
         ContentType: fileType,
+        ContentLength: Number(fileSize),
       });
 
       const uploadUrl = await getSignedUrl(s3, command, {
@@ -7360,7 +7611,7 @@ app.post(
 
 app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
-    const { id, title, album, children = [], s3Key, fileName = "" } = req.body;
+    const { id, title, album, children = [], s3Key, fileName = "", fileType = "image/jpeg", fileSize = 0 } = req.body;
 
     if (!id || !title || !album || !s3Key) {
       return res.status(400).json({
@@ -7381,6 +7632,14 @@ app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) =
       });
     }
 
+    const verifiedUpload = await verifyUploadedS3Object({
+      s3Key,
+      ownerId,
+      fileType,
+      fileSize,
+      uploadKind: "photo",
+    });
+
     const now = new Date().toISOString();
 
     const photo = {
@@ -7396,6 +7655,10 @@ app.post("/api/photos", requireAuth, validateAwsConfig, async (req, res, next) =
       children: Array.isArray(children) ? children : [],
       s3Key,
       fileName,
+      fileType: verifiedUpload.actualFileType,
+      fileSize: verifiedUpload.actualFileSize,
+      actualFileSize: verifiedUpload.actualFileSize,
+      uploadVerified: true,
       date: now.slice(0, 10),
       createdAt: now,
       updatedAt: now,
@@ -7757,12 +8020,98 @@ app.delete(
   }
 );
 
+
+
+app.post(
+  "/api/uploads/verify",
+  requireAuth,
+  validateAwsConfig,
+  validateS3Config,
+  async (req, res, next) => {
+    try {
+      const uploadKind = String(req.body?.uploadKind || "photo").trim().toLowerCase();
+      const s3Key = String(req.body?.s3Key || "").trim();
+      const fileType = String(req.body?.fileType || "").trim();
+      const fileSize = Number(req.body?.fileSize || 0);
+      const documentId = String(req.body?.documentId || "").trim();
+
+      if (!s3Key || !fileType || !fileSize) {
+        return res.status(400).json({
+          error: "missing_fields",
+          message: "s3Key, fileType et fileSize sont requis.",
+        });
+      }
+
+      let accessContext;
+
+      if (uploadKind === "document") {
+        accessContext = await getDataAccessContext(req, "documents", "edit");
+      } else if (uploadKind === "avatar") {
+        accessContext = await getPrincipalDataAccessContext(req);
+      } else {
+        accessContext = await getDataAccessContext(req, "photos", "edit");
+      }
+
+      const verifiedUpload = await verifyUploadedS3Object({
+        s3Key,
+        ownerId: accessContext.ownerId,
+        fileType,
+        fileSize,
+        uploadKind,
+      });
+
+      if (uploadKind === "document" && documentId) {
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: DYNAMODB_TABLE,
+            Key: {
+              PK: accessContext.dataPk,
+              SK: `DOCUMENT#${documentId}`,
+            },
+            UpdateExpression:
+              "SET uploadVerified = :uploadVerified, actualFileSize = :actualFileSize, fileSize = :actualFileSize, fileType = :fileType, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+              ":uploadVerified": true,
+              ":actualFileSize": verifiedUpload.actualFileSize,
+              ":fileType": verifiedUpload.actualFileType,
+              ":updatedAt": new Date().toISOString(),
+            },
+            ReturnValues: "NONE",
+          })
+        );
+      }
+
+      await writeSecurityEvent(req, "upload_verified", {
+        uploadKind,
+        s3Key,
+        actualFileSize: verifiedUpload.actualFileSize,
+        actualFileType: verifiedUpload.actualFileType,
+      });
+
+      return res.json({
+        success: true,
+        ...verifiedUpload,
+      });
+    } catch (error) {
+      if (error?.errorCode === "invalid_uploaded_file_type" || error?.errorCode === "invalid_uploaded_file_size") {
+        await writeSecurityEvent(req, "upload_rejected", {
+          uploadKind: req.body?.uploadKind || "",
+          s3Key: req.body?.s3Key || "",
+          reason: error.errorCode,
+        });
+      }
+
+      next(error);
+    }
+  }
+);
+
 /* =========================
    Diagnostics
    ========================= */
 
 app.use((err, req, res, next) => {
-  console.error("ERREUR SERVEUR:", err);
+  logServerError(err);
 
   const statusCode = Number(err.statusCode) || 500;
 
