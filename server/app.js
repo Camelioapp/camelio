@@ -6773,6 +6773,7 @@ app.delete(
           message: "Lien invalide.",
         });
       }
+      
 
       const result = await dynamo.send(
         new GetCommand({
