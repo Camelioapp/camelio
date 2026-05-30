@@ -290,16 +290,6 @@ export default function SettingsView({
   };
 
   const [subscription, setSubscription] = useState(() => {
-    try {
-      const savedSubscription = localStorage.getItem(
-        "camelio_subscription_status"
-      );
-
-      if (savedSubscription) return JSON.parse(savedSubscription);
-    } catch (error) {
-      console.error("Erreur lecture abonnement:", error);
-    }
-
     const trialEndDate = getDefaultTrialEndDate();
 
     return {
@@ -442,10 +432,7 @@ const saveUploadPreferences = (preferences) => {
 
   const saveSubscription = (updatedSubscription) => {
     setSubscription(updatedSubscription);
-    localStorage.setItem(
-      "camelio_subscription_status",
-      JSON.stringify(updatedSubscription)
-    );
+    localStorage.removeItem("camelio_subscription_status");
   };
 
   const getSubscriptionStatusLabel = () => {
@@ -724,18 +711,27 @@ const saveUploadPreferences = (preferences) => {
     };
 
     setParentProfile(nextProfile);
+    localStorage.removeItem("camelio_parent_profile_details");
 
-    try {
-      localStorage.setItem(
-        "camelio_parent_profile_details",
-        JSON.stringify({
-          ...nextProfile,
-          savedAt: new Date().toISOString(),
-        })
-      );
-    } catch (error) {
-      console.error("Erreur sauvegarde profil parent local:", error);
-    }
+    fetch(`${API_BASE_URL}/api/profile`, {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: nextProfile.name || "",
+        displayName: nextProfile.name || "",
+        phone: nextProfile.phone || "",
+        profilePhoto: nextProfile.photoUrl || "",
+        gender: nextProfile.gender || "",
+        parentRole: nextProfile.parentRole || "",
+        familyRole: nextProfile.parentRole || "",
+        maritalStatus: nextProfile.maritalStatus || "",
+      }),
+    }).catch((error) => {
+      console.error("Erreur sauvegarde profil parent serveur:", error);
+    });
   };
 
   const handleParentPhotoChange = (event) => {

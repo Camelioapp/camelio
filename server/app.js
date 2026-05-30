@@ -408,6 +408,21 @@ const sensitiveLimiter = rateLimit({
   },
 });
 
+const sharedDocumentAccessLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const token = String(req.params?.token || "").trim().slice(0, 128);
+    return `shared-doc-access:${rateLimit.ipKeyGenerator(req.ip)}:${token}`;
+  },
+  message: {
+    error: "too_many_access_attempts",
+    message: "Trop d’essais avec ce lien. Veuillez réessayer dans quelques minutes.",
+  },
+});
+
 app.use("/api", apiLimiter);
 app.use("/login", sensitiveLimiter);
 app.use("/signup", sensitiveLimiter);
@@ -1247,6 +1262,9 @@ function cleanProfilePayload(body = {}) {
     profilePhotoZoom: Number(body.profilePhotoZoom || body.avatarZoom) || 1,
     phone: body.phone || "",
     preferredLanguage: body.preferredLanguage || "fr",
+    gender: body.gender || "",
+    parentRole: body.parentRole || body.familyRole || body.userRole || "",
+    maritalStatus: body.maritalStatus || "",
   };
 }
 
@@ -1995,6 +2013,9 @@ app.get("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       profilePhotoZoom:
         existingProfile.profilePhotoZoom || existingProfile.avatarZoom || 1,
       phone: existingProfile.phone || "",
+      gender: existingProfile.gender || "",
+      parentRole: existingProfile.parentRole || existingProfile.familyRole || "",
+      maritalStatus: existingProfile.maritalStatus || "",
       preferredLanguage: existingProfile.preferredLanguage || "fr",
       welcomeCompleted: Boolean(
         existingProfile.welcomeCompleted ||
@@ -2094,6 +2115,14 @@ app.put("/api/profile", requireAuth, validateAwsConfig, async (req, res, next) =
       profilePhotoZoom:
         cleanedProfile.profilePhotoZoom || existingProfile.profilePhotoZoom || 1,
       phone: cleanedProfile.phone || existingProfile.phone || "",
+      gender: cleanedProfile.gender || existingProfile.gender || "",
+      parentRole:
+        cleanedProfile.parentRole ||
+        existingProfile.parentRole ||
+        existingProfile.familyRole ||
+        "",
+      maritalStatus:
+        cleanedProfile.maritalStatus || existingProfile.maritalStatus || "",
       preferredLanguage:
         cleanedProfile.preferredLanguage ||
         existingProfile.preferredLanguage ||
@@ -6195,6 +6224,7 @@ app.get(
 
 app.post(
   "/api/shared-documents/:token/access",
+  sharedDocumentAccessLimiter,
   validateAwsConfig,
   validateS3Config,
   async (req, res, next) => {

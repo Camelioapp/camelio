@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
-const STORAGE_KEY = "camelio-carnet-souvenirs";
+const LEGACY_STORAGE_KEY = "camelio-carnet-souvenirs";
 
 const chapters = [
   {
@@ -166,21 +166,21 @@ function getAgeTrackingLabel(child = {}) {
   return months < 24 ? "Suivi mensuel recommandé" : "Suivi annuel recommandé";
 }
 
-function readStoredMemories() {
+function readLegacyStoredMemories() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(LEGACY_STORAGE_KEY);
     return saved ? JSON.parse(saved) : [];
   } catch (error) {
-    console.error("Erreur lecture carnet souvenir:", error);
+    console.error("Erreur lecture ancien carnet souvenir local:", error);
     return [];
   }
 }
 
-function writeStoredMemories(memories) {
+function clearLegacyStoredMemories() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(memories));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch (error) {
-    console.error("Erreur sauvegarde carnet souvenir:", error);
+    console.error("Erreur nettoyage ancien carnet souvenir local:", error);
   }
 }
 
@@ -376,7 +376,7 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
         }
 
         let serverMemories = Array.isArray(data.memories) ? data.memories : [];
-        const localMemories = readStoredMemories();
+        const localMemories = readLegacyStoredMemories();
 
         if (serverMemories.length === 0 && localMemories.length > 0) {
           const migratedMemories = [];
@@ -403,7 +403,7 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
           }
 
           if (migratedMemories.length > 0) {
-            localStorage.removeItem(STORAGE_KEY);
+            clearLegacyStoredMemories();
             serverMemories = migratedMemories;
           }
         }

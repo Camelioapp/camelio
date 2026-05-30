@@ -598,7 +598,12 @@ export default function Dashboard({
             ...current,
             name: nextWelcomeProfile.displayName || nextWelcomeProfile.name || current.name,
             email: nextWelcomeProfile.email || current.email,
+            phone: nextWelcomeProfile.phone || current.phone || "",
             userId: nextWelcomeProfile.userId || current.userId || "",
+            photoUrl: nextWelcomeProfile.profilePhoto || nextWelcomeProfile.avatar || current.photoUrl || "",
+            maritalStatus: nextWelcomeProfile.maritalStatus || current.maritalStatus || "",
+            gender: nextWelcomeProfile.gender || current.gender || "",
+            parentRole: nextWelcomeProfile.parentRole || nextWelcomeProfile.familyRole || current.parentRole || "",
           }));
 
           const welcomeIsCompleted = nextWelcomeProfile.welcomeCompleted === true;
@@ -1434,11 +1439,7 @@ export default function Dashboard({
       hiddenSections,
     };
 
-    localStorage.setItem("camelio_first_step_completed", "true");
-    localStorage.setItem(
-      "camelio_initial_setup",
-      JSON.stringify(normalizedSetupData)
-    );
+    sessionStorage.setItem("camelio_first_step_completed", "true");
 
     await createChildrenFromSetup(normalizedSetupData);
 

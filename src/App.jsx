@@ -41,27 +41,15 @@ export default function App() {
     referralCode: null,
   });
 
-  const [parentProfile, setParentProfile] = useState(() => {
-    let savedProfile = {};
-
-    try {
-      savedProfile = JSON.parse(
-        localStorage.getItem("camelio_parent_profile_details") || "{}"
-      );
-    } catch (error) {
-      console.error("Erreur lecture profil parent local:", error);
-    }
-
-    return {
-      name: savedProfile.name || "",
-      email: savedProfile.email || "",
-      phone: savedProfile.phone || "",
-      userId: savedProfile.userId || "",
-      photoUrl: savedProfile.photoUrl || "",
-      maritalStatus: savedProfile.maritalStatus || "",
-      gender: savedProfile.gender || "",
-      parentRole: savedProfile.parentRole || "",
-    };
+  const [parentProfile, setParentProfile] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    userId: "",
+    photoUrl: "",
+    maritalStatus: "",
+    gender: "",
+    parentRole: "",
   });
 
   const path = getPath();
@@ -96,20 +84,30 @@ export default function App() {
       setAuth(nextAuth);
 
       if (nextAuth.authenticated && nextAuth.user) {
-        setParentProfile((current) => ({
-          ...current,
+        const profileResponse = await fetch(`${API_BASE_URL}/api/profile`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+
+        const profileData = await profileResponse.json().catch(() => ({}));
+        const profile = profileResponse.ok ? profileData?.profile || {} : {};
+
+        setParentProfile({
           name:
-            current.name ||
+            profile.displayName ||
+            profile.name ||
             nextAuth.user.name ||
             nextAuth.user.given_name ||
             "",
-          email: nextAuth.user.email || current.email || "",
-          phone: current.phone || "",
-          photoUrl: current.photoUrl || "",
-          maritalStatus: current.maritalStatus || "",
-          gender: current.gender || "",
-          parentRole: current.parentRole || "",
-        }));
+          email: profile.email || nextAuth.user.email || "",
+          phone: profile.phone || "",
+          userId: profile.userId || "",
+          photoUrl: profile.profilePhoto || profile.avatar || "",
+          maritalStatus: profile.maritalStatus || "",
+          gender: profile.gender || "",
+          parentRole: profile.parentRole || profile.familyRole || "",
+        });
       }
     } catch (error) {
       console.error("Erreur vérification session:", error);
