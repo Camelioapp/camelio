@@ -277,7 +277,31 @@ app.use(express.json({ limit: "10mb" }));
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "base-uri": ["'self'"],
+        "object-src": ["'none'"],
+        "frame-ancestors": ["'none'"],
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+        "connect-src": [
+          "'self'",
+          "https://camelio.app",
+          "https://www.camelio.app",
+          "https://api.camelio.app",
+          "https://*.amazonaws.com",
+          "https://*.amazoncognito.com",
+          "https://api.stripe.com",
+          "https://checkout.stripe.com",
+          "https://api.resend.com"
+        ],
+        "script-src": ["'self'", "https://js.stripe.com"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "font-src": ["'self'", "data:", "https:"],
+        "frame-src": ["'self'", "https://js.stripe.com", "https://checkout.stripe.com"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -1038,6 +1062,38 @@ function filterPhotosForShare(photos = [], share) {
   });
 }
 
+function filterEventsForShare(events = [], share) {
+  if (!share) return events;
+
+  const allowedChildIds = getSharedChildIds(share);
+
+  if (allowedChildIds.size === 0) return [];
+
+  return events.filter((event) => {
+    const childIds = Array.isArray(event.childIds) ? event.childIds : [];
+    return childIds.some((childId) => allowedChildIds.has(String(childId || "")));
+  });
+}
+
+function filterMemoriesForShare(memories = [], share) {
+  if (!share) return memories;
+
+  return memories.filter((memory) =>
+    isChildAllowedForShare(share, memory.childId)
+  );
+}
+
+async function assertPrincipalAccount(req, message = "Action réservée au compte principal.") {
+  const activeShare = await getActiveImportedShare(req);
+
+  if (activeShare) {
+    const error = new Error(message);
+    error.statusCode = 403;
+    error.errorCode = "principal_account_required";
+    throw error;
+  }
+}
+
 function assertChildrenAllowedForShare(share, childIds = []) {
   if (!share) return;
 
@@ -1220,6 +1276,24 @@ function cleanEventPayload(body = {}) {
     end: body.end || "",
     note: body.note || "",
     color: body.color || "sage",
+  };
+}
+
+function cleanMemoryPayload(body = {}) {
+  const rawPhoto = String(body.photo || "").trim();
+
+  return {
+    childId: String(body.childId || "").trim(),
+    type: String(body.type || "memory").trim().slice(0, 80),
+    title: String(body.title || "Souvenir").trim().slice(0, 180),
+    date: String(body.date || "").trim().slice(0, 40),
+    note: String(body.note || "").trim().slice(0, 4000),
+    pregnancyWeek: String(body.pregnancyWeek || "").trim().slice(0, 40),
+    heightCm: String(body.heightCm || "").trim().slice(0, 40),
+    bedtime: String(body.bedtime || "").trim().slice(0, 20),
+    wakeTime: String(body.wakeTime || "").trim().slice(0, 20),
+    photo: rawPhoto.startsWith("https://") ? rawPhoto.slice(0, 2000) : "",
+    sourcePhotoId: String(body.sourcePhotoId || "").trim().slice(0, 120),
   };
 }
 
@@ -1495,6 +1569,68 @@ async function deleteCognitoUser(req) {
   throw lastError || new Error("Impossible de supprimer l’utilisateur Cognito.");
 }
 
+async function cancelStripeSubscriptionForUser(userPk) {
+  if (!stripe) return null;
+
+  const subscriptionResult = await dynamo.send(
+    new GetCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: userPk,
+        SK: "SUBSCRIPTION",
+      },
+    })
+  );
+
+  const subscription = subscriptionResult.Item || null;
+  const stripeSubscriptionId = subscription?.stripeSubscriptionId;
+
+  if (!stripeSubscriptionId) return subscription;
+
+  const cancelableStatuses = new Set(["active", "trialing", "past_due", "unpaid", "incomplete"]);
+
+  if (subscription.status && !cancelableStatuses.has(subscription.status)) {
+    return subscription;
+  }
+
+  await stripe.subscriptions.cancel(stripeSubscriptionId);
+
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: userPk,
+        SK: "SUBSCRIPTION",
+      },
+      UpdateExpression:
+        "SET #status = :status, canceledAt = :canceledAt, updatedAt = :updatedAt",
+      ExpressionAttributeNames: {
+        "#status": "status",
+      },
+      ExpressionAttributeValues: {
+        ":status": "canceled",
+        ":canceledAt": new Date().toISOString(),
+        ":updatedAt": new Date().toISOString(),
+      },
+      ReturnValues: "NONE",
+    })
+  );
+
+  return subscription;
+}
+
+async function deleteLocalSubscription(userPk) {
+  await dynamo.send(
+    new DeleteCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: userPk,
+        SK: "SUBSCRIPTION",
+      },
+    })
+  );
+}
+
 app.get("/", (req, res) => {
   res.render("index", {
     title: "Camelio Server",
@@ -1559,7 +1695,14 @@ async function sendEmailWithResend({ to, subject, html, text }) {
   return data;
 }
 
-app.get("/api/test-email", async (req, res) => {
+app.get("/api/test-email", requireAuth, async (req, res) => {
+  if (IS_PRODUCTION) {
+    return res.status(404).json({
+      error: "not_found",
+      message: "Route non disponible en production.",
+    });
+  }
+
   try {
     console.log("TEST RESEND EMAIL START", {
       hasResendApiKey: Boolean(RESEND_API_KEY),
@@ -4582,6 +4725,17 @@ app.get(
   validateS3Config,
   async (req, res, next) => {
     try {
+      const activeShare = await getActiveImportedShare(req);
+
+      if (activeShare) {
+        const children = await loadSharedChildrenForImportedShare(activeShare);
+
+        return res.json({
+          children,
+          isGuest: true,
+        });
+      }
+
       const result = await dynamo.send(
         new QueryCommand({
           TableName: DYNAMODB_TABLE,
@@ -4607,8 +4761,9 @@ app.get(
         );
       });
 
-      res.json({
+      return res.json({
         children,
+        isGuest: false,
       });
     } catch (error) {
       next(error);
@@ -4618,6 +4773,8 @@ app.get(
 
 app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    await assertPrincipalAccount(req, "Les comptes invités ne peuvent pas ajouter d’enfant.");
+
     const existingChildrenResult = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
@@ -4673,6 +4830,8 @@ app.put(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      await assertPrincipalAccount(req, "Les comptes invités ne peuvent pas modifier un profil d’enfant.");
+
       const { childId } = req.params;
       const now = new Date().toISOString();
       const payload = cleanChildPayload(req.body);
@@ -4725,6 +4884,8 @@ app.delete(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      await assertPrincipalAccount(req, "Les comptes invités ne peuvent pas supprimer un profil d’enfant.");
+
       const { childId } = req.params;
 
       await dynamo.send(
@@ -4749,20 +4910,23 @@ app.delete(
 
 app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getDataAccessContext(req, "calendar", "read");
+
     const result = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": getUserPk(req),
+          ":pk": accessContext.dataPk,
           ":sk": "EVENT#",
         },
       })
     );
 
-    const events = (result.Items || []).sort((a, b) => {
-      return String(a.date || "").localeCompare(String(b.date || ""));
-    });
+    const events = filterEventsForShare(result.Items || [], accessContext.share)
+      .sort((a, b) => {
+        return String(a.date || "").localeCompare(String(b.date || ""));
+      });
 
     res.json({
       events,
@@ -4774,15 +4938,20 @@ app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) =>
 
 app.post("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getDataAccessContext(req, "calendar", "edit");
     const eventId = randomUUID();
     const now = new Date().toISOString();
     const payload = cleanEventPayload(req.body);
 
+    assertChildrenAllowedForShare(accessContext.share, payload.childIds);
+
     const event = {
-      PK: getUserPk(req),
+      PK: accessContext.dataPk,
       SK: `EVENT#${eventId}`,
       id: eventId,
       typeItem: "event",
+      createdByUserId: req.session.user.sub,
+      createdFromAccountType: accessContext.isGuest ? "guest" : "principal",
       ...payload,
       createdAt: now,
       updatedAt: now,
@@ -4810,15 +4979,18 @@ app.put(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      const accessContext = await getDataAccessContext(req, "calendar", "edit");
       const { eventId } = req.params;
       const now = new Date().toISOString();
       const payload = cleanEventPayload(req.body);
+
+      assertChildrenAllowedForShare(accessContext.share, payload.childIds);
 
       const result = await dynamo.send(
         new UpdateCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `EVENT#${eventId}`,
           },
           UpdateExpression:
@@ -4860,13 +5032,14 @@ app.delete(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      const accessContext = await getDataAccessContext(req, "calendar", "delete");
       const { eventId } = req.params;
 
       await dynamo.send(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `EVENT#${eventId}`,
           },
         })
@@ -4881,6 +5054,182 @@ app.delete(
     }
   }
 );
+
+/* =========================
+   Carnet souvenir côté serveur
+   ========================= */
+
+app.get("/api/memory-book", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "read");
+
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: DYNAMODB_TABLE,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": accessContext.dataPk,
+          ":sk": "MEMORY#",
+        },
+      })
+    );
+
+    const memories = filterMemoriesForShare(result.Items || [], accessContext.share)
+      .sort((a, b) => String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || "")));
+
+    return res.json({
+      success: true,
+      memories,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/memory-book", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "edit");
+    const payload = cleanMemoryPayload(req.body || {});
+
+    if (!payload.childId) {
+      return res.status(400).json({
+        error: "missing_child_id",
+        message: "Un enfant doit être associé au souvenir.",
+      });
+    }
+
+    assertChildrenAllowedForShare(accessContext.share, [payload.childId]);
+
+    const memoryId = req.body?.id || randomUUID();
+    const now = new Date().toISOString();
+
+    const memory = {
+      PK: accessContext.dataPk,
+      SK: `MEMORY#${memoryId}`,
+      id: memoryId,
+      typeItem: "memory",
+      createdByUserId: req.session.user.sub,
+      createdFromAccountType: accessContext.isGuest ? "guest" : "principal",
+      ...payload,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: memory,
+      })
+    );
+
+    return res.status(201).json({
+      success: true,
+      memory,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/memory-book/:memoryId", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "edit");
+    const { memoryId } = req.params;
+    const payload = cleanMemoryPayload(req.body || {});
+
+    if (!payload.childId) {
+      return res.status(400).json({
+        error: "missing_child_id",
+        message: "Un enfant doit être associé au souvenir.",
+      });
+    }
+
+    assertChildrenAllowedForShare(accessContext.share, [payload.childId]);
+
+    const now = new Date().toISOString();
+
+    const result = await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: accessContext.dataPk,
+          SK: `MEMORY#${memoryId}`,
+        },
+        UpdateExpression:
+          "SET childId = :childId, #memoryType = :memoryType, title = :title, #date = :date, note = :note, pregnancyWeek = :pregnancyWeek, heightCm = :heightCm, bedtime = :bedtime, wakeTime = :wakeTime, photo = :photo, sourcePhotoId = :sourcePhotoId, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#memoryType": "type",
+          "#date": "date",
+        },
+        ExpressionAttributeValues: {
+          ":childId": payload.childId,
+          ":memoryType": payload.type,
+          ":title": payload.title,
+          ":date": payload.date,
+          ":note": payload.note,
+          ":pregnancyWeek": payload.pregnancyWeek,
+          ":heightCm": payload.heightCm,
+          ":bedtime": payload.bedtime,
+          ":wakeTime": payload.wakeTime,
+          ":photo": payload.photo,
+          ":sourcePhotoId": payload.sourcePhotoId,
+          ":updatedAt": now,
+        },
+        ReturnValues: "ALL_NEW",
+      })
+    );
+
+    return res.json({
+      success: true,
+      memory: result.Attributes,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/memory-book/:memoryId", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "delete");
+    const { memoryId } = req.params;
+
+    if (accessContext.isGuest) {
+      const existingResult = await dynamo.send(
+        new GetCommand({
+          TableName: DYNAMODB_TABLE,
+          Key: {
+            PK: accessContext.dataPk,
+            SK: `MEMORY#${memoryId}`,
+          },
+        })
+      );
+
+      if (!existingResult.Item || !isChildAllowedForShare(accessContext.share, existingResult.Item.childId)) {
+        return res.status(403).json({
+          error: "guest_child_forbidden",
+          message: "Votre compte invité ne peut pas supprimer ce souvenir.",
+        });
+      }
+    }
+
+    await dynamo.send(
+      new DeleteCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: accessContext.dataPk,
+          SK: `MEMORY#${memoryId}`,
+        },
+      })
+    );
+
+    return res.json({
+      success: true,
+      deletedId: memoryId,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/my-data", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
@@ -6677,8 +7026,10 @@ app.delete(
 
       const profileUserId = profileResult.Item?.userId;
 
+      await cancelStripeSubscriptionForUser(userPk);
       await deleteAllUserS3Objects(ownerId);
       await deleteAllUserDynamoItems(userPk);
+      await deleteLocalSubscription(userPk);
       await deleteUserIdLookup(profileUserId);
       await deleteCognitoUser(req);
 
@@ -6705,7 +7056,7 @@ app.delete(
    ========================= */
 
 app.use((err, req, res, next) => {
-  console.error("ERREUR SERVEUR:", err);
+  console.error("ERREUR SERVEUR:", IS_PRODUCTION ? (err?.message || err) : err);
 
   const statusCode = Number(err.statusCode) || 500;
 
