@@ -994,7 +994,7 @@ async function getDataAccessContext(req, sectionId, requiredPermission = "read")
 
     return {
       isGuest: false,
-      dataPk: getUserPk(req),
+      dataPk: accessContext.dataPk,
       ownerId: getOwnerId(req),
       share: null,
       permission: "delete",
@@ -1028,6 +1028,23 @@ async function getDataAccessContext(req, sectionId, requiredPermission = "read")
     ownerId: share.sourceOwnerUserId,
     share,
     permission,
+  };
+}
+
+async function getPrincipalDataAccessContext(req) {
+  const profile = await getCurrentUserProfile(req);
+  const activeAccountId = String(profile?.activeAccountId || "");
+
+  if (isGuestAccountId(activeAccountId)) {
+    const error = new Error("Cette action est réservée au compte principal.");
+    error.statusCode = 403;
+    error.errorCode = "principal_account_required";
+    throw error;
+  }
+
+  return {
+    dataPk: getUserPk(req),
+    ownerId: getOwnerId(req),
   };
 }
 
@@ -1525,6 +1542,84 @@ function buildCalendarIcs(events = [], feed = {}) {
   lines.push("END:VCALENDAR");
 
   return `${lines.map(foldIcsLine).join("\r\n")}\r\n`;
+}
+
+async function cancelStripeSubscriptionForUser(userPk) {
+  if (!stripe || !userPk) return null;
+
+  const subscriptionResult = await dynamo.send(
+    new GetCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: userPk,
+        SK: "SUBSCRIPTION",
+      },
+    })
+  );
+
+  const subscription = subscriptionResult.Item || null;
+  const stripeSubscriptionId = subscription?.stripeSubscriptionId;
+
+  if (!stripeSubscriptionId) return subscription;
+
+  const alreadyInactiveStatuses = new Set([
+    "canceled",
+    "incomplete_expired",
+    "none",
+  ]);
+
+  if (!alreadyInactiveStatuses.has(String(subscription.status || ""))) {
+    try {
+      await stripe.subscriptions.cancel(stripeSubscriptionId);
+    } catch (error) {
+      if (error?.code !== "resource_missing") {
+        throw error;
+      }
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: SUBSCRIPTIONS_TABLE,
+      Key: {
+        PK: userPk,
+        SK: "SUBSCRIPTION",
+      },
+      UpdateExpression:
+        "SET #status = :status, cancelAtPeriodEnd = :cancelAtPeriodEnd, canceledAt = :canceledAt, updatedAt = :updatedAt",
+      ExpressionAttributeNames: {
+        "#status": "status",
+      },
+      ExpressionAttributeValues: {
+        ":status": "canceled",
+        ":cancelAtPeriodEnd": false,
+        ":canceledAt": now,
+        ":updatedAt": now,
+      },
+    })
+  );
+
+  return { ...subscription, status: "canceled", canceledAt: now };
+}
+
+async function deleteUserSubscription(userPk) {
+  if (!userPk) return;
+
+  try {
+    await dynamo.send(
+      new DeleteCommand({
+        TableName: SUBSCRIPTIONS_TABLE,
+        Key: {
+          PK: userPk,
+          SK: "SUBSCRIPTION",
+        },
+      })
+    );
+  } catch (error) {
+    console.warn("Impossible de supprimer l’abonnement local:", error?.message || error);
+  }
 }
 
 async function deleteAllUserDynamoItems(userPk) {
@@ -4743,6 +4838,16 @@ app.get(
   validateS3Config,
   async (req, res, next) => {
     try {
+      const activeShare = await getActiveImportedShare(req);
+
+      if (activeShare) {
+        const children = await loadSharedChildrenForImportedShare(activeShare);
+
+        return res.json({
+          children,
+        });
+      }
+
       const result = await dynamo.send(
         new QueryCommand({
           TableName: DYNAMODB_TABLE,
@@ -4768,7 +4873,7 @@ app.get(
         );
       });
 
-      res.json({
+      return res.json({
         children,
       });
     } catch (error) {
@@ -4779,12 +4884,14 @@ app.get(
 
 app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getPrincipalDataAccessContext(req);
+
     const existingChildrenResult = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": getUserPk(req),
+          ":pk": accessContext.dataPk,
           ":sk": "CHILD#",
         },
       })
@@ -4803,7 +4910,7 @@ app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next)
     const now = new Date().toISOString();
 
     const child = {
-      PK: getUserPk(req),
+      PK: accessContext.dataPk,
       SK: `CHILD#${childId}`,
       id: childId,
       type: "child",
@@ -4834,6 +4941,7 @@ app.put(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      const accessContext = await getPrincipalDataAccessContext(req);
       const { childId } = req.params;
       const now = new Date().toISOString();
       const payload = cleanChildPayload(req.body);
@@ -4842,7 +4950,7 @@ app.put(
         new UpdateCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `CHILD#${childId}`,
           },
           UpdateExpression:
@@ -4891,13 +4999,14 @@ app.delete(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      const accessContext = await getPrincipalDataAccessContext(req);
       const { childId } = req.params;
 
       await dynamo.send(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `CHILD#${childId}`,
           },
         })
@@ -4915,22 +5024,34 @@ app.delete(
 
 app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getDataAccessContext(req, "calendar", "read");
+
     const result = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": getUserPk(req),
+          ":pk": accessContext.dataPk,
           ":sk": "EVENT#",
         },
       })
     );
 
-    const events = (result.Items || []).sort((a, b) => {
-      return String(a.date || "").localeCompare(String(b.date || ""));
-    });
+    const events = (result.Items || [])
+      .filter((event) => {
+        if (!accessContext.share) return true;
 
-    res.json({
+        const eventChildIds = Array.isArray(event.childIds) ? event.childIds : [];
+
+        return eventChildIds.some((childId) =>
+          isChildAllowedForShare(accessContext.share, childId)
+        );
+      })
+      .sort((a, b) => {
+        return String(a.date || "").localeCompare(String(b.date || ""));
+      });
+
+    return res.json({
       events,
     });
   } catch (error) {
@@ -4940,12 +5061,15 @@ app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) =>
 
 app.post("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getDataAccessContext(req, "calendar", "edit");
     const eventId = randomUUID();
     const now = new Date().toISOString();
     const payload = cleanEventPayload(req.body);
 
+    assertChildrenAllowedForShare(accessContext.share, payload.childIds);
+
     const event = {
-      PK: getUserPk(req),
+      PK: accessContext.dataPk,
       SK: `EVENT#${eventId}`,
       id: eventId,
       typeItem: "event",
@@ -4976,15 +5100,18 @@ app.put(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      const accessContext = await getDataAccessContext(req, "calendar", "edit");
       const { eventId } = req.params;
       const now = new Date().toISOString();
       const payload = cleanEventPayload(req.body);
+
+      assertChildrenAllowedForShare(accessContext.share, payload.childIds);
 
       const result = await dynamo.send(
         new UpdateCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `EVENT#${eventId}`,
           },
           UpdateExpression:
@@ -5030,13 +5157,14 @@ app.delete(
   validateAwsConfig,
   async (req, res, next) => {
     try {
+      const accessContext = await getDataAccessContext(req, "calendar", "delete");
       const { eventId } = req.params;
 
       await dynamo.send(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: getUserPk(req),
+            PK: accessContext.dataPk,
             SK: `EVENT#${eventId}`,
           },
         })
@@ -5055,12 +5183,14 @@ app.delete(
 
 app.get("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getPrincipalDataAccessContext(req);
+
     const result = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": getUserPk(req),
+          ":pk": accessContext.dataPk,
           ":sk": "CALENDAR_FEED#",
         },
       })
@@ -5088,6 +5218,7 @@ app.get("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, n
 
 app.post("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getPrincipalDataAccessContext(req);
     const token = randomUUID().replace(/-/g, "");
     const now = new Date().toISOString();
     const childId = String(req.body?.childId || "all").trim() || "all";
@@ -5096,14 +5227,14 @@ app.post("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, 
     const feedUrl = getCalendarFeedUrl(token);
 
     const feed = {
-      PK: getUserPk(req),
+      PK: accessContext.dataPk,
       SK: `CALENDAR_FEED#${token}`,
       id: token,
       token,
       typeItem: "calendar_feed",
       status: "active",
       ownerId: req.session.user.sub,
-      dataPk: getUserPk(req),
+      dataPk: accessContext.dataPk,
       feedName,
       childId,
       childName,
@@ -5119,7 +5250,7 @@ app.post("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, 
       token,
       status: "active",
       ownerId: req.session.user.sub,
-      dataPk: getUserPk(req),
+      dataPk: accessContext.dataPk,
       feedName,
       childId,
       childName,
@@ -5165,14 +5296,23 @@ app.post("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, 
 
 app.delete("/api/calendar-feed/:token", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
+    const accessContext = await getPrincipalDataAccessContext(req);
     const token = String(req.params.token || "").trim();
+
+    if (!token) {
+      return res.status(400).json({
+        error: "missing_token",
+        message: "Lien calendrier invalide.",
+      });
+    }
+
     const now = new Date().toISOString();
 
     await dynamo.send(
       new UpdateCommand({
         TableName: DYNAMODB_TABLE,
         Key: {
-          PK: getUserPk(req),
+          PK: accessContext.dataPk,
           SK: `CALENDAR_FEED#${token}`,
         },
         UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
@@ -5186,25 +5326,26 @@ app.delete("/api/calendar-feed/:token", requireAuth, validateAwsConfig, async (r
       })
     );
 
-    const result = await dynamo.send(
-  new GetCommand({
-    TableName: DYNAMODB_TABLE,
-    Key: {
-      PK: getPublicDocumentSharePk(token),
-      SK: "METADATA",
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: getPublicCalendarFeedPk(token),
+          SK: "METADATA",
         },
-        UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
+        UpdateExpression: "SET #status = :status, revokedAt = :revokedAt, updatedAt = :updatedAt",
         ExpressionAttributeNames: {
           "#status": "status",
         },
         ExpressionAttributeValues: {
           ":status": "revoked",
+          ":revokedAt": now,
           ":updatedAt": now,
         },
       })
     );
 
-    res.json({ success: true, token, status: "revoked" });
+    return res.json({ success: true, token, status: "revoked" });
   } catch (error) {
     next(error);
   }
@@ -6773,7 +6914,6 @@ app.delete(
           message: "Lien invalide.",
         });
       }
-      
 
       const result = await dynamo.send(
         new GetCommand({
@@ -7362,9 +7502,11 @@ app.delete(
 
       const profileUserId = profileResult.Item?.userId;
 
+      await cancelStripeSubscriptionForUser(userPk);
       await deleteAllUserS3Objects(ownerId);
       await deleteAllUserDynamoItems(userPk);
       await deleteUserIdLookup(profileUserId);
+      await deleteUserSubscription(userPk);
       await deleteCognitoUser(req);
 
       req.session.destroy(() => {
