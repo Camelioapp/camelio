@@ -1281,6 +1281,30 @@ function cleanEventPayload(body = {}) {
   };
 }
 
+function cleanMemoryPayload(body = {}) {
+  const title = String(body.title || "").trim().slice(0, 180);
+  const note = String(body.note || "").trim().slice(0, 4000);
+  const childId = String(body.childId || "").trim();
+  const memoryType = String(body.type || "ultrasound").trim().slice(0, 80) || "ultrasound";
+  const sourcePhotoId = String(body.sourcePhotoId || "").trim().slice(0, 120);
+  const rawPhoto = String(body.photo || "").trim();
+  const safePhoto = rawPhoto.startsWith("https://") ? rawPhoto.slice(0, 2000) : "";
+
+  return {
+    childId,
+    type: memoryType,
+    title,
+    date: String(body.date || "").trim().slice(0, 20),
+    note,
+    pregnancyWeek: String(body.pregnancyWeek || "").trim().slice(0, 12),
+    heightCm: String(body.heightCm || "").trim().slice(0, 12),
+    bedtime: String(body.bedtime || "").trim().slice(0, 12),
+    wakeTime: String(body.wakeTime || "").trim().slice(0, 12),
+    photo: safePhoto,
+    sourcePhotoId,
+  };
+}
+
 function cleanDocumentPayload(body = {}) {
   const fileName = body.fileName || "";
   const fileType = inferDocumentFileType(fileName, body.fileType);
@@ -5021,6 +5045,212 @@ app.delete(
     }
   }
 );
+
+
+app.get("/api/memory-book", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "read");
+
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: DYNAMODB_TABLE,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": accessContext.dataPk,
+          ":sk": "MEMORY#",
+        },
+      })
+    );
+
+    const memories = (result.Items || [])
+      .filter((memory) => isChildAllowedForShare(accessContext.share, memory.childId))
+      .sort((a, b) =>
+        String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || ""))
+      );
+
+    return res.json({
+      success: true,
+      memories,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/memory-book", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "edit");
+    const payload = cleanMemoryPayload(req.body || {});
+
+    if (!payload.childId) {
+      return res.status(400).json({
+        error: "invalid_child",
+        message: "L’enfant associé au souvenir est requis.",
+      });
+    }
+
+    assertChildrenAllowedForShare(accessContext.share, [payload.childId]);
+
+    const memoryId = String(req.body?.id || randomUUID()).trim();
+    const now = new Date().toISOString();
+
+    const memory = {
+      PK: accessContext.dataPk,
+      SK: `MEMORY#${memoryId}`,
+      id: memoryId,
+      typeItem: "memory",
+      ownerId: accessContext.ownerId,
+      createdByUserId: req.session.user.sub,
+      createdFromAccountType: accessContext.isGuest ? "guest" : "principal",
+      ...payload,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: DYNAMODB_TABLE,
+        Item: memory,
+      })
+    );
+
+    return res.status(201).json({
+      success: true,
+      memory,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/memory-book/:memoryId", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "edit");
+    const { memoryId } = req.params;
+    const payload = cleanMemoryPayload(req.body || {});
+
+    if (!payload.childId) {
+      return res.status(400).json({
+        error: "invalid_child",
+        message: "L’enfant associé au souvenir est requis.",
+      });
+    }
+
+    assertChildrenAllowedForShare(accessContext.share, [payload.childId]);
+
+    const existing = await dynamo.send(
+      new GetCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: accessContext.dataPk,
+          SK: `MEMORY#${memoryId}`,
+        },
+      })
+    );
+
+    if (!existing.Item) {
+      return res.status(404).json({
+        error: "not_found",
+        message: "Souvenir introuvable.",
+      });
+    }
+
+    if (!isChildAllowedForShare(accessContext.share, existing.Item.childId)) {
+      return res.status(403).json({
+        error: "guest_child_forbidden",
+        message: "Accès refusé à ce souvenir.",
+      });
+    }
+
+    const updatedAt = new Date().toISOString();
+
+    const result = await dynamo.send(
+      new UpdateCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: accessContext.dataPk,
+          SK: `MEMORY#${memoryId}`,
+        },
+        UpdateExpression:
+          "SET childId = :childId, #memoryType = :memoryType, title = :title, #memoryDate = :memoryDate, note = :note, pregnancyWeek = :pregnancyWeek, heightCm = :heightCm, bedtime = :bedtime, wakeTime = :wakeTime, photo = :photo, sourcePhotoId = :sourcePhotoId, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#memoryType": "type",
+          "#memoryDate": "date",
+        },
+        ExpressionAttributeValues: {
+          ":childId": payload.childId,
+          ":memoryType": payload.type,
+          ":title": payload.title,
+          ":memoryDate": payload.date,
+          ":note": payload.note,
+          ":pregnancyWeek": payload.pregnancyWeek,
+          ":heightCm": payload.heightCm,
+          ":bedtime": payload.bedtime,
+          ":wakeTime": payload.wakeTime,
+          ":photo": payload.photo,
+          ":sourcePhotoId": payload.sourcePhotoId,
+          ":updatedAt": updatedAt,
+        },
+        ReturnValues: "ALL_NEW",
+      })
+    );
+
+    return res.json({
+      success: true,
+      memory: result.Attributes,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/memory-book/:memoryId", requireAuth, validateAwsConfig, async (req, res, next) => {
+  try {
+    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "delete");
+    const { memoryId } = req.params;
+
+    const existing = await dynamo.send(
+      new GetCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: accessContext.dataPk,
+          SK: `MEMORY#${memoryId}`,
+        },
+      })
+    );
+
+    if (!existing.Item) {
+      return res.status(404).json({
+        error: "not_found",
+        message: "Souvenir introuvable.",
+      });
+    }
+
+    if (!isChildAllowedForShare(accessContext.share, existing.Item.childId)) {
+      return res.status(403).json({
+        error: "guest_child_forbidden",
+        message: "Accès refusé à ce souvenir.",
+      });
+    }
+
+    await dynamo.send(
+      new DeleteCommand({
+        TableName: DYNAMODB_TABLE,
+        Key: {
+          PK: accessContext.dataPk,
+          SK: `MEMORY#${memoryId}`,
+        },
+      })
+    );
+
+    return res.json({
+      success: true,
+      deletedId: memoryId,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {

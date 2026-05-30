@@ -47,6 +47,7 @@ const nonShareableSectionIds = ["children"];
 const shareableSectionIds = [
   "photos",
   "memorable-phrases",
+  "carnet-souvenirs",
   "calendar",
   "sante",
   "documents",

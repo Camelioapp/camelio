@@ -322,10 +322,13 @@ function ChapterButton({ chapter, count, active, onClick }) {
 export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
   const [selectedChildId, setSelectedChildId] = useState(children[0]?.id || "");
   const [activeChapter, setActiveChapter] = useState("overview");
-  const [memories, setMemories] = useState(() => readStoredMemories());
+  const [memories, setMemories] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [photos, setPhotos] = useState([]);
   const [bookPageIndex, setBookPageIndex] = useState(0);
+  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
+  const [memoryError, setMemoryError] = useState("");
 
   useEffect(() => {
     if (!selectedChildId && children[0]?.id) {
@@ -353,16 +356,74 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
       }
     }
 
+    async function loadMemoryBook() {
+      setIsLoadingMemories(true);
+      setMemoryError("");
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/memory-book`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!mounted) return;
+
+        if (!response.ok) {
+          throw new Error(data?.message || "Impossible de charger le carnet souvenir.");
+        }
+
+        let serverMemories = Array.isArray(data.memories) ? data.memories : [];
+        const localMemories = readStoredMemories();
+
+        if (serverMemories.length === 0 && localMemories.length > 0) {
+          const migratedMemories = [];
+
+          for (const memory of localMemories) {
+            try {
+              const migrationResponse = await fetch(`${API_BASE_URL}/api/memory-book`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  ...memory,
+                  photo: String(memory.photo || "").startsWith("https://") ? memory.photo : "",
+                }),
+              });
+
+              const migrationData = await migrationResponse.json().catch(() => ({}));
+              if (migrationResponse.ok && migrationData.memory) {
+                migratedMemories.push(migrationData.memory);
+              }
+            } catch (error) {
+              console.error("Erreur migration carnet souvenir:", error);
+            }
+          }
+
+          if (migratedMemories.length > 0) {
+            localStorage.removeItem(STORAGE_KEY);
+            serverMemories = migratedMemories;
+          }
+        }
+
+        setMemories(serverMemories);
+      } catch (error) {
+        console.error("Erreur chargement carnet souvenir:", error);
+        if (mounted) setMemoryError(error?.message || "Impossible de charger le carnet souvenir.");
+      } finally {
+        if (mounted) setIsLoadingMemories(false);
+      }
+    }
+
     loadPhotos();
+    loadMemoryBook();
 
     return () => {
       mounted = false;
     };
   }, []);
-
-  useEffect(() => {
-    writeStoredMemories(memories);
-  }, [memories]);
 
   const selectedChild = useMemo(() => {
     return children.find((child) => child.id === selectedChildId) || children[0] || null;
@@ -371,8 +432,9 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
   const childMemories = useMemo(() => {
     return memories
       .filter((memory) => memory.childId === selectedChild?.id)
+      .map((memory) => ({ ...memory, photo: getMemoryPhoto(memory) }))
       .sort((a, b) => String(b.date || b.createdAt).localeCompare(String(a.date || a.createdAt)));
-  }, [memories, selectedChild]);
+  }, [memories, selectedChild, photos]);
 
   const chapterCounts = useMemo(() => {
     return chapters.reduce((acc, chapter) => {
@@ -414,21 +476,15 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
   }
 
   function handlePhotoUpload(event) {
-    const file = event.target.files?.[0];
-    if (!file || !file.type?.startsWith("image/")) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateForm("photo", String(reader.result || ""));
-      updateForm("sourcePhotoId", "");
-    };
-    reader.readAsDataURL(file);
+    event.target.value = "";
+    setMemoryError("Pour conserver une photo dans le carnet, ajoutez-la d’abord dans la section Photos, puis sélectionnez-la ici.");
   }
 
   function selectExistingPhoto(photo) {
     const url = photo.url || photo.photoUrl || photo.downloadUrl || photo.image || photo.src || "";
     if (!url) return;
 
+    setMemoryError("");
     setForm((current) => ({
       ...current,
       photo: url,
@@ -436,14 +492,26 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
     }));
   }
 
-  function addMemory() {
-    if (!selectedChild) return;
+  function getMemoryPhoto(memory) {
+    if (memory.sourcePhotoId) {
+      const sourcePhoto = photos.find((photo) => {
+        const photoId = photo.id || photo.photoId || "";
+        return photoId === memory.sourcePhotoId;
+      });
+
+      const sourceUrl = sourcePhoto?.url || sourcePhoto?.photoUrl || sourcePhoto?.downloadUrl || sourcePhoto?.image || sourcePhoto?.src || "";
+      if (sourceUrl) return sourceUrl;
+    }
+
+    return String(memory.photo || "").startsWith("https://") ? memory.photo : "";
+  }
+
+  async function addMemory() {
+    if (!selectedChild || isSavingMemory) return;
 
     const type = getMemoryType(form.type);
     const title = form.title.trim() || type.label;
-
-    const entry = {
-      id: `memory-${Date.now()}`,
+    const payload = {
       childId: selectedChild.id,
       type: form.type,
       title,
@@ -453,21 +521,62 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
       heightCm: form.heightCm,
       bedtime: form.bedtime,
       wakeTime: form.wakeTime,
-      photo: form.photo,
+      photo: String(form.photo || "").startsWith("https://") ? form.photo : "",
       sourcePhotoId: form.sourcePhotoId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
-    setMemories((current) => [entry, ...current]);
-    setActiveChapter(type.chapter);
-    setForm({ ...emptyForm, type: form.type });
-    setBookPageIndex(0);
+    setIsSavingMemory(true);
+    setMemoryError("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/memory-book`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Impossible d’ajouter ce souvenir.");
+      }
+
+      setMemories((current) => [data.memory, ...current].filter(Boolean));
+      setActiveChapter(type.chapter);
+      setForm({ ...emptyForm, type: form.type });
+      setBookPageIndex(0);
+    } catch (error) {
+      console.error("Erreur ajout souvenir:", error);
+      setMemoryError(error?.message || "Impossible d’ajouter ce souvenir.");
+    } finally {
+      setIsSavingMemory(false);
+    }
   }
 
-  function deleteMemory(memoryId) {
-    setMemories((current) => current.filter((memory) => memory.id !== memoryId));
-    setBookPageIndex(0);
+  async function deleteMemory(memoryId) {
+    if (!memoryId) return;
+
+    setMemoryError("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/memory-book/${encodeURIComponent(memoryId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Impossible de retirer ce souvenir.");
+      }
+
+      setMemories((current) => current.filter((memory) => memory.id !== memoryId));
+      setBookPageIndex(0);
+    } catch (error) {
+      console.error("Erreur suppression souvenir:", error);
+      setMemoryError(error?.message || "Impossible de retirer ce souvenir.");
+    }
   }
 
   if (children.length === 0) {
@@ -662,7 +771,7 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
                 {form.photo ? <img src={form.photo} alt="Aperçu" className="mt-3 h-32 w-full rounded-2xl object-cover" /> : null}
 
                 <label className="mt-3 inline-flex cursor-pointer items-center justify-center rounded-full border border-[#EADFCF] bg-white px-4 py-2 text-xs font-bold text-[#6F665E] hover:bg-[#F8F3EA]">
-                  Importer une photo
+                  Importer depuis Photos d’abord
                   <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                 </label>
 
@@ -685,9 +794,15 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
                 ) : null}
               </div>
 
-              <button type="button" onClick={addMemory} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:brightness-95">
+              {memoryError ? (
+                <p className="rounded-2xl border border-[#EAA5AF]/40 bg-[#FBECEF] px-4 py-3 text-sm font-bold leading-5 text-[#9A4E5B]">
+                  {memoryError}
+                </p>
+              ) : null}
+
+              <button type="button" onClick={addMemory} disabled={isSavingMemory} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#A8B193] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60">
                 <CheckCircle2 className="h-5 w-5" />
-                Ajouter au carnet
+                {isSavingMemory ? "Ajout en cours..." : "Ajouter au carnet"}
               </button>
             </div>
           </section>
@@ -732,7 +847,12 @@ export default function CarnetSouvenirs({ children = [], onBack = () => {} }) {
               </div>
             )}
 
-            {visibleMemories.length === 0 ? (
+            {isLoadingMemories ? (
+              <div className="flex min-h-[180px] flex-col items-center justify-center rounded-[28px] border border-dashed border-[#D8C8B6] bg-white text-center">
+                <Sparkles className="h-10 w-10 animate-pulse text-[#B5A7C8]" />
+                <p className="mt-3 text-sm font-bold text-[#7D756E]">Chargement du carnet souvenir...</p>
+              </div>
+            ) : visibleMemories.length === 0 ? (
               <div className="flex min-h-[280px] flex-col items-center justify-center rounded-[28px] border border-dashed border-[#D8C8B6] bg-white text-center">
                 <Sparkles className="h-12 w-12 text-[#B5A7C8]" />
                 <h4 className="mt-4 text-lg font-black text-[#4F4A45]">Aucun souvenir ici pour le moment</h4>
