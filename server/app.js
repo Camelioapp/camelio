@@ -164,6 +164,8 @@ const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CHILDREN_PER_ACCOUNT = 10;
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_PUBLIC_SHARE_FAILED_ATTEMPTS = 10;
+const PUBLIC_SHARE_LOCK_MINUTES = 30;
 
 const ALLOWED_DOCUMENT_TYPES = [
   "application/pdf",
@@ -994,7 +996,7 @@ async function getDataAccessContext(req, sectionId, requiredPermission = "read")
 
     return {
       isGuest: false,
-      dataPk: accessContext.dataPk,
+      dataPk: getUserPk(req),
       ownerId: getOwnerId(req),
       share: null,
       permission: "delete",
@@ -1447,6 +1449,18 @@ function isShareExpired(share) {
 
 function isShareActive(share) {
   return Boolean(share) && share.status !== "revoked" && !isShareExpired(share);
+}
+
+function isPublicShareLocked(share) {
+  if (!share) return false;
+
+  const lockedUntil = share.lockedUntil ? new Date(share.lockedUntil).getTime() : 0;
+
+  if (lockedUntil && lockedUntil > Date.now()) {
+    return true;
+  }
+
+  return Number(share.failedAttempts || 0) >= MAX_PUBLIC_SHARE_FAILED_ATTEMPTS;
 }
 
 function getPublicDocumentSharePk(token = "") {
@@ -6230,6 +6244,7 @@ app.post(
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
         ContentType: payload.fileType,
+        ContentLength: payload.fileSize,
       });
 
       const uploadUrl = await getSignedUrl(s3, command, {
@@ -6935,6 +6950,13 @@ app.post(
 
       const requiresCode = share.requiresCode !== false;
 
+      if (requiresCode && isPublicShareLocked(share)) {
+        return res.status(423).json({
+          error: "link_locked",
+          message: "Ce lien est temporairement verrouillé à cause d’un trop grand nombre d’essais invalides.",
+        });
+      }
+
       if (requiresCode) {
         if (!isValidShareCode(code)) {
           return res.status(400).json({
@@ -6954,11 +6976,15 @@ app.post(
                 SK: "METADATA",
               },
               UpdateExpression:
-                "SET failedAttempts = if_not_exists(failedAttempts, :zero) + :one, lastFailedAttemptAt = :now, updatedAt = :now",
+                "SET failedAttempts = if_not_exists(failedAttempts, :zero) + :one, lastFailedAttemptAt = :now, lockedUntil = :lockedUntil, updatedAt = :now",
               ExpressionAttributeValues: {
                 ":zero": 0,
                 ":one": 1,
                 ":now": new Date().toISOString(),
+                ":lockedUntil":
+                  Number(share.failedAttempts || 0) + 1 >= MAX_PUBLIC_SHARE_FAILED_ATTEMPTS
+                    ? new Date(Date.now() + PUBLIC_SHARE_LOCK_MINUTES * 60 * 1000).toISOString()
+                    : share.lockedUntil || "",
               },
             })
           );
@@ -7026,7 +7052,7 @@ app.post(
               SK: "METADATA",
             },
             UpdateExpression:
-              "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now",
+              "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now REMOVE failedAttempts, lastFailedAttemptAt, lockedUntil",
             ExpressionAttributeValues: {
               ":zero": 0,
               ":one": 1,
@@ -7091,7 +7117,7 @@ app.post(
             SK: "METADATA",
           },
           UpdateExpression:
-            "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now",
+            "SET accessCount = if_not_exists(accessCount, :zero) + :one, lastAccessedAt = :now, updatedAt = :now REMOVE failedAttempts, lastFailedAttemptAt, lockedUntil",
           ExpressionAttributeValues: {
             ":zero": 0,
             ":one": 1,
@@ -7236,10 +7262,10 @@ app.post(
         });
       }
 
-      if (fileSize && !isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
+      if (!isValidFileSize(fileSize, MAX_AVATAR_SIZE_BYTES)) {
         return res.status(400).json({
           error: "invalid_file_size",
-          message: "L’image doit ne pas dépasser 5 MB.",
+          message: "L’image doit être supérieure à 0 octet et ne pas dépasser 5 MB.",
         });
       }
 
@@ -7261,6 +7287,7 @@ app.post(
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
         ContentType: fileType,
+        ContentLength: Number(fileSize),
       });
 
       const uploadUrl = await getSignedUrl(s3, uploadCommand, {
@@ -7316,10 +7343,10 @@ app.post(
         });
       }
 
-      if (fileSize && !isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
+      if (!isValidFileSize(fileSize, MAX_IMAGE_SIZE_BYTES)) {
         return res.status(400).json({
           error: "invalid_file_size",
-          message: "La photo doit ne pas dépasser 5 MB.",
+          message: "La photo doit être supérieure à 0 octet et ne pas dépasser 5 MB.",
         });
       }
 
@@ -7340,6 +7367,7 @@ app.post(
         Bucket: S3_DOCUMENTS_BUCKET,
         Key: s3Key,
         ContentType: fileType,
+        ContentLength: Number(fileSize),
       });
 
       const uploadUrl = await getSignedUrl(s3, command, {
