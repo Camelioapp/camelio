@@ -53,13 +53,6 @@ const APP_URL =
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
 
-const PUBLIC_API_URL =
-  process.env.PUBLIC_API_URL ||
-  process.env.API_BASE_URL ||
-  process.env.API_URL ||
-  process.env.RENDER_EXTERNAL_URL ||
-  APP_URL;
-
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM =
   process.env.RESEND_FROM_EMAIL ||
@@ -284,34 +277,7 @@ app.use(express.json({ limit: "10mb" }));
 
 app.use(
   helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "default-src": ["'self'"],
-        "base-uri": ["'self'"],
-        "object-src": ["'none'"],
-        "frame-ancestors": ["'none'"],
-
-        "img-src": ["'self'", "data:", "blob:", "https:"],
-
-        "connect-src": [
-          "'self'",
-          "https://camelio.app",
-          "https://www.camelio.app",
-          "https://api.camelio.app",
-          "https://*.amazonaws.com",
-          "https://*.amazoncognito.com",
-          "https://api.stripe.com",
-          "https://checkout.stripe.com",
-          "https://api.resend.com"
-        ],
-
-        "script-src": ["'self'", "https://js.stripe.com"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-        "font-src": ["'self'", "data:", "https:"],
-        "frame-src": ["'self'", "https://js.stripe.com", "https://checkout.stripe.com"],
-      },
-    },
+    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -1033,23 +999,6 @@ async function getDataAccessContext(req, sectionId, requiredPermission = "read")
   };
 }
 
-async function getPrincipalDataAccessContext(req) {
-  const profile = await getCurrentUserProfile(req);
-  const activeAccountId = String(profile?.activeAccountId || "");
-
-  if (isGuestAccountId(activeAccountId)) {
-    const error = new Error("Cette action est réservée au compte principal.");
-    error.statusCode = 403;
-    error.errorCode = "principal_account_required";
-    throw error;
-  }
-
-  return {
-    dataPk: getUserPk(req),
-    ownerId: getOwnerId(req),
-  };
-}
-
 function getSharedChildIds(share) {
   return new Set(
     (Array.isArray(share?.childIds) ? share.childIds : [])
@@ -1223,11 +1172,6 @@ function cleanChildPayload(body = {}) {
     },
     photoZoom: Number(body.photoZoom) || 1,
     notes: body.notes || body.profileNote || "",
-    isStar: Boolean(body.isStar || body.starChild || body.isDeceased || body.deceasedDate || body.deathDate),
-    starChild: Boolean(body.isStar || body.starChild || body.isDeceased || body.deceasedDate || body.deathDate),
-    isDeceased: Boolean(body.isStar || body.starChild || body.isDeceased || body.deceasedDate || body.deathDate),
-    deceasedDate: body.deceasedDate || body.deathDate || "",
-    deathDate: body.deathDate || body.deceasedDate || "",
   };
 }
 
@@ -1276,34 +1220,6 @@ function cleanEventPayload(body = {}) {
     end: body.end || "",
     note: body.note || "",
     color: body.color || "sage",
-    appointmentEmoji: body.appointmentEmoji || body.icon || "heart",
-    icon: body.icon || body.appointmentEmoji || "heart",
-    recurrence: body.recurrence || "Aucune",
-    recurrenceGroupId: body.recurrenceGroupId || "",
-  };
-}
-
-function cleanMemoryPayload(body = {}) {
-  const title = String(body.title || "").trim().slice(0, 180);
-  const note = String(body.note || "").trim().slice(0, 4000);
-  const childId = String(body.childId || "").trim();
-  const memoryType = String(body.type || "ultrasound").trim().slice(0, 80) || "ultrasound";
-  const sourcePhotoId = String(body.sourcePhotoId || "").trim().slice(0, 120);
-  const rawPhoto = String(body.photo || "").trim();
-  const safePhoto = rawPhoto.startsWith("https://") ? rawPhoto.slice(0, 2000) : "";
-
-  return {
-    childId,
-    type: memoryType,
-    title,
-    date: String(body.date || "").trim().slice(0, 20),
-    note,
-    pregnancyWeek: String(body.pregnancyWeek || "").trim().slice(0, 12),
-    heightCm: String(body.heightCm || "").trim().slice(0, 12),
-    bedtime: String(body.bedtime || "").trim().slice(0, 12),
-    wakeTime: String(body.wakeTime || "").trim().slice(0, 12),
-    photo: safePhoto,
-    sourcePhotoId,
   };
 }
 
@@ -1318,8 +1234,6 @@ function cleanDocumentPayload(body = {}) {
     childId: body.childId || "",
     childName: body.childName || "",
     category: body.category || body.type || "Document",
-    folderId: body.folderId || body.folder || "other",
-    folderName: body.folderName || "Autres documents",
     title: body.title || fileName || "Document",
     note: body.note || "",
   };
@@ -1401,15 +1315,6 @@ function isSafeS3KeyForOwner(s3Key = "", ownerId = "") {
   return String(s3Key).startsWith(`users/${ownerId}/`);
 }
 
-function normalizeDocumentFileName(value = "") {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function normalizeShareCode(code = "") {
   return String(code || "")
     .trim()
@@ -1418,7 +1323,7 @@ function normalizeShareCode(code = "") {
 }
 
 function isValidShareCode(code = "") {
-  return /^[A-Z0-9]{6,8}$/.test(normalizeShareCode(code));
+  return /^[A-Z0-9]{4}$/.test(normalizeShareCode(code));
 }
 
 function hashShareCode(code = "", salt = "") {
@@ -1465,199 +1370,6 @@ function isPublicShareLocked(share) {
 
 function getPublicDocumentSharePk(token = "") {
   return `PUBLIC_DOCUMENT_SHARE#${String(token || "").trim()}`;
-}
-
-
-function getPublicCalendarFeedPk(token = "") {
-  return `PUBLIC_CALENDAR_FEED#${String(token || "").trim()}`;
-}
-
-function getPublicApiUrl() {
-  return String(PUBLIC_API_URL || APP_URL || "https://api.camelio.app").replace(/\/$/, "");
-}
-
-function getCalendarFeedUrl(token = "") {
-  return `${getPublicApiUrl()}/api/calendar/feed/${encodeURIComponent(token)}.ics`;
-}
-
-function escapeIcsText(value = "") {
-  return String(value || "")
-    .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "")
-    .replace(/,/g, "\\,")
-    .replace(/;/g, "\\;");
-}
-
-function foldIcsLine(line = "") {
-  const value = String(line || "");
-  if (value.length <= 74) return value;
-
-  const parts = [];
-  let cursor = value;
-  parts.push(cursor.slice(0, 74));
-  cursor = cursor.slice(74);
-
-  while (cursor.length > 0) {
-    parts.push(` ${cursor.slice(0, 73)}`);
-    cursor = cursor.slice(73);
-  }
-
-  return parts.join("\r\n");
-}
-
-function toIcsDateTime(dateKey = "", time = "") {
-  const [year = "", month = "", day = ""] = String(dateKey || "").split("-");
-  const [hour = "00", minute = "00"] = String(time || "00:00").split(":");
-  return `${year}${month}${day}T${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}00`;
-}
-
-function toIcsDate(dateKey = "") {
-  return String(dateKey || "").replace(/-/g, "");
-}
-
-function addDaysToDateKey(dateKey = "", days = 1) {
-  const [year, month, day] = String(dateKey || "").split("-").map(Number);
-  const date = new Date(year, (month || 1) - 1, day || 1);
-  date.setDate(date.getDate() + days);
-  const nextYear = date.getFullYear();
-  const nextMonth = String(date.getMonth() + 1).padStart(2, "0");
-  const nextDay = String(date.getDate()).padStart(2, "0");
-  return `${nextYear}-${nextMonth}-${nextDay}`;
-}
-
-function buildCalendarIcs(events = [], feed = {}) {
-  const nowStamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-  const calendarName = feed.feedName || feed.name || "Calendrier Camelio";
-  const timezone = process.env.CALENDAR_TIMEZONE || "America/Toronto";
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Camelio//Calendrier familial//FR",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    `X-WR-CALNAME:${escapeIcsText(calendarName)}`,
-    `X-WR-TIMEZONE:${escapeIcsText(timezone)}`,
-  ];
-
-  for (const event of events) {
-    if (!event?.date) continue;
-
-    const isAppointment = event.eventType === "appointment" || event.eventType === "Rendez-vous";
-    const icon = isAppointment ? event.appointmentEmoji || event.icon || "" : "";
-    const title = event.title || (isAppointment ? "Rendez-vous" : "Journée de garde");
-    const childNames = Array.isArray(event.childNames) && event.childNames.length
-      ? event.childNames.join(", ")
-      : "";
-    const descriptionParts = [
-      event.note || "",
-      childNames ? `Enfant(s) : ${childNames}` : "",
-      event.recurrence && event.recurrence !== "Aucune" ? `Récurrence : ${event.recurrence}` : "",
-      "Créé dans Camelio.",
-    ].filter(Boolean);
-
-    lines.push("BEGIN:VEVENT");
-    lines.push(`UID:${escapeIcsText(event.id || randomUUID())}@camelio.app`);
-    lines.push(`DTSTAMP:${nowStamp}`);
-    lines.push(`SUMMARY:${escapeIcsText(`${icon ? `${icon} ` : ""}${title}`)}`);
-
-    if (event.start) {
-      lines.push(`DTSTART;TZID=${timezone}:${toIcsDateTime(event.date, event.start)}`);
-      lines.push(`DTEND;TZID=${timezone}:${toIcsDateTime(event.date, event.end || event.start)}`);
-    } else {
-      lines.push(`DTSTART;VALUE=DATE:${toIcsDate(event.date)}`);
-      lines.push(`DTEND;VALUE=DATE:${toIcsDate(addDaysToDateKey(event.date, 1))}`);
-    }
-
-    if (descriptionParts.length) {
-      lines.push(`DESCRIPTION:${escapeIcsText(descriptionParts.join("\n"))}`);
-    }
-
-    lines.push(`CATEGORIES:${escapeIcsText(isAppointment ? "Rendez-vous" : "Garde")}`);
-    lines.push("END:VEVENT");
-  }
-
-  lines.push("END:VCALENDAR");
-
-  return `${lines.map(foldIcsLine).join("\r\n")}\r\n`;
-}
-
-async function cancelStripeSubscriptionForUser(userPk) {
-  if (!stripe || !userPk) return null;
-
-  const subscriptionResult = await dynamo.send(
-    new GetCommand({
-      TableName: SUBSCRIPTIONS_TABLE,
-      Key: {
-        PK: userPk,
-        SK: "SUBSCRIPTION",
-      },
-    })
-  );
-
-  const subscription = subscriptionResult.Item || null;
-  const stripeSubscriptionId = subscription?.stripeSubscriptionId;
-
-  if (!stripeSubscriptionId) return subscription;
-
-  const alreadyInactiveStatuses = new Set([
-    "canceled",
-    "incomplete_expired",
-    "none",
-  ]);
-
-  if (!alreadyInactiveStatuses.has(String(subscription.status || ""))) {
-    try {
-      await stripe.subscriptions.cancel(stripeSubscriptionId);
-    } catch (error) {
-      if (error?.code !== "resource_missing") {
-        throw error;
-      }
-    }
-  }
-
-  const now = new Date().toISOString();
-
-  await dynamo.send(
-    new UpdateCommand({
-      TableName: SUBSCRIPTIONS_TABLE,
-      Key: {
-        PK: userPk,
-        SK: "SUBSCRIPTION",
-      },
-      UpdateExpression:
-        "SET #status = :status, cancelAtPeriodEnd = :cancelAtPeriodEnd, canceledAt = :canceledAt, updatedAt = :updatedAt",
-      ExpressionAttributeNames: {
-        "#status": "status",
-      },
-      ExpressionAttributeValues: {
-        ":status": "canceled",
-        ":cancelAtPeriodEnd": false,
-        ":canceledAt": now,
-        ":updatedAt": now,
-      },
-    })
-  );
-
-  return { ...subscription, status: "canceled", canceledAt: now };
-}
-
-async function deleteUserSubscription(userPk) {
-  if (!userPk) return;
-
-  try {
-    await dynamo.send(
-      new DeleteCommand({
-        TableName: SUBSCRIPTIONS_TABLE,
-        Key: {
-          PK: userPk,
-          SK: "SUBSCRIPTION",
-        },
-      })
-    );
-  } catch (error) {
-    console.warn("Impossible de supprimer l’abonnement local:", error?.message || error);
-  }
 }
 
 async function deleteAllUserDynamoItems(userPk) {
@@ -1847,13 +1559,7 @@ async function sendEmailWithResend({ to, subject, html, text }) {
   return data;
 }
 
-app.get("/api/test-email", requireAuth, async (req, res) => {
-  if (IS_PRODUCTION) {
-    return res.status(404).json({
-      error: "not_found",
-      message: "Route non disponible en production.",
-    });
-  }
+app.get("/api/test-email", async (req, res) => {
   try {
     console.log("TEST RESEND EMAIL START", {
       hasResendApiKey: Boolean(RESEND_API_KEY),
@@ -4876,16 +4582,6 @@ app.get(
   validateS3Config,
   async (req, res, next) => {
     try {
-      const activeShare = await getActiveImportedShare(req);
-
-      if (activeShare) {
-        const children = await loadSharedChildrenForImportedShare(activeShare);
-
-        return res.json({
-          children,
-        });
-      }
-
       const result = await dynamo.send(
         new QueryCommand({
           TableName: DYNAMODB_TABLE,
@@ -4911,7 +4607,7 @@ app.get(
         );
       });
 
-      return res.json({
+      res.json({
         children,
       });
     } catch (error) {
@@ -4922,14 +4618,12 @@ app.get(
 
 app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
-    const accessContext = await getPrincipalDataAccessContext(req);
-
     const existingChildrenResult = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": accessContext.dataPk,
+          ":pk": getUserPk(req),
           ":sk": "CHILD#",
         },
       })
@@ -4948,7 +4642,7 @@ app.post("/api/children", requireAuth, validateAwsConfig, async (req, res, next)
     const now = new Date().toISOString();
 
     const child = {
-      PK: accessContext.dataPk,
+      PK: getUserPk(req),
       SK: `CHILD#${childId}`,
       id: childId,
       type: "child",
@@ -4979,7 +4673,6 @@ app.put(
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      const accessContext = await getPrincipalDataAccessContext(req);
       const { childId } = req.params;
       const now = new Date().toISOString();
       const payload = cleanChildPayload(req.body);
@@ -4988,11 +4681,11 @@ app.put(
         new UpdateCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: accessContext.dataPk,
+            PK: getUserPk(req),
             SK: `CHILD#${childId}`,
           },
           UpdateExpression:
-            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, avatarS3Key = :avatarS3Key, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, isStar = :isStar, starChild = :starChild, isDeceased = :isDeceased, deceasedDate = :deceasedDate, deathDate = :deathDate, updatedAt = :updatedAt",
+            "SET firstName = :firstName, lastName = :lastName, nickname = :nickname, birthDate = :birthDate, gender = :gender, color = :color, avatar = :avatar, photo = :photo, #image = :image, avatarS3Key = :avatarS3Key, photoPosition = :photoPosition, photoZoom = :photoZoom, notes = :notes, updatedAt = :updatedAt",
           ExpressionAttributeNames: {
             "#image": "image",
           },
@@ -5010,11 +4703,6 @@ app.put(
             ":photoPosition": payload.photoPosition,
             ":photoZoom": payload.photoZoom,
             ":notes": payload.notes,
-            ":isStar": payload.isStar,
-            ":starChild": payload.starChild,
-            ":isDeceased": payload.isDeceased,
-            ":deceasedDate": payload.deceasedDate,
-            ":deathDate": payload.deathDate,
             ":updatedAt": now,
           },
           ReturnValues: "ALL_NEW",
@@ -5037,14 +4725,13 @@ app.delete(
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      const accessContext = await getPrincipalDataAccessContext(req);
       const { childId } = req.params;
 
       await dynamo.send(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: accessContext.dataPk,
+            PK: getUserPk(req),
             SK: `CHILD#${childId}`,
           },
         })
@@ -5060,242 +4747,24 @@ app.delete(
   }
 );
 
-
-app.get("/api/memory-book", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "read");
-
-    const result = await dynamo.send(
-      new QueryCommand({
-        TableName: DYNAMODB_TABLE,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": accessContext.dataPk,
-          ":sk": "MEMORY#",
-        },
-      })
-    );
-
-    const memories = (result.Items || [])
-      .filter((memory) => isChildAllowedForShare(accessContext.share, memory.childId))
-      .sort((a, b) =>
-        String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || ""))
-      );
-
-    return res.json({
-      success: true,
-      memories,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/memory-book", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "edit");
-    const payload = cleanMemoryPayload(req.body || {});
-
-    if (!payload.childId) {
-      return res.status(400).json({
-        error: "invalid_child",
-        message: "L’enfant associé au souvenir est requis.",
-      });
-    }
-
-    assertChildrenAllowedForShare(accessContext.share, [payload.childId]);
-
-    const memoryId = String(req.body?.id || randomUUID()).trim();
-    const now = new Date().toISOString();
-
-    const memory = {
-      PK: accessContext.dataPk,
-      SK: `MEMORY#${memoryId}`,
-      id: memoryId,
-      typeItem: "memory",
-      ownerId: accessContext.ownerId,
-      createdByUserId: req.session.user.sub,
-      createdFromAccountType: accessContext.isGuest ? "guest" : "principal",
-      ...payload,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await dynamo.send(
-      new PutCommand({
-        TableName: DYNAMODB_TABLE,
-        Item: memory,
-      })
-    );
-
-    return res.status(201).json({
-      success: true,
-      memory,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.put("/api/memory-book/:memoryId", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "edit");
-    const { memoryId } = req.params;
-    const payload = cleanMemoryPayload(req.body || {});
-
-    if (!payload.childId) {
-      return res.status(400).json({
-        error: "invalid_child",
-        message: "L’enfant associé au souvenir est requis.",
-      });
-    }
-
-    assertChildrenAllowedForShare(accessContext.share, [payload.childId]);
-
-    const existing = await dynamo.send(
-      new GetCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: accessContext.dataPk,
-          SK: `MEMORY#${memoryId}`,
-        },
-      })
-    );
-
-    if (!existing.Item) {
-      return res.status(404).json({
-        error: "not_found",
-        message: "Souvenir introuvable.",
-      });
-    }
-
-    if (!isChildAllowedForShare(accessContext.share, existing.Item.childId)) {
-      return res.status(403).json({
-        error: "guest_child_forbidden",
-        message: "Accès refusé à ce souvenir.",
-      });
-    }
-
-    const updatedAt = new Date().toISOString();
-
-    const result = await dynamo.send(
-      new UpdateCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: accessContext.dataPk,
-          SK: `MEMORY#${memoryId}`,
-        },
-        UpdateExpression:
-          "SET childId = :childId, #memoryType = :memoryType, title = :title, #memoryDate = :memoryDate, note = :note, pregnancyWeek = :pregnancyWeek, heightCm = :heightCm, bedtime = :bedtime, wakeTime = :wakeTime, photo = :photo, sourcePhotoId = :sourcePhotoId, updatedAt = :updatedAt",
-        ExpressionAttributeNames: {
-          "#memoryType": "type",
-          "#memoryDate": "date",
-        },
-        ExpressionAttributeValues: {
-          ":childId": payload.childId,
-          ":memoryType": payload.type,
-          ":title": payload.title,
-          ":memoryDate": payload.date,
-          ":note": payload.note,
-          ":pregnancyWeek": payload.pregnancyWeek,
-          ":heightCm": payload.heightCm,
-          ":bedtime": payload.bedtime,
-          ":wakeTime": payload.wakeTime,
-          ":photo": payload.photo,
-          ":sourcePhotoId": payload.sourcePhotoId,
-          ":updatedAt": updatedAt,
-        },
-        ReturnValues: "ALL_NEW",
-      })
-    );
-
-    return res.json({
-      success: true,
-      memory: result.Attributes,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.delete("/api/memory-book/:memoryId", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const accessContext = await getDataAccessContext(req, "carnet-souvenirs", "delete");
-    const { memoryId } = req.params;
-
-    const existing = await dynamo.send(
-      new GetCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: accessContext.dataPk,
-          SK: `MEMORY#${memoryId}`,
-        },
-      })
-    );
-
-    if (!existing.Item) {
-      return res.status(404).json({
-        error: "not_found",
-        message: "Souvenir introuvable.",
-      });
-    }
-
-    if (!isChildAllowedForShare(accessContext.share, existing.Item.childId)) {
-      return res.status(403).json({
-        error: "guest_child_forbidden",
-        message: "Accès refusé à ce souvenir.",
-      });
-    }
-
-    await dynamo.send(
-      new DeleteCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: accessContext.dataPk,
-          SK: `MEMORY#${memoryId}`,
-        },
-      })
-    );
-
-    return res.json({
-      success: true,
-      deletedId: memoryId,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
-    const accessContext = await getDataAccessContext(req, "calendar", "read");
-
     const result = await dynamo.send(
       new QueryCommand({
         TableName: DYNAMODB_TABLE,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ":pk": accessContext.dataPk,
+          ":pk": getUserPk(req),
           ":sk": "EVENT#",
         },
       })
     );
 
-    const events = (result.Items || [])
-      .filter((event) => {
-        if (!accessContext.share) return true;
+    const events = (result.Items || []).sort((a, b) => {
+      return String(a.date || "").localeCompare(String(b.date || ""));
+    });
 
-        const eventChildIds = Array.isArray(event.childIds) ? event.childIds : [];
-
-        return eventChildIds.some((childId) =>
-          isChildAllowedForShare(accessContext.share, childId)
-        );
-      })
-      .sort((a, b) => {
-        return String(a.date || "").localeCompare(String(b.date || ""));
-      });
-
-    return res.json({
+    res.json({
       events,
     });
   } catch (error) {
@@ -5305,15 +4774,12 @@ app.get("/api/events", requireAuth, validateAwsConfig, async (req, res, next) =>
 
 app.post("/api/events", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
-    const accessContext = await getDataAccessContext(req, "calendar", "edit");
     const eventId = randomUUID();
     const now = new Date().toISOString();
     const payload = cleanEventPayload(req.body);
 
-    assertChildrenAllowedForShare(accessContext.share, payload.childIds);
-
     const event = {
-      PK: accessContext.dataPk,
+      PK: getUserPk(req),
       SK: `EVENT#${eventId}`,
       id: eventId,
       typeItem: "event",
@@ -5344,22 +4810,19 @@ app.put(
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      const accessContext = await getDataAccessContext(req, "calendar", "edit");
       const { eventId } = req.params;
       const now = new Date().toISOString();
       const payload = cleanEventPayload(req.body);
-
-      assertChildrenAllowedForShare(accessContext.share, payload.childIds);
 
       const result = await dynamo.send(
         new UpdateCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: accessContext.dataPk,
+            PK: getUserPk(req),
             SK: `EVENT#${eventId}`,
           },
           UpdateExpression:
-            "SET title = :title, eventType = :eventType, childIds = :childIds, childNames = :childNames, #date = :date, #start = :start, #end = :end, note = :note, color = :color, appointmentEmoji = :appointmentEmoji, icon = :icon, recurrence = :recurrence, recurrenceGroupId = :recurrenceGroupId, updatedAt = :updatedAt",
+            "SET title = :title, eventType = :eventType, childIds = :childIds, childNames = :childNames, #date = :date, #start = :start, #end = :end, note = :note, color = :color, updatedAt = :updatedAt",
           ExpressionAttributeNames: {
             "#date": "date",
             "#start": "start",
@@ -5375,10 +4838,6 @@ app.put(
             ":end": payload.end,
             ":note": payload.note,
             ":color": payload.color,
-            ":appointmentEmoji": payload.appointmentEmoji,
-            ":icon": payload.icon,
-            ":recurrence": payload.recurrence,
-            ":recurrenceGroupId": payload.recurrenceGroupId,
             ":updatedAt": now,
           },
           ReturnValues: "ALL_NEW",
@@ -5401,14 +4860,13 @@ app.delete(
   validateAwsConfig,
   async (req, res, next) => {
     try {
-      const accessContext = await getDataAccessContext(req, "calendar", "delete");
       const { eventId } = req.params;
 
       await dynamo.send(
         new DeleteCommand({
           TableName: DYNAMODB_TABLE,
           Key: {
-            PK: accessContext.dataPk,
+            PK: getUserPk(req),
             SK: `EVENT#${eventId}`,
           },
         })
@@ -5423,224 +4881,6 @@ app.delete(
     }
   }
 );
-
-
-app.get("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const accessContext = await getPrincipalDataAccessContext(req);
-
-    const result = await dynamo.send(
-      new QueryCommand({
-        TableName: DYNAMODB_TABLE,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": accessContext.dataPk,
-          ":sk": "CALENDAR_FEED#",
-        },
-      })
-    );
-
-    const feeds = (result.Items || [])
-      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-      .map((feed) => ({
-        id: feed.id,
-        token: feed.token,
-        feedName: feed.feedName,
-        childId: feed.childId || "all",
-        childName: feed.childName || "Tous les enfants",
-        status: feed.status || "active",
-        feedUrl: getCalendarFeedUrl(feed.token),
-        createdAt: feed.createdAt,
-        updatedAt: feed.updatedAt,
-      }));
-
-    res.json({ feeds });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/calendar-feed", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const accessContext = await getPrincipalDataAccessContext(req);
-    const token = randomUUID().replace(/-/g, "");
-    const now = new Date().toISOString();
-    const childId = String(req.body?.childId || "all").trim() || "all";
-    const childName = String(req.body?.childName || "Tous les enfants").trim() || "Tous les enfants";
-    const feedName = String(req.body?.feedName || (childId === "all" ? "Camelio - Tous les enfants" : `Camelio - ${childName}`)).trim();
-    const feedUrl = getCalendarFeedUrl(token);
-
-    const feed = {
-      PK: accessContext.dataPk,
-      SK: `CALENDAR_FEED#${token}`,
-      id: token,
-      token,
-      typeItem: "calendar_feed",
-      status: "active",
-      ownerId: req.session.user.sub,
-      dataPk: accessContext.dataPk,
-      feedName,
-      childId,
-      childName,
-      feedUrl,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const publicFeed = {
-      PK: getPublicCalendarFeedPk(token),
-      SK: "METADATA",
-      type: "public_calendar_feed",
-      token,
-      status: "active",
-      ownerId: req.session.user.sub,
-      dataPk: accessContext.dataPk,
-      feedName,
-      childId,
-      childName,
-      feedUrl,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await dynamo.send(
-      new PutCommand({
-        TableName: DYNAMODB_TABLE,
-        Item: feed,
-        ConditionExpression: "attribute_not_exists(PK)",
-      })
-    );
-
-    await dynamo.send(
-      new PutCommand({
-        TableName: DYNAMODB_TABLE,
-        Item: publicFeed,
-        ConditionExpression: "attribute_not_exists(PK)",
-      })
-    );
-
-    res.status(201).json({
-      success: true,
-      feed: {
-        id: feed.id,
-        token,
-        feedName,
-        childId,
-        childName,
-        status: "active",
-        feedUrl,
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.delete("/api/calendar-feed/:token", requireAuth, validateAwsConfig, async (req, res, next) => {
-  try {
-    const accessContext = await getPrincipalDataAccessContext(req);
-    const token = String(req.params.token || "").trim();
-
-    if (!token) {
-      return res.status(400).json({
-        error: "missing_token",
-        message: "Lien calendrier invalide.",
-      });
-    }
-
-    const now = new Date().toISOString();
-
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: accessContext.dataPk,
-          SK: `CALENDAR_FEED#${token}`,
-        },
-        UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
-        ExpressionAttributeNames: {
-          "#status": "status",
-        },
-        ExpressionAttributeValues: {
-          ":status": "revoked",
-          ":updatedAt": now,
-        },
-      })
-    );
-
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: getPublicCalendarFeedPk(token),
-          SK: "METADATA",
-        },
-        UpdateExpression: "SET #status = :status, revokedAt = :revokedAt, updatedAt = :updatedAt",
-        ExpressionAttributeNames: {
-          "#status": "status",
-        },
-        ExpressionAttributeValues: {
-          ":status": "revoked",
-          ":revokedAt": now,
-          ":updatedAt": now,
-        },
-      })
-    );
-
-    return res.json({ success: true, token, status: "revoked" });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/calendar/feed/:token.ics", validateAwsConfig, async (req, res, next) => {
-  try {
-    const token = String(req.params.token || "").trim();
-
-    const feedResult = await dynamo.send(
-      new GetCommand({
-        TableName: DYNAMODB_TABLE,
-        Key: {
-          PK: getPublicCalendarFeedPk(token),
-          SK: "METADATA",
-        },
-      })
-    );
-
-    const feed = feedResult.Item;
-
-    if (!feed || feed.status !== "active") {
-      return res.status(404).type("text/plain").send("Calendrier introuvable ou désactivé.");
-    }
-
-    const eventsResult = await dynamo.send(
-      new QueryCommand({
-        TableName: DYNAMODB_TABLE,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": feed.dataPk,
-          ":sk": "EVENT#",
-        },
-      })
-    );
-
-    const childId = feed.childId || "all";
-    const events = (eventsResult.Items || [])
-      .filter((event) => childId === "all" || (Array.isArray(event.childIds) && event.childIds.includes(childId)))
-      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-
-    const ics = buildCalendarIcs(events, feed);
-
-    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-    res.setHeader("Content-Disposition", `inline; filename=\"camelio-${token}.ics\"`);
-    res.setHeader("Cache-Control", "no-store, max-age=0");
-    res.status(200).send(ics);
-  } catch (error) {
-    next(error);
-  }
-});
 
 app.get("/api/my-data", requireAuth, validateAwsConfig, async (req, res, next) => {
   try {
@@ -6204,29 +5444,6 @@ app.post(
         });
       }
 
-      const existingDocsResult = await dynamo.send(
-        new QueryCommand({
-          TableName: DYNAMODB_TABLE,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-          ExpressionAttributeValues: {
-            ":pk": accessContext.dataPk,
-            ":sk": "DOCUMENT#",
-          },
-        })
-      );
-
-      const normalizedIncomingFileName = normalizeDocumentFileName(payload.fileName);
-      const duplicateFile = (existingDocsResult.Items || []).find((item) => {
-        return normalizeDocumentFileName(item.fileName) === normalizedIncomingFileName;
-      });
-
-      if (duplicateFile) {
-        return res.status(409).json({
-          error: "duplicate_file_name",
-          message: "Un document avec ce même nom de fichier existe déjà. Renomme le fichier avant de l’ajouter.",
-        });
-      }
-
       const ownerId = accessContext.ownerId;
       const documentId = randomUUID();
       const now = new Date().toISOString();
@@ -6262,8 +5479,6 @@ app.post(
   childId: payload.childId,
   childName: payload.childName,
   category: payload.category,
-  folderId: payload.folderId || "other",
-  folderName: payload.folderName || "Autres documents",
   title: payload.title,
   note: payload.note,
   fileName: payload.fileName,
@@ -6386,98 +5601,6 @@ app.get(
   }
 );
 
-app.patch(
-  "/api/documents/:documentId",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const { documentId } = req.params;
-      const title = String(req.body?.title || "").trim().slice(0, 180);
-      const note = String(req.body?.note || "").trim().slice(0, 1000);
-      const childId = String(req.body?.childId || "").trim();
-      const childName = String(req.body?.childName || "").trim().slice(0, 120);
-      const folderId = String(req.body?.folderId || "other").trim().slice(0, 120) || "other";
-      const folderName = String(req.body?.folderName || "Autres documents").trim().slice(0, 180) || "Autres documents";
-
-      if (!title) {
-        return res.status(400).json({
-          error: "invalid_title",
-          message: "Le nom du document est requis.",
-        });
-      }
-
-      if (!childId) {
-        return res.status(400).json({
-          error: "invalid_child",
-          message: "L’enfant associé est requis.",
-        });
-      }
-
-      const accessContext = await getDataAccessContext(req, "documents", "edit");
-
-      const result = await dynamo.send(
-        new GetCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: accessContext.dataPk,
-            SK: `DOCUMENT#${documentId}`,
-          },
-        })
-      );
-
-      const document = result.Item;
-
-      if (!document) {
-        return res.status(404).json({
-          error: "not_found",
-          message: "Document introuvable.",
-        });
-      }
-
-      if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, document.childId)) {
-        return res.status(403).json({
-          error: "guest_child_forbidden",
-          message: "Accès refusé à ce document.",
-        });
-      }
-
-      const updatedAt = new Date().toISOString();
-
-      const updateResult = await dynamo.send(
-        new UpdateCommand({
-          TableName: DYNAMODB_TABLE,
-          Key: {
-            PK: accessContext.dataPk,
-            SK: `DOCUMENT#${documentId}`,
-          },
-          UpdateExpression:
-            "SET title = :title, note = :note, childId = :childId, childName = :childName, folderId = :folderId, folderName = :folderName, category = :category, updatedAt = :updatedAt",
-          ExpressionAttributeValues: {
-            ":title": title,
-            ":note": note,
-            ":childId": childId,
-            ":childName": childName || (childId === "general" ? "Général" : "Enfant"),
-            ":folderId": folderId,
-            ":folderName": folderName,
-            ":category": "Document",
-            ":updatedAt": updatedAt,
-          },
-          ReturnValues: "ALL_NEW",
-        })
-      );
-
-      res.json({
-        success: true,
-        document: updateResult.Attributes,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-
 app.delete(
   "/api/documents/:documentId",
   requireAuth,
@@ -6559,22 +5682,20 @@ app.post(
   async (req, res, next) => {
     try {
       const { documentId } = req.params;
-      const requiresCode = req.body?.requiresCode !== false;
       const code = normalizeShareCode(req.body?.code);
       const durationDays = Number(req.body?.durationDays);
-      const accessMode = "view_only";
 
-      if (requiresCode && !isValidShareCode(code)) {
+      if (!isValidShareCode(code)) {
         return res.status(400).json({
           error: "invalid_code",
-          message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
+          message: "Le code doit contenir exactement 4 caractères, lettres ou chiffres.",
         });
       }
 
-      if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+      if (![1, 3, 7].includes(durationDays)) {
         return res.status(400).json({
           error: "invalid_duration",
-          message: "La durée doit être entre 1 et 365 jours.",
+          message: "La durée doit être de 1 journée, 3 jours ou 7 jours.",
         });
       }
 
@@ -6638,12 +5759,9 @@ app.post(
         childId: document.childId || "",
         childName: document.childName || "",
         s3Key: document.s3Key,
-        requiresCode,
-        codeSalt: requiresCode ? salt : "",
-        codeHash: requiresCode ? hashShareCode(code, salt) : "",
+        codeSalt: salt,
+        codeHash: hashShareCode(code, salt),
         durationDays,
-        accessMode,
-        allowDownload: false,
         shareUrl,
         accessCount: 0,
         failedAttempts: 0,
@@ -6668,190 +5786,8 @@ app.post(
         url: shareUrl,
         expiresAt,
         durationDays,
-        accessMode,
-        allowDownload: false,
-        requiresCode,
-        message: `Lien sécurisé créé en mode visionnement seulement. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
+        message: `Lien sécurisé créé. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
       });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-
-app.post(
-  "/api/document-folders/:folderId/share-link",
-  requireAuth,
-  validateAwsConfig,
-  validateS3Config,
-  async (req, res, next) => {
-    try {
-      const folderId = String(req.params.folderId || "").trim() || "other";
-      const folderName = String(req.body?.folderName || "Dossier Camelio").trim() || "Dossier Camelio";
-      const requiresCode = req.body?.requiresCode !== false;
-      const code = normalizeShareCode(req.body?.code);
-      const durationDays = Number(req.body?.durationDays);
-      const accessMode = "view_only";
-
-      if (requiresCode && !isValidShareCode(code)) {
-        return res.status(400).json({
-          error: "invalid_code",
-          message: "Le code doit contenir entre 6 et 8 caractères, lettres ou chiffres.",
-        });
-      }
-
-      if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
-        return res.status(400).json({
-          error: "invalid_duration",
-          message: "La durée doit être entre 1 et 365 jours.",
-        });
-      }
-
-      const accessContext = await getDataAccessContext(req, "documents", "edit");
-
-      const documentsResult = await dynamo.send(
-        new QueryCommand({
-          TableName: DYNAMODB_TABLE,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-          ExpressionAttributeValues: {
-            ":pk": accessContext.dataPk,
-            ":sk": "DOCUMENT#",
-          },
-        })
-      );
-
-      const folderDocuments = (documentsResult.Items || []).filter((document) => {
-        const documentFolderId = document.folderId || document.folder || "other";
-        if (documentFolderId !== folderId) return false;
-        if (accessContext.isGuest && !isChildAllowedForShare(accessContext.share, document.childId)) return false;
-        return isSafeS3KeyForOwner(document.s3Key, accessContext.ownerId);
-      });
-
-      if (!folderDocuments.length) {
-        return res.status(400).json({
-          error: "empty_folder",
-          message: "Ce dossier ne contient aucun document à partager.",
-        });
-      }
-
-      const token = randomUUID().replace(/-/g, "");
-      const salt = randomUUID();
-      const now = new Date();
-      const expiresAtDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
-      const expiresAt = expiresAtDate.toISOString();
-      const shareUrl = `${getPublicAppUrl()}/shared-document/${token}`;
-
-      const shareItem = {
-        PK: getPublicDocumentSharePk(token),
-        SK: "METADATA",
-        type: "public_document_folder_share",
-        token,
-        status: "active",
-        ownerId: accessContext.ownerId,
-        dataPk: accessContext.dataPk,
-        createdByUserId: req.session.user.sub,
-        createdByEmail: req.session.user.email || "",
-        shareKind: "folder",
-        folderId,
-        folderName,
-        documentName: folderName,
-        fileName: "",
-        fileType: "folder",
-        fileSize: 0,
-        documentCount: folderDocuments.length,
-        requiresCode,
-        codeSalt: requiresCode ? salt : "",
-        codeHash: requiresCode ? hashShareCode(code, salt) : "",
-        durationDays,
-        accessMode,
-        allowDownload: false,
-        shareUrl,
-        accessCount: 0,
-        failedAttempts: 0,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-        expiresAt,
-        expiresAtEpoch: Math.floor(expiresAtDate.getTime() / 1000),
-      };
-
-      await dynamo.send(
-        new PutCommand({
-          TableName: DYNAMODB_TABLE,
-          Item: shareItem,
-          ConditionExpression: "attribute_not_exists(PK)",
-        })
-      );
-
-      return res.json({
-        success: true,
-        token,
-        shareUrl,
-        url: shareUrl,
-        expiresAt,
-        durationDays,
-        accessMode,
-        allowDownload: false,
-        requiresCode,
-        shareKind: "folder",
-        documentCount: folderDocuments.length,
-        message: `Lien sécurisé créé pour le dossier. Il sera actif pendant ${durationDays === 1 ? "1 journée" : `${durationDays} jours`}.`,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.get(
-  "/api/shared-documents",
-  requireAuth,
-  validateAwsConfig,
-  async (req, res, next) => {
-    try {
-      const currentUserId = req.session.user.sub;
-      const result = await dynamo.send(
-        new ScanCommand({
-          TableName: DYNAMODB_TABLE,
-          FilterExpression:
-            "begins_with(PK, :pkPrefix) AND SK = :sk AND #status = :status AND (ownerId = :userId OR createdByUserId = :userId)",
-          ExpressionAttributeNames: {
-            "#status": "status",
-          },
-          ExpressionAttributeValues: {
-            ":pkPrefix": "PUBLIC_DOCUMENT_SHARE#",
-            ":sk": "METADATA",
-            ":status": "active",
-            ":userId": currentUserId,
-          },
-        })
-      );
-
-      const now = Date.now();
-      const shares = (result.Items || [])
-        .filter((share) => !share.expiresAt || new Date(share.expiresAt).getTime() > now)
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-        .map((share) => ({
-          token: share.token,
-          shareKind: share.shareKind || (share.folderId ? "folder" : "document"),
-          folderId: share.folderId || "",
-          folderName: share.folderName || "",
-          documentId: share.documentId || "",
-          documentName: share.documentName || share.fileName || "Document Camelio",
-          fileName: share.fileName || "",
-          childName: share.childName || "",
-          documentCount: share.documentCount || 0,
-          shareUrl: share.shareUrl || `${getPublicAppUrl()}/shared-document/${share.token}`,
-          requiresCode: share.requiresCode !== false,
-          accessMode: share.accessMode || "view_only",
-          allowDownload: false,
-          accessCount: share.accessCount || 0,
-          createdAt: share.createdAt || "",
-          expiresAt: share.expiresAt || "",
-          lastAccessedAt: share.lastAccessedAt || "",
-        }));
-
-      return res.json({ success: true, shares });
     } catch (error) {
       next(error);
     }
@@ -6894,18 +5830,13 @@ app.get(
       return res.json({
         success: true,
         token,
-        shareKind: share.shareKind || (share.folderId ? "folder" : "document"),
-        folderName: share.folderName || "",
-        documentCount: share.documentCount || 0,
         documentName: share.documentName || share.fileName || "Document Camelio",
         fileName: share.fileName || "",
         fileType: share.fileType || "",
         fileSize: share.fileSize || 0,
         childName: share.childName || "",
         expiresAt: share.expiresAt,
-        accessMode: share.accessMode || "view_only",
-        allowDownload: false,
-        requiresCode: share.requiresCode !== false,
+        requiresCode: true,
       });
     } catch (error) {
       next(error);
@@ -7010,7 +5941,11 @@ app.post(
 
         const folderDocuments = (documentsResult.Items || []).filter((document) => {
           const documentFolderId = document.folderId || document.folder || "other";
-          return documentFolderId === share.folderId && isSafeS3KeyForOwner(document.s3Key, share.ownerId);
+          return (
+            documentFolderId === share.folderId &&
+            document.s3Key &&
+            isSafeS3KeyForOwner(document.s3Key, share.ownerId)
+          );
         });
 
         if (!folderDocuments.length) {
@@ -7064,12 +5999,9 @@ app.post(
         return res.json({
           success: true,
           shareKind: "folder",
+          folderId: share.folderId || "",
           folderName: share.folderName || share.documentName || "Dossier Camelio",
-          documentName: share.documentName || share.folderName || "Dossier Camelio",
           documents,
-          accessMode: share.accessMode || "view_only",
-          allowDownload: false,
-          requiresCode,
           expiresIn: 300,
         });
       }
@@ -7100,7 +6032,7 @@ app.post(
         });
       }
 
-      const viewUrl = await getSignedUrl(
+      const downloadUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({
           Bucket: S3_DOCUMENTS_BUCKET,
@@ -7128,33 +6060,18 @@ app.post(
 
       return res.json({
         success: true,
-        viewUrl,
-        url: viewUrl,
+        shareKind: "document",
+        downloadUrl,
+        url: downloadUrl,
         expiresIn: 300,
-        accessMode: share.accessMode || "view_only",
-        allowDownload: false,
-        requiresCode,
         documentName: share.documentName || share.fileName || "Document Camelio",
-        fileName: share.fileName || "",
-        fileType: share.fileType || "",
-        documents: [
-          {
-            id: document.id,
-            documentName: share.documentName || share.fileName || "Document Camelio",
-            fileName: share.fileName || "",
-            fileType: share.fileType || "",
-            fileSize: share.fileSize || 0,
-            childName: share.childName || "",
-            viewUrl,
-            url: viewUrl,
-          },
-        ],
       });
     } catch (error) {
       next(error);
     }
   }
 );
+
 
 app.delete(
   "/api/shared-documents/:token",
@@ -7760,11 +6677,9 @@ app.delete(
 
       const profileUserId = profileResult.Item?.userId;
 
-      await cancelStripeSubscriptionForUser(userPk);
       await deleteAllUserS3Objects(ownerId);
       await deleteAllUserDynamoItems(userPk);
       await deleteUserIdLookup(profileUserId);
-      await deleteUserSubscription(userPk);
       await deleteCognitoUser(req);
 
       req.session.destroy(() => {
