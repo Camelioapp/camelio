@@ -9,7 +9,7 @@ import {
 import { Field, Popup, SectionTitle } from "./shared.jsx";
 import { displayName, getColor } from "./sectionsData.js";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://api.camelio.app";
+const API_URL = import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 const inputClass =
   "mt-2 w-full rounded-2xl border border-[#EFE4D6] bg-[#FFFDF8] px-4 py-3 text-sm text-[#55534C] outline-none placeholder:text-[#B8B0A3] focus:border-[#EAA5AF] focus:ring-2 focus:ring-[#F3CDD3]";
@@ -942,7 +942,6 @@ export default function Photos({ children = [] }) {
       body: JSON.stringify({
         fileName: file.name,
         fileType: file.type || "image/jpeg",
-        fileSize: file.size,
       }),
     });
 
@@ -964,26 +963,6 @@ export default function Photos({ children = [] }) {
       throw new Error("Impossible d’envoyer l’image vers S3.");
     }
 
-    const verifyResponse = await fetch(`${API_URL}/api/uploads/verify`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        uploadKind: "photo",
-        s3Key: presignData.s3Key,
-        fileType: file.type || "image/jpeg",
-        fileSize: file.size,
-      }),
-    });
-
-    const verifyData = await verifyResponse.json().catch(() => ({}));
-
-    if (!verifyResponse.ok) {
-      throw new Error(verifyData.message || "La photo envoyée n’a pas pu être validée.");
-    }
-
     const saveResponse = await fetch(`${API_URL}/api/photos`, {
       method: "POST",
       credentials: "include",
@@ -997,8 +976,6 @@ export default function Photos({ children = [] }) {
         children: selectedChildren,
         s3Key: presignData.s3Key,
         fileName: file.name,
-        fileType: file.type || "image/jpeg",
-        fileSize: file.size,
       }),
     });
 
@@ -1096,28 +1073,36 @@ export default function Photos({ children = [] }) {
         </div>
       )}
 
-      <div className="rounded-[2rem] bg-[#FFF8F9] p-4 shadow-sm ring-1 ring-[#F3CDD3] md:p-5">
-        <div className="flex items-center gap-3 rounded-[1.75rem] bg-white p-4 ring-1 ring-[#EFE4D6] md:p-5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EAA5AF] text-white shadow-sm">
+      <div className="rounded-[2rem] bg-[#FFF8F9] p-5 shadow-sm ring-1 ring-[#F3CDD3]">
+        <div className="rounded-[1.75rem] bg-white p-5 ring-1 ring-[#EFE4D6]">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EAA5AF] text-white shadow-sm">
             <Camera className="h-6 w-6" />
           </div>
 
-          <div className="min-w-0">
-            <h3 className="text-lg font-bold text-[#55534C] md:text-xl">
-              Ajouter des photos
-            </h3>
+          <h3 className="mt-3 text-xl font-bold text-[#55534C]">
+            Ajouter des photos
+          </h3>
 
-            <p className="mt-1 text-xs leading-5 text-[#746F64] md:text-sm">
-              Importe, identifie et classe les photos par album.
-            </p>
+          <p className="mt-2 text-sm leading-6 text-[#746F64]">
+            Importe une ou plusieurs photos, choisis les enfants présents et
+            classe-les dans un album.
+          </p>
+
+          <div className="mt-5">
+            <PhotoCompressionToggle
+              enabled={compressPhotosBeforeUpload}
+              onToggle={() =>
+                setCompressPhotosBeforeUpload((current) => !current)
+              }
+            />
           </div>
         </div>
 
-        <div className="mt-4 flex gap-3">
+        <div className="mt-5 grid !grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => setShowPhotoPopup(true)}
-            className="flex-1 rounded-2xl bg-[#EAA5AF] px-4 py-4 text-sm font-bold text-white shadow-sm"
+            className="rounded-2xl bg-[#EAA5AF] px-4 py-4 text-sm font-bold text-white shadow-sm"
           >
             Ajouter des photos
           </button>
@@ -1125,7 +1110,7 @@ export default function Photos({ children = [] }) {
           <button
             type="button"
             onClick={() => setShowAlbumPopup(true)}
-            className="flex-1 rounded-2xl bg-white px-4 py-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
+            className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-[#B96B77] ring-1 ring-[#F3CDD3]"
           >
             Créer un album
           </button>

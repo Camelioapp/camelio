@@ -19,7 +19,7 @@ import { Popup, SectionTitle } from "./shared.jsx";
 import { displayName } from "./sectionsData.js";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://api.camelio.app";
+  import.meta.env.VITE_API_URL || "https://camelio.onrender.com";
 
 const defaultPhotoPosition = { x: 50, y: 50 };
 
@@ -404,10 +404,6 @@ function PhotoPicker({
                 <Camera className="h-4 w-4" />
                 Importer
                 <input
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
                   type="file"
                   accept="image/*"
                   className="hidden"
@@ -471,10 +467,6 @@ function PhotoPicker({
               <label className="block text-xs font-bold text-[#746F64]">
                 Zoom
                 <input
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
                   type="range"
                   min="0.7"
                   max="2.5"
@@ -676,26 +668,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
     if (!uploadResponse.ok) {
       throw new Error("Erreur upload fichier vers S3");
-    }
-
-    const verifyResponse = await fetch(`${API_BASE_URL}/api/uploads/verify`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        uploadKind: "avatar",
-        s3Key: presignData.s3Key,
-        fileType: file.type,
-        fileSize: file.size,
-      }),
-    });
-
-    const verifyData = await verifyResponse.json().catch(() => ({}));
-
-    if (!verifyResponse.ok) {
-      throw new Error(verifyData.message || "La photo de profil n’a pas pu être validée.");
     }
 
     return {
@@ -1189,10 +1161,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
               <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
                 <FormField label="Prénom">
                   <input
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
                     className={inputClass}
                     value={newChild.firstName}
                     onChange={(event) =>
@@ -1208,10 +1176,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
                 <FormField label="Nom">
                   <input
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
                     className={inputClass}
                     value={newChild.lastName}
                     onChange={(event) =>
@@ -1226,10 +1190,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
                 <FormField label="Surnom">
                   <input
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
                     className={inputClass}
                     value={newChild.nickname}
                     onChange={(event) =>
@@ -1261,10 +1221,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
                 <FormField label="Date de fête">
                   <input
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
                     type="date"
                     className={inputClass}
                     value={newChild.birthDate}
@@ -1310,10 +1266,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                   <label className="mt-4 block">
                     <span className="text-sm font-bold text-[#4F4A45]">Date du décès</span>
                     <input
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
                       type="date"
                       className={`${inputClass} mt-2`}
                       value={newChild.deceasedDate || ""}
@@ -1552,10 +1504,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
             <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2">
               <FormField label="Prénom">
                 <input
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
                   className={inputClass}
                   value={selectedChild.firstName || ""}
                   onChange={(event) =>
@@ -1569,10 +1517,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
               <FormField label="Nom">
                 <input
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
                   className={inputClass}
                   value={selectedChild.lastName || ""}
                   onChange={(event) =>
@@ -1586,10 +1530,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
               <FormField label="Surnom">
                 <input
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
                   className={inputClass}
                   value={selectedChild.nickname || ""}
                   onChange={(event) =>
@@ -1622,10 +1562,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
 
               <FormField label="Date de fête">
                 <input
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
                   type="date"
                   className={inputClass}
                   value={
@@ -1677,10 +1613,6 @@ export default function Children({ children, setChildren, onOpen = () => {} }) {
                 <label className="mt-4 block">
                   <span className="text-sm font-bold text-[#4F4A45]">Date du décès</span>
                   <input
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
                     type="date"
                     className={`${inputClass} mt-2`}
                     value={selectedChild.deceasedDate || ""}
@@ -1820,10 +1752,10 @@ function ColorPicker({ value, onChange, options }) {
     options.find((color) => color.id === value) || options[0];
 
   return (
-    <div>
+    <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpen((current) => !current)}
         className="flex w-full items-center justify-between rounded-2xl border border-[#EFE4D6] bg-[#FFF8EC] px-4 py-3 text-sm font-bold text-[#4F4A45] shadow-sm"
       >
         <span className="flex min-w-0 items-center gap-3">
@@ -1837,69 +1769,49 @@ function ColorPicker({ value, onChange, options }) {
           </span>
         </span>
 
-        <ChevronDown className="h-4 w-4 shrink-0 text-[#746F64]" />
+        {open ? (
+          <ChevronUp className="h-4 w-4 shrink-0 text-[#746F64]" />
+        ) : (
+          <ChevronDown className="h-4 w-4 shrink-0 text-[#746F64]" />
+        )}
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#2F2A24]/35 px-4 pb-4 pt-12 backdrop-blur-sm sm:items-center sm:pb-12">
-          <div className="w-full max-w-md overflow-hidden rounded-[30px] bg-[#FFFDF8] shadow-2xl ring-1 ring-[#EADFCF]">
-            <div className="flex items-start justify-between gap-4 border-b border-[#EFE4D6] px-5 py-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#A8B193]">
-                  Couleur de l’enfant
-                </p>
-                <h3 className="mt-1 text-xl font-black text-[#4F4A45]">
-                  Choisir une couleur
-                </h3>
-                <p className="mt-1 text-sm font-semibold leading-5 text-[#8B7D6B]">
-                  Cette couleur sera utilisée pour le profil et les repères du calendrier.
-                </p>
-              </div>
+      {open && (
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 rounded-2xl bg-white p-4 shadow-xl ring-1 ring-[#EFE4D6]">
+          <p className="mb-3 text-sm font-bold text-[#55534C]">
+            Choisir une couleur
+          </p>
 
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#F7F1E8] text-[#746F64] transition hover:bg-[#EFE4D6]"
-                aria-label="Fermer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+          <div className="grid grid-cols-5 gap-3">
+            {options.map((color) => {
+              const selected = value === color.id;
 
-            <div className="grid grid-cols-3 gap-3 p-5 sm:grid-cols-4">
-              {options.map((color) => {
-                const selected = value === color.id;
-
-                return (
-                  <button
-                    key={color.id}
-                    type="button"
-                    onClick={() => {
-                      onChange(color.id);
-                      setOpen(false);
-                    }}
-                    className={`flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-3xl border bg-white p-3 text-center text-xs font-black text-[#4F4A45] shadow-sm transition hover:-translate-y-0.5 ${
-                      selected
-                        ? "border-[#4F4A45] ring-2 ring-[#A8B193]/35"
-                        : "border-[#EFE4D6]"
-                    }`}
-                    title={color.label}
-                    aria-label={color.label}
-                  >
-                    <span
-                      className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-white shadow-[0_0_0_2px_rgba(234,223,207,1)]"
-                      style={{ backgroundColor: color.dot }}
-                    >
-                      {selected ? <span className="h-3 w-3 rounded-full bg-white shadow" /> : null}
-                    </span>
-                    <span className="leading-tight">{color.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+              return (
+                <button
+                  key={color.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(color.id);
+                    setOpen(false);
+                  }}
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition hover:scale-105 ${
+                    selected
+                      ? "border-[#4F4A45] bg-[#FFF8EC] shadow-sm"
+                      : "border-[#EFE4D6] bg-white"
+                  }`}
+                  title={color.label}
+                  aria-label={color.label}
+                >
+                  <span
+                    className="h-7 w-7 rounded-full shadow-inner"
+                    style={{ backgroundColor: color.dot }}
+                  />
+                </button>
+              );
+            })}
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
